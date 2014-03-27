@@ -35,7 +35,7 @@ Create a protection system, add it into a system-map as a component under the ``
 
 ```
 
-Create a component that provides bidi routes :-
+Create a component that provides [bidi](https://github.com/juxt/bidi) routes :-
 
 ```clojure
 (component/system-map
