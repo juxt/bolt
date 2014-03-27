@@ -7,6 +7,14 @@
 An integrated security system for Clojure applications built using
 Stuart Sierra's [component](https://github.com/stuartsierra/component).
 
+Cylon provides protected routes, a customisable login form, a salted
+hashed HMAC password store with pluggable durability, a persistent
+session store, targeted
+[Liberator](http://clojure-liberator.github.io/liberator/) support, CSRF
+protection and more, all from just a couple of tweaks to an existing
+[component](https://github.com/stuartsierra/component)-based
+application.
+
 ## Installation
 
 Add the following dependency to your `project.clj` file
