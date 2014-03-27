@@ -2,7 +2,7 @@
 
 > “Building secure Clojure web applications needs to be easier, and
 > requires integrated security frameworks - not standalone libraries!” –
-> [John P. Hackworth](https://hackworth.be/2014/03/26/clojure-web-security-is-worse-than-you-think/)
+> John P. Hackworth, [Clojure web security is worse than you think](https://hackworth.be/2014/03/26/clojure-web-security-is-worse-than-you-think/)
 
 An integrated security system for Clojure applications built using
 Stuart Sierra's [component](https://github.com/stuartsierra/component).
