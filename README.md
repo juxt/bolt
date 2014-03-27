@@ -49,7 +49,7 @@ Create a component that provides [bidi](https://github.com/juxt/bidi) routes :-
 (component/system-map
 ...
 :my-routes
-(cylon/new-proteced-bidi-routes
+(cylon/new-protected-bidi-routes
     ["/index.html" my-handler])
 ...
 )
