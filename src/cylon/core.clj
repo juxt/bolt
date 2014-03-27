@@ -403,7 +403,8 @@ that authorization fails."
     :password-store (new-password-file (:password-file opts))
     :http-session-store (new-atom-backed-session-store
                          (or (:session-timeout-in-seconds opts)
-                             10))}))
+                             (* 60 60) ; one hour by default
+                             ))}))
 
 ;; Now that we have a protection system, we want the ability to create
 ;; bidi routes components that can be protected by simply declaring a dependency upon the protection system component.
