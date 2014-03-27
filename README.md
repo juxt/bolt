@@ -83,7 +83,7 @@ https://github.com/juxt/msf
 ## Terms
 
 The precise meanings of the terms component, system-map and system are
-those in [component](https://github.com/stuartsierra/component))
+those in [component](https://github.com/stuartsierra/component).
 
 ## Discussion
 
