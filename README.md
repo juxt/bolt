@@ -170,6 +170,11 @@ We don't recommend relying on Cylon for production systems until we
 reach version 1.0, which will indicate that Cylon has been deployed into
 production elsewhere and has undergone thorough peer review.
 
+## Join in the conversation
+
+Join our Google group cylon-security@googlegroups.com for discussion
+about how to improve Cylon.
+
 ## References
 
 https://hackworth.be/2014/03/26/clojure-web-security-is-worse-than-you-think/
