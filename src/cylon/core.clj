@@ -99,9 +99,10 @@ http://adambard.com/blog/3-wrong-ways-to-store-a-password/"
      (get @(:ref this) uid))))
 
 (defn new-password-file [f]
-  (assert (.exists (.getParentFile f))
-          (format "Please create the directory structure which should contain the password file: %s" f))
-  (->PasswordFile f))
+  (let [f (io/file f)]
+    (assert (.exists (.getParentFile f))
+            (format "Please create the directory structure which should contain the password file: %s" f))
+    (->PasswordFile f)))
 
 (defprotocol NewUserCreator
   (add-user! [_ uid pw]))
