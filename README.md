@@ -11,7 +11,7 @@ Cylon provides protected routes, a customisable login form, a salted
 hashed HMAC password store with pluggable durability, a persistent
 session store, targeted
 [Liberator](http://clojure-liberator.github.io/liberator/) support, CSRF
-protection and more, all from just a couple of tweaks to an existing
+protection and more, by adding a single Cylon component to an existing
 [component](https://github.com/stuartsierra/component)-based
 application.
 
@@ -25,7 +25,8 @@ Add the following dependency to your `project.clj` file
 
 ## Usage
 
-Create a protection system, add it into a system-map as a component under the ```:protection-system``` key.
+Create a protection system, add it into a system-map as a component
+under the ```:protection-system``` key.
 
 ```clojure
 (ns example
