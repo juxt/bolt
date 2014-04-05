@@ -29,21 +29,21 @@
    javax.crypto.spec.PBEKeySpec
    (javax.xml.bind DatatypeConverter)))
 
-(defprotocol HttpRequestAuthorizer
+(defprotocol HttpRequestAuthenticator
   ;; Return a map, potentially containing entries to be merged with the request.
-  (authorized-request? [_ request]))
+  (allowed-request? [_ request]))
 
-(extend-protocol HttpRequestAuthorizer
+(extend-protocol HttpRequestAuthenticator
   Boolean
-  (authorized-request? [this request]
+  (allowed-request? [this request]
     (when this {})))
 
-(defprotocol UserPasswordAuthorizer
-  (authorized-user? [_ user password]))
+(defprotocol UserAuthenticator
+  (allowed-user? [_ user password]))
 
-(extend-protocol UserPasswordAuthorizer
+(extend-protocol UserAuthenticator
   Boolean
-  (authorized-user? [this user password] this))
+  (allowed-user? [this user password] this))
 
 (def PASSWORD_HASH_ALGO "PBKDF2WithHmacSHA1")
 
@@ -116,8 +116,8 @@ http://adambard.com/blog/3-wrong-ways-to-store-a-password/"
   (start [this] (assoc this :rng (SecureRandom.)))
   (stop [this] this)
 
-  UserPasswordAuthorizer
-  (authorized-user? [this uid pw]
+  UserAuthenticator
+  (allowed-user? [this uid pw]
     (when-let [hash (get-hash-for-uid (:password-store this) uid)]
       (verify-password pw hash)
       ;; TODO There is a slight security concern here. If no uid is
@@ -137,36 +137,36 @@ http://adambard.com/blog/3-wrong-ways-to-store-a-password/"
 
 ;; -------
 
-(defprotocol FailedAuthorizationHandler
-  (failed-authorization [_ request]))
+(defprotocol FailedAuthenticationHandler
+  (failed-authentication [_ request]))
 
 ;; Certain objects can provide protection for routes
 (defprotocol BidiRoutesProtector
   (protect-bidi-routes [_ routes]))
 
-(defn wrap-authorization
-  "Ring middleware to pre-authorize a request through an authorizer. If
+(defn wrap-authentication
+  "Ring middleware to pre-authenticate a request through an authenticator. If
 given, the failure-handler is given the request to handle in the event
-that authorization fails."
-  ([h authorizer failure-handler]
+that authentication fails."
+  ([h authenticator failure-handler]
      (fn [req]
-       (if-let [auth (authorized-request? authorizer req)]
+       (if-let [auth (allowed-request? authenticator req)]
          (h (merge req auth))
          (if failure-handler
-           (failed-authorization failure-handler req)
+           (failed-authentication failure-handler req)
            (throw (ex-info {:request (select-keys req :headers :cookies)
-                            :http-request-authorizer authorizer}))))))
-  ([h authorizer]
-     (wrap-authorization h authorizer nil)))
+                            :http-request-authenticator authenticator}))))))
+  ([h authenticator]
+     (wrap-authentication h authenticator nil)))
 
 ;; bidi (https://github.com/juxt/bidi) is required for the functions below
 
-(defn make-authorization-wrapper
+(defn make-authentication-wrapper
   "Currently bidi's WrapMiddleware only allows middleware with a single
   handler argument. This function provides an adapter."
-  [authorizer failure-handler]
+  [authenticator failure-handler]
   (fn [h]
-    (wrap-authorization h authorizer failure-handler)))
+    (wrap-authentication h authenticator failure-handler)))
 
 (defrecord ProtectMatched [routes opts]
   bidi/Matched
@@ -175,9 +175,9 @@ that authorization fails."
       (if (:handler r)
         (update-in r [:handler]
                    (comp wrap-cookies
-                         (make-authorization-wrapper
-                          (:http-request-authorizer opts)
-                          (:failed-authorization-handler opts))))
+                         (make-authentication-wrapper
+                          (:http-request-authenticator opts)
+                          (:failed-authentication-handler opts))))
         r)))
   (unresolve-handler [this m]
     (unresolve-handler routes m)))
@@ -186,21 +186,21 @@ that authorization fails."
   ["" (->ProtectMatched
        [routes]
        (s/validate
-        {:http-request-authorizer (s/protocol HttpRequestAuthorizer)
-         (s/optional-key :failed-authorization-handler) (s/protocol FailedAuthorizationHandler)}
+        {:http-request-authenticator (s/protocol HttpRequestAuthenticator)
+         (s/optional-key :failed-authentication-handler) (s/protocol FailedAuthenticationHandler)}
         opts))])
 
-(defrecord BidiFailedAuthorizationRedirect [h]
-  FailedAuthorizationHandler
-  (failed-authorization [_ req]
+(defrecord BidiFailedAuthenticationRedirect [h]
+  FailedAuthenticationHandler
+  (failed-authentication [_ req]
     {:status 302
      :headers {"Location" (path-for (:modular.bidi/routes req) h)}
-     :body "Not authorized\n"
+     :body "Not authenticated\n"
      :cookies {"requested-uri" (:uri req)}}))
 
 (defrecord MapBackedUserRegistry [m]
-  UserPasswordAuthorizer
-  (authorized-user? [_ user password]
+  UserAuthenticator
+  (allowed-user? [_ user password]
     ((set (seq m)) [user password])))
 
 (defn new-map-backed-user-registry [m]
@@ -236,46 +236,46 @@ that authorization fails."
 
 ;; A request authoriser that uses HTTP basic auth
 
-(defrecord HttpBasicRequestAuthorizer [authorizer]
-  HttpRequestAuthorizer
-  (authorized-request? [_ request]
+(defrecord HttpBasicRequestAuthenticator [authenticator]
+  HttpRequestAuthenticator
+  (allowed-request? [_ request]
     (when-let [auth (get-in request [:headers "authorization"])]
       (when-let [basic-creds (second (re-matches #"\QBasic\E\s+(.*)" auth))]
         (let [[username password] (->> (String. (DatatypeConverter/parseBase64Binary basic-creds) "UTF-8")
                                        (re-matches #"(.*):(.*)")
                                        rest)]
-          (when (authorized-user? authorizer username password)
+          (when (allowed-user? authenticator username password)
             {:username username}))))))
 
-(defn new-http-basic-request-authorizer [& {:as opts}]
-  (let [{dlg :user-password-authorizer}
-        (s/validate {:user-password-authorizer (s/protocol UserPasswordAuthorizer)} opts)]
-    (->HttpBasicRequestAuthorizer dlg)))
+(defn new-http-basic-request-authenticator [& {:as opts}]
+  (let [{dlg :user-authenticator}
+        (s/validate {:user-authenticator (s/protocol UserAuthenticator)} opts)]
+    (->HttpBasicRequestAuthenticator dlg)))
 
-;; A request authorizer that uses cookie-based sessions
+;; A request authenticator that uses cookie-based sessions
 
-(defrecord SessionBasedRequestAuthorizer [sessions]
-  HttpRequestAuthorizer
-  (authorized-request? [_ request]
+(defrecord SessionBasedRequestAuthenticator [sessions]
+  HttpRequestAuthenticator
+  (allowed-request? [_ request]
     (when-let [session (get-session sessions (:cookies (cookies-request request)))]
       {:session session
        :username (:username session)})))
 
-(defn new-session-based-request-authorizer [& {:as opts}]
+(defn new-session-based-request-authenticator [& {:as opts}]
   (let [{dlg :http-session-store}
         (s/validate {:http-session-store (s/protocol HttpSessionStore)} opts)]
-    (->SessionBasedRequestAuthorizer dlg)))
+    (->SessionBasedRequestAuthenticator dlg)))
 
 
-;; A request authorizer that tries multiple authorizers in turn
+;; A request authenticator that tries multiple authenticators in turn
 
-(defrecord CompositeDisjunctiveRequestAuthorizer [delegates]
-  HttpRequestAuthorizer
-  (authorized-request? [_ request]
-    (some #(authorized-request? % request) delegates)))
+(defrecord CompositeDisjunctiveRequestAuthenticator [delegates]
+  HttpRequestAuthenticator
+  (allowed-request? [_ request]
+    (some #(allowed-request? % request) delegates)))
 
-(defn new-composite-disjunctive-request-authorizer [& delegates]
-  (->CompositeDisjunctiveRequestAuthorizer (s/validate [(s/protocol HttpRequestAuthorizer)] delegates)))
+(defn new-composite-disjunctive-request-authenticator [& delegates]
+  (->CompositeDisjunctiveRequestAuthenticator (s/validate [(s/protocol HttpRequestAuthenticator)] delegates)))
 
 ;; Since this module is dependent on bidi, let's provide some sample
 ;; bidi routes that can be used as-is or to demonstrate.
@@ -299,8 +299,8 @@ that authorization fails."
       {:status 200
        :body (if boilerplate (boilerplate (html form)) (html [:body form]))})))
 
-(defn new-login-post-handler [handlers-p get-handler-key {:keys [user-password-authorizer http-session-store] :as opts}]
-  (s/validate {:user-password-authorizer (s/protocol UserPasswordAuthorizer)
+(defn new-login-post-handler [handlers-p get-handler-key {:keys [user-authenticator http-session-store] :as opts}]
+  (s/validate {:user-authenticator (s/protocol UserAuthenticator)
                :http-session-store (s/protocol HttpSessionStore)}
               opts)
   (fn [{{username "username" password "password" requested-uri "requested-uri"} :form-params
@@ -308,7 +308,7 @@ that authorization fails."
 
     (if (and username
              (not-empty username)
-             (authorized-user? user-password-authorizer (.trim username) password))
+             (allowed-user? user-authenticator (.trim username) password))
 
       {:status 302
        :headers {"Location" requested-uri}
@@ -321,12 +321,12 @@ that authorization fails."
 (defn- make-login-handlers [opts]
   (let [p (promise)]
     @(deliver p {:get-handler (new-login-get-handler p :post-handler (select-keys opts [:boilerplate]))
-                 :post-handler (wrap-params (new-login-post-handler p :get-handler (select-keys opts [:user-password-authorizer :http-session-store])))})))
+                 :post-handler (wrap-params (new-login-post-handler p :get-handler (select-keys opts [:user-authenticator :http-session-store])))})))
 
 (defrecord LoginForm [path context boilerplate]
   component/Lifecycle
   (start [this]
-    (let [handlers (make-login-handlers (select-keys this [:user-password-authorizer :http-session-store :boilerplate]))]
+    (let [handlers (make-login-handlers (select-keys this [:user-authenticator :http-session-store :boilerplate]))]
       (assoc this
         :handlers handlers
         :routes [path (->WrapMiddleware
@@ -343,8 +343,8 @@ that authorization fails."
   (protect-bidi-routes [this routes]
     (add-bidi-protection-wrapper
      routes
-     :http-request-authorizer (new-session-based-request-authorizer :http-session-store (:http-session-store this))
-     :failed-authorization-handler (->BidiFailedAuthorizationRedirect (get-in this [:handlers :get-handler])))))
+     :http-request-authenticator (new-session-based-request-authenticator :http-session-store (:http-session-store this))
+     :failed-authentication-handler (->BidiFailedAuthenticationRedirect (get-in this [:handlers :get-handler])))))
 
 (def new-login-form-schema
   {(s/optional-key :path) s/Str
@@ -358,13 +358,13 @@ that authorization fails."
                      :path "/login"
                      :boilerplate #(html [:body %])})
              (s/validate new-login-form-schema))]
-    (component/using (->LoginForm path context boilerplate) [:user-password-authorizer :http-session-store])))
+    (component/using (->LoginForm path context boilerplate) [:user-authenticator :http-session-store])))
 
 ;; Now we can build a protection system, composed of a login form, user
-;; authorizer and session store. Different constructors can build this
+;; authenticator and session store. Different constructors can build this
 ;; component in different ways.
 
-(defrecord ProtectionSystem [protector user-password-authorizer http-session-store]
+(defrecord ProtectionSystem [protector user-authenticator http-session-store]
   component/Lifecycle
   (start [this] (component/start-system this (keys this)))
   (stop [this] (component/stop-system this (keys this)))
@@ -376,12 +376,12 @@ that authorization fails."
   (routes [this] ["" (vec (keep #(when (satisfies? BidiRoutesProvider %) (routes %)) (vals this)))])
   (context [this] (or
                    (first (keep #(when (satisfies? BidiRoutesProvider %) (context %))
-                                ((juxt :protector :user-password-authorizer :http-session-store) this)))
+                                ((juxt :protector :user-authenticator :http-session-store) this)))
                    ""))
   NewUserCreator
   (add-user! [_ uid pw]
-    (if (satisfies? NewUserCreator user-password-authorizer)
-      (add-user! user-password-authorizer uid pw)
+    (if (satisfies? NewUserCreator user-authenticator)
+      (add-user! user-authenticator uid pw)
       (throw (ex-info "This protection system implementation does not support the creation of new users" {})))))
 
 (def new-default-protection-system-schema
@@ -396,7 +396,7 @@ that authorization fails."
    {:protector (if-let [boilerplate (:boilerplate opts)]
                  (new-login-form :boilerplate boilerplate)
                  (new-login-form))
-    :user-password-authorizer (component/using (new-user-domain) [:password-store])
+    :user-authenticator (component/using (new-user-domain) [:password-store])
     :password-store (new-password-file (:password-file opts))
     :http-session-store (new-atom-backed-session-store
                          (or (:session-timeout-in-seconds opts)

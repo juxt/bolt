@@ -73,7 +73,7 @@ To test, add the following code to your `user.clj` :-
 
 (defn add-user! [uid pw]
   (cylon/add-user!
-   (-> system :protection-system :user-password-authorizer)
+   (-> system :protection-system :user-password-authenticator)
    uid pw))
 ```
 
