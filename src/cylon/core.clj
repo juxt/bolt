@@ -17,7 +17,7 @@
    [clojure.java.io :as io]
    [clojure.pprint :refer (pprint)]
    [bidi.bidi :as bidi :refer (path-for resolve-handler unresolve-handler ->WrapMiddleware)]
-   [modular.bidi :as modbidi :refer (BidiRoutesContributor routes context)]
+   [modular.bidi :as modbidi :refer (BidiRoutesProvider routes context)]
    [schema.core :as s]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request)]
    [ring.middleware.params :refer (wrap-params)]
@@ -143,10 +143,6 @@ http://adambard.com/blog/3-wrong-ways-to-store-a-password/"
 ;; Certain objects can provide protection for routes
 (defprotocol BidiRoutesProtector
   (protect-bidi-routes [_ routes]))
-
-;; Tag that a BidiRoutesContributor is protected
-;; TODO Rename BidiRoutesContributor to BidiRoutesProvider
-;;(defprotocol BidiRoutesProtected)
 
 (defn wrap-authorization
   "Ring middleware to pre-authorize a request through an authorizer. If
@@ -339,7 +335,7 @@ that authorization fails."
                        wrap-cookies)])))
   (stop [this] this)
 
-  BidiRoutesContributor
+  BidiRoutesProvider
   (routes [this] (:routes this))
   (context [this] context)
 
@@ -376,10 +372,10 @@ that authorization fails."
   ;; sub-components. These are the routes that provide login forms and
   ;; so on, nothing to do with the routes that are protected by this
   ;; protection system.
-  BidiRoutesContributor
-  (routes [this] ["" (vec (keep #(when (satisfies? BidiRoutesContributor %) (routes %)) (vals this)))])
+  BidiRoutesProvider
+  (routes [this] ["" (vec (keep #(when (satisfies? BidiRoutesProvider %) (routes %)) (vals this)))])
   (context [this] (or
-                   (first (keep #(when (satisfies? BidiRoutesContributor %) (context %))
+                   (first (keep #(when (satisfies? BidiRoutesProvider %) (context %))
                                 ((juxt :protector :user-password-authorizer :http-session-store) this)))
                    ""))
   NewUserCreator
@@ -420,7 +416,7 @@ that authorization fails."
       (assoc this :routes routes)))
   (stop [this] this)
 
-  BidiRoutesContributor
+  BidiRoutesProvider
   (routes [this] (:routes this))
   (context [this] context))
 
