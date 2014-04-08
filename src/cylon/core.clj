@@ -225,7 +225,7 @@ that authentication fails."
               :expiry (+ (.getTime (java.util.Date.)) (* expiry-seconds 1000))})
       ;; TODO: Make this cookie name configurable
       {"session" {:value uuid
-                  :max-age (* expiry-seconds 1000)}}))
+                  :max-age expiry-seconds}}))
   (get-session [this cookies]
     (when-let [{:keys [expiry] :as session} (->> (get cookies "session") :value (get @(:sessions this)))]
       (when (< (.getTime (java.util.Date.)) expiry)
