@@ -12,7 +12,9 @@
 ;; See the License for the specific language governing permissions and
 ;; limitations under the License.
 
-(ns cylon.core
+(ns ^{:clojure.tools.namespace.repl/unload false
+      :clojure.tools.namespace.repl/load false}
+  cylon.core
   (:require
    [clojure.java.io :as io]
    [clojure.pprint :refer (pprint)]
@@ -212,9 +214,11 @@ that authentication fails."
   (start-session! [_ username]) ; return cookie map compatible with wrap-cookies
   (get-session [_ request]))
 
+(def sessions-atom (atom {}))
+
 (defrecord AtomBackedSessionStore [expiry-seconds]
   component/Lifecycle
-  (start [this] (assoc this :sessions (atom {})))
+  (start [this] (assoc this :sessions sessions-atom))
   (stop [this] (dissoc this :sessions))
   HttpSessionStore
   (start-session! [this username]
