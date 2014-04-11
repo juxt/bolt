@@ -19,6 +19,8 @@
    [clojure.java.io :as io]
    [clojure.pprint :refer (pprint)]
    [bidi.bidi :as bidi :refer (path-for resolve-handler unresolve-handler ->WrapMiddleware)]
+   [modular.ring :refer (RingHandlerProvider)]
+   [modular.index :refer (Index)]
    [modular.bidi :as modbidi :refer (BidiRoutesProvider routes context)]
    [schema.core :as s]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request)]
@@ -441,3 +443,30 @@ that authentication fails."
   (component/using
    (apply new-optionally-protected-bidi-routes routes (apply concat (seq opts)))
    [:protection-system]))
+
+
+(defrecord ProtectedBidiRingHandlerProvider []
+  component/Lifecycle
+  (start [this]
+    (let [protector (get-in this [:protection-system :protector])]
+      (assoc this :routes ["" (protect-bidi-routes
+                               protector
+                               (vec (for [v (vals this)
+                                          :when (satisfies? BidiRoutesProvider v)]
+                                      [(or (context v) "") [(routes v)]])))])))
+  (stop [this] this)
+
+  Index
+  (satisfying-protocols [this] #{BidiRoutesProvider})
+
+  RingHandlerProvider
+  (handler [this]
+    (let [routes (:routes this)]
+      (-> routes bidi/make-handler
+          (wrap-routes routes)))))
+
+(defn new-protected-bidi-ring-handler-provider
+  "Constructor for a ring handler provider that amalgamates all bidi
+  routes provided by components in the system."
+  []
+  (->ProtectedBidiRingHandlerProvider))
