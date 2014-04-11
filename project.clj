@@ -1,6 +1,6 @@
 ;; Copyright © 2014 JUXT LTD.
 
-(defproject cylon "0.1.3"
+(defproject cylon "0.1.4-SNAPSHOT"
   :description "An integrated security system for applications built on component"
   :url "https://github.com/juxt/cylon"
   :license {:name "The MIT License"
