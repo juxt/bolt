@@ -8,4 +8,6 @@
   :dependencies [[juxt.modular/bidi "0.3.0"]
                  [prismatic/schema "0.2.1"]
                  [ring/ring-core "1.2.2"]
-                 [hiccup "1.0.5"]])
+                 [hiccup "1.0.5"]]
+
+  :profiles {:dev {:dependencies [[org.clojure/clojure "1.6.0"]]}})
