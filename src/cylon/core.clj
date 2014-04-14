@@ -19,7 +19,7 @@
    [clojure.java.io :as io]
    [clojure.pprint :refer (pprint)]
    [clojure.set :as set]
-   [bidi.bidi :as bidi :refer (path-for resolve-handler unresolve-handler ->WrapMiddleware)]
+   [bidi.bidi :as bidi :refer (path-for resolve-handler unresolve-handler ->WrapMiddleware Matched)]
    [modular.ring :refer (RingHandlerProvider)]
    [modular.index :refer (Index)]
    [modular.bidi :as modbidi :refer (BidiRoutesProvider routes context)]
@@ -52,7 +52,10 @@
   clojure.lang.PersistentVector
   (matches-role? [this roles]
     (when (every? #(matches-role? % roles) this)
-      this)))
+      this))
+
+  Boolean
+  (matches-role? [this roles] this))
 
 (defprotocol UserRoles
   (user-in-role? [_ user role]))
@@ -70,7 +73,11 @@
 
   clojure.lang.Fn
   (user-in-role? [this user role]
-    (this user role)))
+    (this user role))
+
+  nil
+  (user-in-role? [this user role]
+    nil))
 
 ;; Define HTTP request authentication
 
@@ -493,29 +500,59 @@ that authentication fails."
    (apply new-optionally-protected-bidi-routes routes (apply concat (seq opts)))
    [:protection-system]))
 
+;; Authorization
 
-#_(defrecord ProtectedBidiRingHandlerProvider []
-  component/Lifecycle
-  (start [this]
-    (let [protector (get-in this [:protection-system :protector])]
-      (assoc this :routes ["" (protect-bidi-routes
-                               protector
-                               (vec (for [v (vals this)
-                                          :when (satisfies? BidiRoutesProvider v)]
-                                      [(or (context v) "") [(routes v)]])))])))
-  (stop [this] this)
+;; Bidi handlers can be subject to access restrictions. We restrict at
+;; the level of the handler rather than the route, because it's the
+;; handler that determines what kind of data is being returned. It is
+;; data itself that is sensitive to access, not the URIs.
 
-  Index
-  (satisfying-protocols [this] #{BidiRoutesProvider})
+(defprotocol HandlerAuthorizer
+  (allowed-handler? [_ req]))
 
-  RingHandlerProvider
-  (handler [this]
-    (let [routes (:routes this)]
-      (-> routes bidi/make-handler
-          (wrap-routes routes)))))
+;; Ring middleware
+(defn restrict-to-authorized [h handler-authorizer]
+  (fn [req]
+    (if (allowed-handler? handler-authorizer req)
+      (h req)
+      (throw (ex-info "Unauthorized" (merge
+                                      (select-keys req [::username ::user-roles])
+                                      {:handler-authorizer handler-authorizer}))))))
 
-#_(defn new-protected-bidi-ring-handler-provider
-  "Constructor for a ring handler provider that amalgamates all bidi
-  routes provided by components in the system."
-  []
-  (->ProtectedBidiRingHandlerProvider))
+;; This is intended to wrap an individual Ring handler. By using a
+;; record, rather than a function, we can satisfy the HandlerAuthorizer
+;; protocol which can indicate whether this handler would be authorized
+;; given the current request without asking it to handle the request.
+(defrecord RestrictedHandler [matched authorized?]
+  Matched
+  (resolve-handler [this m]
+    (let [handler (resolve-handler matched m)]
+      (merge handler
+             {:handler (restrict-to-authorized (:handler handler) this)})))
+  (unresolve-handler [this m]
+    (let [res (unresolve-handler matched m)]
+      res))
+
+  HandlerAuthorizer
+  (allowed-handler? [this req]
+    (cond (satisfies? RoleQualifier authorized?)
+          (user-in-role? (::user-roles req) (::username req) authorized?)
+          (fn? authorized?)
+          (authorized? req)
+          :otherwise (throw (ex-info ("Unsupported type of authorizer: %s" (type authorized?)) {:authorized? authorized?})))))
+
+(extend-protocol HandlerAuthorizer
+  ;; 'Normal' handlers are not wrapped in a record, but must be able to
+  ;; give an answer if given as an argument to allowed-handler? above.
+  clojure.lang.Fn
+  (allowed-handler? [this req] true))
+
+(defn restrict-handler
+  "Restrict the given route. If authorized? is a predicate function, it
+  must take a single argument (the Ring request). Otherwise, if
+  authorized? is a keyword, then it represents a role that much match
+  the user. If it is a set of roles, then the user must match one of
+  those roles. If it is a vector of roles, the user must match all."
+  [matched authorized?]
+  (->RestrictedHandler matched authorized?)
+  )

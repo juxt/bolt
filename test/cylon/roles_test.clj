@@ -17,6 +17,9 @@
            "bob" #{:accountant :clerk} => #{:clerk}
            "alice" [:accountant :clerk] => [:accountant :clerk]
            "bob" [:accountant :clerk] => nil
+           ;; Booleans are useful for testing
+           "alice" true => true
+           "bob" false => false
            )))
   (testing "fn"
     (let [roles (fn [user role] (= user "alice"))]
@@ -24,4 +27,12 @@
            "alice" :accountant => true
            "alice" :clerk => true
            "bob" :clerk => false
+           )))
+  ;; Nil needs to be supported in cases where no user roles have been established.
+  (testing "nil"
+    (let [roles nil]
+      (are [user roleq _ result] (is (= (user-in-role? roles user roleq) result))
+           "alice" :accountant => nil
+           "alice" :clerk => nil
+           "bob" :clerk => nil
            ))))
