@@ -363,7 +363,7 @@ that authentication fails."
 ;; authenticator and session store. Different constructors can build this
 ;; component in different ways.
 
-(defrecord ProtectionSystem [protector user-authenticator http-session-store]
+(defrecord ProtectionSystem [login-form user-authenticator http-session-store]
   component/Lifecycle
   (start [this] (component/start-system this (keys this)))
   (stop [this] (component/stop-system this (keys this)))
@@ -375,7 +375,7 @@ that authentication fails."
   (routes [this] ["" (vec (keep #(when (satisfies? BidiRoutesProvider %) (routes %)) (vals this)))])
   (context [this] (or
                    (first (keep #(when (satisfies? BidiRoutesProvider %) (context %))
-                                ((juxt :protector :user-authenticator :http-session-store) this)))
+                                ((juxt :login-form :user-authenticator :http-session-store) this)))
                    ""))
 
   BidiRoutesProtector
@@ -383,7 +383,7 @@ that authentication fails."
     (add-bidi-protection-wrapper
      routes
      :http-request-authenticator (new-session-based-request-authenticator :http-session-store (:http-session-store this))
-     :failed-authentication-handler (->BidiFailedAuthenticationRedirect (get-in (:protector this) [:handlers :get-handler]))))
+     :failed-authentication-handler (->BidiFailedAuthenticationRedirect (get-in (:login-form this) [:handlers :get-handler]))))
 
   NewUserCreator
   (add-user! [_ uid pw]
@@ -400,14 +400,14 @@ that authentication fails."
 (defn new-default-protection-system [& {:as opts}]
   (s/validate new-default-protection-system-schema opts)
   (map->ProtectionSystem
-   {:protector (if-let [boilerplate (:boilerplate opts)]
-                 (new-login-form :boilerplate boilerplate)
-                 (new-login-form))
+   {:login-form (if-let [boilerplate (:boilerplate opts)]
+                  (new-login-form :boilerplate boilerplate)
+                  (new-login-form))
     :user-authenticator (component/using (new-user-domain) [:password-store])
     :password-store (new-password-file (:password-file opts))
     :http-session-store (new-atom-backed-session-store
                          (or (:session-timeout-in-seconds opts)
-                             (* 60 60) ; one hour by default
+                             (* 60 60)  ; one hour by default
                              ))}))
 
 ;; Now that we have a protection system, we want the ability to create
@@ -416,10 +416,10 @@ that authentication fails."
 (defrecord ProtectedBidiRoutes [routes context]
   component/Lifecycle
   (start [this]
-    (let [protector (get-in this [:protection-system])
+    (let [protection (get-in this [:protection-system])
           routes (cond-> routes
                          (fn? routes) (apply [this])
-                         protector ((partial protect-bidi-routes protector)))]
+                         protection ((partial protect-bidi-routes protection)))]
       (assoc this :routes routes)))
   (stop [this] this)
 
