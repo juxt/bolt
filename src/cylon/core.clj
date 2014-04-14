@@ -445,7 +445,7 @@ that authentication fails."
    [:protection-system]))
 
 
-(defrecord ProtectedBidiRingHandlerProvider []
+#_(defrecord ProtectedBidiRingHandlerProvider []
   component/Lifecycle
   (start [this]
     (let [protector (get-in this [:protection-system :protector])]
@@ -465,7 +465,7 @@ that authentication fails."
       (-> routes bidi/make-handler
           (wrap-routes routes)))))
 
-(defn new-protected-bidi-ring-handler-provider
+#_(defn new-protected-bidi-ring-handler-provider
   "Constructor for a ring handler provider that amalgamates all bidi
   routes provided by components in the system."
   []
