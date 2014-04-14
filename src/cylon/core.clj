@@ -343,14 +343,7 @@ that authentication fails."
 
   BidiRoutesProvider
   (routes [this] (:routes this))
-  (context [this] context)
-
-  BidiRoutesProtector
-  (protect-bidi-routes [this routes]
-    (add-bidi-protection-wrapper
-     routes
-     :http-request-authenticator (new-session-based-request-authenticator :http-session-store (:http-session-store this))
-     :failed-authentication-handler (->BidiFailedAuthenticationRedirect (get-in this [:handlers :get-handler])))))
+  (context [this] context))
 
 (def new-login-form-schema
   {(s/optional-key :path) s/Str
@@ -384,6 +377,14 @@ that authentication fails."
                    (first (keep #(when (satisfies? BidiRoutesProvider %) (context %))
                                 ((juxt :protector :user-authenticator :http-session-store) this)))
                    ""))
+
+  BidiRoutesProtector
+  (protect-bidi-routes [this routes]
+    (add-bidi-protection-wrapper
+     routes
+     :http-request-authenticator (new-session-based-request-authenticator :http-session-store (:http-session-store this))
+     :failed-authentication-handler (->BidiFailedAuthenticationRedirect (get-in (:protector this) [:handlers :get-handler]))))
+
   NewUserCreator
   (add-user! [_ uid pw]
     (if (satisfies? NewUserCreator user-authenticator)
@@ -415,7 +416,7 @@ that authentication fails."
 (defrecord ProtectedBidiRoutes [routes context]
   component/Lifecycle
   (start [this]
-    (let [protector (get-in this [:protection-system :protector])
+    (let [protector (get-in this [:protection-system])
           routes (cond-> routes
                          (fn? routes) (apply [this])
                          protector ((partial protect-bidi-routes protector)))]
