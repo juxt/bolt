@@ -18,6 +18,7 @@
   (:require
    [clojure.java.io :as io]
    [clojure.pprint :refer (pprint)]
+   [clojure.set :as set]
    [bidi.bidi :as bidi :refer (path-for resolve-handler unresolve-handler ->WrapMiddleware)]
    [modular.ring :refer (RingHandlerProvider)]
    [modular.index :refer (Index)]
@@ -32,6 +33,46 @@
    javax.crypto.SecretKeyFactory
    javax.crypto.spec.PBEKeySpec
    (javax.xml.bind DatatypeConverter)))
+
+;; Define role qualification for authorization (used later on)
+
+(defprotocol RoleQualifier
+  (matches-role? [_ role]))
+
+(extend-protocol RoleQualifier
+  clojure.lang.Keyword
+  (matches-role? [this roles]
+    (roles this))
+
+  clojure.lang.PersistentHashSet
+  (matches-role? [this roles]
+    (let [res (set/intersection this roles)]
+      (when (not-empty res) res)))
+
+  clojure.lang.PersistentVector
+  (matches-role? [this roles]
+    (when (every? #(matches-role? % roles) this)
+      this)))
+
+(defprotocol UserRoles
+  (user-in-role? [_ user role]))
+
+(extend-protocol UserRoles
+  clojure.lang.PersistentArrayMap
+  (user-in-role? [this user role]
+    (when-let [roles (get this user)]
+      (matches-role? role roles)))
+
+  clojure.lang.PersistentHashMap
+  (user-in-role? [this user role]
+    (when-let [roles (get this user)]
+      (matches-role? role roles)))
+
+  clojure.lang.Fn
+  (user-in-role? [this user role]
+    (this user role)))
+
+;; Define HTTP request authentication
 
 (defprotocol HttpRequestAuthenticator
   ;; Return a map, potentially containing entries to be merged with the request.
@@ -242,7 +283,7 @@ that authentication fails."
 
 ;; A request authoriser that uses HTTP basic auth
 
-(defrecord HttpBasicRequestAuthenticator [authenticator]
+(defrecord HttpBasicRequestAuthenticator [user-authenticator user-roles]
   HttpRequestAuthenticator
   (allowed-request? [_ request]
     (when-let [auth (get-in request [:headers "authorization"])]
@@ -250,28 +291,32 @@ that authentication fails."
         (let [[username password] (->> (String. (DatatypeConverter/parseBase64Binary basic-creds) "UTF-8")
                                        (re-matches #"(.*):(.*)")
                                        rest)]
-          (when (allowed-user? authenticator username password)
-            {:username username}))))))
+          (when (allowed-user? user-authenticator username password)
+            {::username username
+             ::user-roles user-roles}))))))
 
 (defn new-http-basic-request-authenticator [& {:as opts}]
-  (let [{dlg :user-authenticator}
-        (s/validate {:user-authenticator (s/protocol UserAuthenticator)} opts)]
-    (->HttpBasicRequestAuthenticator dlg)))
+  (->> opts
+       (s/validate {:user-authenticator (s/protocol UserAuthenticator)
+                    :user-roles (s/protocol UserRoles)})
+       map->HttpBasicRequestAuthenticator))
 
 ;; A request authenticator that uses cookie-based sessions
 
-(defrecord SessionBasedRequestAuthenticator [sessions]
+(defrecord SessionBasedRequestAuthenticator [http-session-store user-roles]
   HttpRequestAuthenticator
   (allowed-request? [_ request]
-    (when-let [session (get-session sessions (:cookies (cookies-request request)))]
-      {:session session
-       :username (:username session)})))
+    (when-let [session (get-session http-session-store (:cookies (cookies-request request)))]
+      {:session session ; retain compatibility with Ring's wrap-session
+       ::session session
+       ::username (:username session)
+       ::user-roles user-roles})))
 
 (defn new-session-based-request-authenticator [& {:as opts}]
-  (let [{dlg :http-session-store}
-        (s/validate {:http-session-store (s/protocol HttpSessionStore)} opts)]
-    (->SessionBasedRequestAuthenticator dlg)))
-
+  (->> opts
+       (s/validate {:http-session-store (s/protocol HttpSessionStore)
+                    :user-roles (s/protocol UserRoles)})
+       map->SessionBasedRequestAuthenticator))
 
 ;; A request authenticator that tries multiple authenticators in turn
 
@@ -363,7 +408,7 @@ that authentication fails."
 ;; authenticator and session store. Different constructors can build this
 ;; component in different ways.
 
-(defrecord ProtectionSystem [login-form user-authenticator http-session-store]
+(defrecord ProtectionSystem [login-form user-authenticator http-session-store user-roles]
   component/Lifecycle
   (start [this] (component/start-system this (keys this)))
   (stop [this] (component/stop-system this (keys this)))
@@ -382,7 +427,7 @@ that authentication fails."
   (protect-bidi-routes [this routes]
     (add-bidi-protection-wrapper
      routes
-     :http-request-authenticator (new-session-based-request-authenticator :http-session-store (:http-session-store this))
+     :http-request-authenticator (new-session-based-request-authenticator :http-session-store (:http-session-store this) :user-roles user-roles)
      :failed-authentication-handler (->BidiFailedAuthenticationRedirect (get-in (:login-form this) [:handlers :get-handler]))))
 
   NewUserCreator
@@ -395,6 +440,7 @@ that authentication fails."
   {:password-file s/Any
    (s/optional-key :session-timeout-in-seconds) s/Int
    (s/optional-key :boilerplate) (s/=> 1)
+   (s/optional-key :user-roles) (s/protocol UserRoles)
    })
 
 (defn new-default-protection-system [& {:as opts}]
@@ -404,11 +450,13 @@ that authentication fails."
                   (new-login-form :boilerplate boilerplate)
                   (new-login-form))
     :user-authenticator (component/using (new-user-domain) [:password-store])
+
     :password-store (new-password-file (:password-file opts))
     :http-session-store (new-atom-backed-session-store
                          (or (:session-timeout-in-seconds opts)
                              (* 60 60)  ; one hour by default
-                             ))}))
+                             ))
+    :user-roles (or (:user-roles opts) {})}))
 
 ;; Now that we have a protection system, we want the ability to create
 ;; bidi routes components that can be protected by simply declaring a dependency upon the protection system component.
