@@ -20,8 +20,7 @@
    [clojure.pprint :refer (pprint)]
    [clojure.set :as set]
    [bidi.bidi :as bidi :refer (path-for resolve-handler unresolve-handler ->WrapMiddleware Matched)]
-   [modular.ring :refer (RingHandlerProvider)]
-   [modular.index :refer (Index)]
+   [modular.ring :refer (handler RingHandlerProvider)]
    [modular.bidi :as modbidi :refer (BidiRoutesProvider routes context)]
    [schema.core :as s]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request)]
@@ -202,12 +201,11 @@ given, the failure-handler is given the request to handle in the event
 that authentication fails."
   ([h authenticator failure-handler]
      (fn [req]
-       (if-let [auth (allowed-request? authenticator req)]
-         (h (merge req auth))
-         (if failure-handler
-           (failed-authentication failure-handler req)
-           (throw (ex-info {:request (select-keys req :headers :cookies)
-                            :http-request-authenticator authenticator}))))))
+       (let [auth (allowed-request? authenticator req)]
+         (cond auth (h (merge req auth))
+               failure-handler (failed-authentication failure-handler req)
+               ;; Continue without merging auth
+               :otherwise (h req)))))
   ([h authenticator]
      (wrap-authentication h authenticator nil)))
 
@@ -502,6 +500,27 @@ that authentication fails."
 
 ;; Authorization
 
+;; This record wraps an existing RingHandlerProvider and sets
+;; authentication entries in the incoming request, according to its
+;; protection system dependency.
+(defrecord AuthBinder []
+  RingHandlerProvider
+  (handler [this]
+    (-> (:ring-handler-provider this)
+        handler
+        ;; TODO Just use the one authenticator if possible
+        (wrap-authentication (new-session-based-request-authenticator
+                              :http-session-store
+                              (-> this :protection-system :http-session-store)
+                              :user-roles
+                              (-> this :protection-system :user-roles))))))
+
+(defn new-auth-binder
+  "Constructor for a ring handler provider that amalgamates all bidi
+  routes provided by components in the system."
+  []
+  (component/using (->AuthBinder) [:protection-system :ring-handler-provider]))
+
 ;; Bidi handlers can be subject to access restrictions. We restrict at
 ;; the level of the handler rather than the route, because it's the
 ;; handler that determines what kind of data is being returned. It is
@@ -527,11 +546,14 @@ that authentication fails."
   Matched
   (resolve-handler [this m]
     (let [handler (resolve-handler matched m)]
-      (merge handler
-             {:handler (restrict-to-authorized (:handler handler) this)})))
+      (update-in handler [:handler] restrict-to-authorized this)))
   (unresolve-handler [this m]
-    (let [res (unresolve-handler matched m)]
-      res))
+    ;; Behave as if we weren't wrapped. We need to handle both the case
+    ;; where the handler in the map is a RestrictedHandler, and where it
+    ;; isn't.
+    (if (instance? RestrictedHandler (:handler m))
+      (unresolve-handler matched (update-in m [:handler] :matched))
+      (unresolve-handler matched m)))
 
   HandlerAuthorizer
   (allowed-handler? [this req]
