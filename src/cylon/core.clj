@@ -585,7 +585,9 @@ that authentication fails."
   ;; 'Normal' handlers are not wrapped in a record, but must be able to
   ;; give an answer if given as an argument to allowed-handler? above.
   clojure.lang.Fn
-  (allowed-handler? [this req] true))
+  (allowed-handler? [this req] true)
+  nil
+  (allowed-handler? [this req] nil))
 
 (defn restrict-handler
   "Restrict the given route. If authorized? is a predicate function, it
@@ -594,5 +596,10 @@ that authentication fails."
   the user. If it is a set of roles, then the user must match one of
   those roles. If it is a vector of roles, the user must match all."
   [matched authorized?]
-  (->RestrictedHandler matched authorized?)
-  )
+  (->RestrictedHandler matched authorized?))
+
+(defn restrict-handler-map
+  "Restrict all the values in the given map according to the given
+  authorization."
+  [m authorized?]
+  (reduce-kv (fn [acc k v] (assoc acc k (->RestrictedHandler v authorized?))) {} m))
