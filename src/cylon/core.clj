@@ -347,7 +347,7 @@ that authentication fails."
     (let [form
           [:form {:method "POST" :style "border: 1px dotted #555"
                   :action (bidi/path-for routes (get @handlers-p :process-login))}
-           (when requested-uri
+           (when (not-empty requested-uri)
              [:input {:type "hidden" :name :requested-uri :value requested-uri}])
            [:div
             [:label {:for "username"} "Username"]
@@ -373,7 +373,8 @@ that authentication fails."
 
       {:status 302
        :headers {"Location" (or requested-uri "/")} ; "/" can be parameterized (TODO)
-       :cookies {"session" (start-session! http-session-store username)}}
+       :cookies {"session" (start-session! http-session-store username)
+                 "requested-uri" ""}}
 
       ;; Return back to login form
       {:status 302
