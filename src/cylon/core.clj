@@ -260,7 +260,8 @@ that authentication fails."
 
 (defprotocol HttpSessionStore
   (start-session! [_ username]) ; return cookie map compatible with wrap-cookies
-  (get-session [_ request]))
+  (get-session [_ request])
+  (end-session! [_ value]))
 
 (def sessions-atom (atom {}))
 
@@ -276,12 +277,16 @@ that authentication fails."
              {:username username
               :expiry (+ (.getTime (java.util.Date.)) (* expiry-seconds 1000))})
       ;; TODO: Make this cookie name configurable
-      {"session" {:value uuid
-                  :max-age expiry-seconds}}))
+      ;; TODO: Use, or remain compatible with, session stores from ring-session
+      {:value uuid
+       :max-age expiry-seconds}))
   (get-session [this cookies]
     (when-let [{:keys [expiry] :as session} (->> (get cookies "session") :value (get @(:sessions this)))]
       (when (< (.getTime (java.util.Date.)) expiry)
-        session))))
+        session)))
+  (end-session! [this value]
+    (swap! (:sessions this)
+           dissoc value)))
 
 (defn new-atom-backed-session-store [expiry-seconds]
   (->AtomBackedSessionStore expiry-seconds))
@@ -336,12 +341,12 @@ that authentication fails."
 ;; Since this module is dependent on bidi, let's provide some sample
 ;; bidi routes that can be used as-is or to demonstrate.
 
-(defn new-login-get-handler [handlers-p post-handler-key {:keys [boilerplate] :as opts}]
+(defn new-login-get-handler [handlers-p & {:keys [boilerplate] :as opts}]
   (fn [{{{requested-uri :value} "requested-uri"} :cookies
         routes :modular.bidi/routes}]
     (let [form
           [:form {:method "POST" :style "border: 1px dotted #555"
-                  :action (bidi/path-for routes (get @handlers-p post-handler-key))}
+                  :action (bidi/path-for routes (get @handlers-p :process-login))}
            (when requested-uri
              [:input {:type "hidden" :name :requested-uri :value requested-uri}])
            [:div
@@ -355,7 +360,7 @@ that authentication fails."
       {:status 200
        :body (if boilerplate (boilerplate (html form)) (html [:body form]))})))
 
-(defn new-login-post-handler [handlers-p get-handler-key {:keys [user-authenticator http-session-store] :as opts}]
+(defn new-login-post-handler [handlers-p & {:keys [user-authenticator http-session-store] :as opts}]
   (s/validate {:user-authenticator (s/protocol UserAuthenticator)
                :http-session-store (s/protocol HttpSessionStore)}
               opts)
@@ -367,28 +372,42 @@ that authentication fails."
              (allowed-user? user-authenticator (.trim username) password))
 
       {:status 302
-       :headers {"Location" requested-uri}
-       :cookies (start-session! http-session-store username)}
+       :headers {"Location" (or requested-uri "/")} ; "/" can be parameterized (TODO)
+       :cookies {"session" (start-session! http-session-store username)}}
 
       ;; Return back to login form
       {:status 302
-       :headers {"Location" (path-for routes (get @handlers-p get-handler-key))}})))
+       :headers {"Location" (path-for routes (get @handlers-p :login))}})))
 
-(defn- make-login-handlers [opts]
+(defn new-logout-handler [http-session-store]
+  (fn [{:keys [cookies]}]
+    (end-session!
+     http-session-store
+     (:value (get cookies "session")))
+    {:status 302 :headers {"Location" "/"}}))
+
+(defn make-login-handlers [opts]
   (let [p (promise)]
-    @(deliver p {:get-handler (new-login-get-handler p :post-handler (select-keys opts [:boilerplate]))
-                 :post-handler (wrap-params (new-login-post-handler p :get-handler (select-keys opts [:user-authenticator :http-session-store])))})))
+    @(deliver p
+              {:login (apply new-login-get-handler p (apply concat (seq (select-keys opts [:boilerplate]))))
+               :process-login (->
+                               (apply new-login-post-handler
+                                      p (apply concat (seq (select-keys opts [:user-authenticator :http-session-store]))))
+                               wrap-params)
+               :logout (new-logout-handler (:http-session-store opts))})))
 
-(defrecord LoginForm [path context boilerplate]
+(defrecord LoginForm [context boilerplate]
   component/Lifecycle
   (start [this]
     (let [handlers (make-login-handlers (select-keys this [:user-authenticator :http-session-store :boilerplate]))]
       (assoc this
         :handlers handlers
-        :routes [path (->WrapMiddleware
-                       {:get (:get-handler handlers)
-                        :post (:post-handler handlers)}
-                       wrap-cookies)])))
+        :routes
+        ["" (->WrapMiddleware
+             [["/login" {:get (:login handlers)
+                     :post (:process-login handlers)}]
+              ["/logout" {:get (:logout handlers)}]]
+             wrap-cookies)])))
   (stop [this] this)
 
   BidiRoutesProvider
@@ -396,18 +415,16 @@ that authentication fails."
   (context [this] context))
 
 (def new-login-form-schema
-  {(s/optional-key :path) s/Str
-   (s/optional-key :context) s/Str
+  {(s/optional-key :context) s/Str
    (s/optional-key :boilerplate) (s/=> 1)})
 
 (defn new-login-form [& {:as opts}]
-  (let [{:keys [path context boilerplate]}
+  (let [{:keys [context boilerplate]}
         (->> opts
              (merge {:context ""
-                     :path "/login"
                      :boilerplate #(html [:body %])})
              (s/validate new-login-form-schema))]
-    (component/using (->LoginForm path context boilerplate) [:user-authenticator :http-session-store])))
+    (component/using (->LoginForm context boilerplate) [:user-authenticator :http-session-store])))
 
 ;; Now we can build a protection system, composed of a login form, user
 ;; authenticator and session store. Different constructors can build this
@@ -433,7 +450,7 @@ that authentication fails."
     (add-bidi-protection-wrapper
      routes
      :http-request-authenticator (new-session-based-request-authenticator :http-session-store (:http-session-store this) :user-roles user-roles)
-     :failed-authentication-handler (->BidiFailedAuthenticationRedirect (get-in (:login-form this) [:handlers :get-handler]))))
+     :failed-authentication-handler (->BidiFailedAuthenticationRedirect (get-in (:login-form this) [:handlers :login]))))
 
   NewUserCreator
   (add-user! [_ uid pw]
