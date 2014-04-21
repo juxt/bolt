@@ -560,6 +560,11 @@ that authentication fails."
 ;; record, rather than a function, we can satisfy the HandlerAuthorizer
 ;; protocol which can indicate whether this handler would be authorized
 ;; given the current request without asking it to handle the request.
+
+;; TODO: Rather than satisfying Matched, wrap the Ring handler and
+;; implement clojure.lang.IFn so that it is invokeable. This will
+;; achieve the same end, allowing the record to satisfy
+;; HandlerAuthorizer but without a dependency on bidi.
 (defrecord RestrictedHandler [matched authorized?]
   Matched
   (resolve-handler [this m]
@@ -575,11 +580,10 @@ that authentication fails."
 
   HandlerAuthorizer
   (allowed-handler? [this req]
-    (cond (satisfies? RoleQualifier authorized?)
-          (user-in-role? (::user-roles req) (::username req) authorized?)
-          (fn? authorized?)
-          (authorized? req)
-          :otherwise (throw (ex-info ("Unsupported type of authorizer: %s" (type authorized?)) {:authorized? authorized?})))))
+    (cond
+     (satisfies? RoleQualifier authorized?) (user-in-role? (::user-roles req) (::username req) authorized?)
+     (fn? authorized?) (authorized? req)
+     :otherwise (throw (ex-info ("Unsupported type of authorizer: %s" (type authorized?)) {:authorized? authorized?})))))
 
 (extend-protocol HandlerAuthorizer
   ;; 'Normal' handlers are not wrapped in a record, but must be able to
