@@ -20,8 +20,8 @@
    [clojure.pprint :refer (pprint)]
    [clojure.set :as set]
    [bidi.bidi :as bidi :refer (path-for resolve-handler unresolve-handler ->WrapMiddleware Matched)]
-   [modular.ring :refer (handler RingHandlerProvider)]
-   [modular.bidi :as modbidi :refer (BidiRoutesProvider routes context)]
+   [modular.ring :refer (ring-handler RingHandler)]
+   [modular.bidi :as modbidi :refer (WebService ring-handler-map routes uri-context)]
    [schema.core :as s]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request)]
    [ring.middleware.params :refer (wrap-params)]
@@ -397,7 +397,7 @@ that authentication fails."
                                wrap-params)
                :logout (new-logout-handler (:http-session-store opts))})))
 
-(defrecord LoginForm [context boilerplate]
+(defrecord LoginForm [uri-context boilerplate]
   component/Lifecycle
   (start [this]
     (let [handlers (make-login-handlers (select-keys this [:user-authenticator :http-session-store :boilerplate]))]
@@ -411,9 +411,10 @@ that authentication fails."
              wrap-cookies)])))
   (stop [this] this)
 
-  BidiRoutesProvider
+  WebService
+  (ring-handler-map [this] (:handlers this))
   (routes [this] (:routes this))
-  (context [this] context))
+  (uri-context [this] uri-context))
 
 (def new-login-form-schema
   {(s/optional-key :context) s/Str
@@ -439,13 +440,15 @@ that authentication fails."
   ;; sub-components. These are the routes that provide login forms and
   ;; so on, nothing to do with the routes that are protected by this
   ;; protection system.
-  BidiRoutesProvider
-  (routes [this] ["" (vec (keep #(when (satisfies? BidiRoutesProvider %) (routes %)) (vals this)))])
-  (context [this] (or
-                   (first (keep #(when (satisfies? BidiRoutesProvider %) (context %))
+  WebService
+  (ring-handler-map [this] (apply merge (keep #(when (satisfies? WebService %) (ring-handler-map %)) (vals this))))
+  (routes [this] ["" (vec (keep #(when (satisfies? WebService %) (routes %)) (vals this)))])
+  (uri-context [this] (or
+                   (first (keep #(when (satisfies? WebService %) (uri-context %))
                                 ((juxt :login-form :user-authenticator :http-session-store) this)))
                    ""))
 
+  ;; Replace this with a more general 'restrict-handler' (to roles) which implies authentication - policies to be determined by sub-component
   BidiRoutesProtector
   (protect-bidi-routes [this routes]
     (add-bidi-protection-wrapper
@@ -483,8 +486,9 @@ that authentication fails."
 
 ;; Now that we have a protection system, we want the ability to create
 ;; bidi routes components that can be protected by simply declaring a dependency upon the protection system component.
+;; However, these will probably be deprecated soon and replaced with a more general method of restricting handlers to roles
 
-(defrecord ProtectedBidiRoutes [routes context]
+(defrecord ProtectedBidiRoutes [routes uri-context]
   component/Lifecycle
   (start [this]
     (let [protection (get-in this [:protection-system])
@@ -494,9 +498,10 @@ that authentication fails."
       (assoc this :routes routes)))
   (stop [this] this)
 
-  BidiRoutesProvider
+  WebService
+  (ring-handler-map [this] {})
   (routes [this] (:routes this))
-  (context [this] context))
+  (uri-context [this] uri-context))
 
 (defn new-optionally-protected-bidi-routes
   "Create a set of protected routes. Routes can a bidi route structure, or
@@ -518,14 +523,14 @@ that authentication fails."
 
 ;; Authorization
 
-;; This record wraps an existing RingHandlerProvider and sets
+;; This record wraps an existing RingHandler and sets
 ;; authentication entries in the incoming request, according to its
 ;; protection system dependency.
 (defrecord AuthBinder []
-  RingHandlerProvider
-  (handler [this]
-    (-> (:ring-handler-provider this)
-        handler
+  RingHandler
+  (ring-handler [this]
+    (-> (:ring-handler this)
+        ring-handler
         ;; TODO Just use the one authenticator if possible
         (wrap-authentication (new-session-based-request-authenticator
                               :http-session-store
@@ -537,7 +542,7 @@ that authentication fails."
   "Constructor for a ring handler provider that amalgamates all bidi
   routes provided by components in the system."
   []
-  (component/using (->AuthBinder) [:protection-system :ring-handler-provider]))
+  (component/using (->AuthBinder) [:protection-system :ring-handler]))
 
 ;; Bidi handlers can be subject to access restrictions. We restrict at
 ;; the level of the handler rather than the route, because it's the
@@ -561,29 +566,20 @@ that authentication fails."
 ;; protocol which can indicate whether this handler would be authorized
 ;; given the current request without asking it to handle the request.
 
-;; TODO: Rather than satisfying Matched, wrap the Ring handler and
-;; implement clojure.lang.IFn so that it is invokeable. This will
-;; achieve the same end, allowing the record to satisfy
-;; HandlerAuthorizer but without a dependency on bidi.
-(defrecord RestrictedHandler [matched authorized?]
-  Matched
-  (resolve-handler [this m]
-    (let [handler (resolve-handler matched m)]
-      (update-in handler [:handler] restrict-to-authorized this)))
-  (unresolve-handler [this m]
-    ;; Behave as if we weren't wrapped. We need to handle both the case
-    ;; where the handler in the map is a RestrictedHandler, and where it
-    ;; isn't.
-    (if (instance? RestrictedHandler (:handler m))
-      (unresolve-handler matched (update-in m [:handler] :matched))
-      (unresolve-handler matched m)))
-
+(defrecord RestrictedHandler [delegate-handler authorized?]
   HandlerAuthorizer
   (allowed-handler? [this req]
     (cond
      (satisfies? RoleQualifier authorized?) (user-in-role? (::user-roles req) (::username req) authorized?)
      (fn? authorized?) (authorized? req)
-     :otherwise (throw (ex-info ("Unsupported type of authorizer: %s" (type authorized?)) {:authorized? authorized?})))))
+     :otherwise (throw (ex-info ("Unsupported type of authorizer: %s" (type authorized?)) {:authorized? authorized?}))))
+
+  clojure.lang.IFn
+  (invoke [this req]
+    (if (allowed-handler? this req)
+      (delegate-handler req)
+      ;; If you don't want this default, call allowed-handler? first!
+      {:status 401 :body "Unauthorized handler"})))
 
 (extend-protocol HandlerAuthorizer
   ;; 'Normal' handlers are not wrapped in a record, but must be able to
