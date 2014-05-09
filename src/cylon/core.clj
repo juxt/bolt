@@ -82,11 +82,11 @@
 
 (defprotocol HttpRequestAuthenticator
   ;; Return a map, potentially containing entries to be merged with the request.
-  (allowed-request? [_ request]))
+  (authenticate-request [_ request]))
 
 (extend-protocol HttpRequestAuthenticator
   Boolean
-  (allowed-request? [this request]
+  (authenticate-request [this request]
     (when this {})))
 
 (defprotocol UserAuthenticator
@@ -201,7 +201,7 @@ given, the failure-handler is given the request to handle in the event
 that authentication fails."
   ([h authenticator failure-handler]
      (fn [req]
-       (let [auth (allowed-request? authenticator req)]
+       (let [auth (authenticate-request authenticator req)]
          (cond auth (h (merge req auth))
                failure-handler (failed-authentication failure-handler req)
                ;; Continue without merging auth
@@ -295,7 +295,7 @@ that authentication fails."
 
 (defrecord HttpBasicRequestAuthenticator [user-authenticator user-roles]
   HttpRequestAuthenticator
-  (allowed-request? [_ request]
+  (authenticate-request [_ request]
     (when-let [auth (get-in request [:headers "authorization"])]
       (when-let [basic-creds (second (re-matches #"\QBasic\E\s+(.*)" auth))]
         (let [[username password] (->> (String. (DatatypeConverter/parseBase64Binary basic-creds) "UTF-8")
@@ -315,7 +315,7 @@ that authentication fails."
 
 (defrecord SessionBasedRequestAuthenticator [http-session-store user-roles]
   HttpRequestAuthenticator
-  (allowed-request? [_ request]
+  (authenticate-request [_ request]
     (when-let [session (get-session http-session-store (:cookies (cookies-request request)))]
       {:session session ; retain compatibility with Ring's wrap-session
        ::session session
@@ -332,8 +332,8 @@ that authentication fails."
 
 (defrecord CompositeDisjunctiveRequestAuthenticator [delegates]
   HttpRequestAuthenticator
-  (allowed-request? [_ request]
-    (some #(allowed-request? % request) delegates)))
+  (authenticate-request [_ request]
+    (some #(authenticate-request % request) delegates)))
 
 (defn new-composite-disjunctive-request-authenticator [& delegates]
   (->CompositeDisjunctiveRequestAuthenticator (s/validate [(s/protocol HttpRequestAuthenticator)] delegates)))
