@@ -90,11 +90,11 @@
     (when this {})))
 
 (defprotocol UserAuthenticator
-  (allowed-user? [_ user password]))
+  (authenticate-user [_ user password]))
 
 (extend-protocol UserAuthenticator
   Boolean
-  (allowed-user? [this user password] this))
+  (authenticate-user [this user password] this))
 
 (def PASSWORD_HASH_ALGO "PBKDF2WithHmacSHA1")
 
@@ -168,7 +168,7 @@ http://adambard.com/blog/3-wrong-ways-to-store-a-password/"
   (stop [this] this)
 
   UserAuthenticator
-  (allowed-user? [this uid pw]
+  (authenticate-user [this uid pw]
     (when-let [hash (get-hash-for-uid (:password-store this) uid)]
       (verify-password pw hash)
       ;; TODO There is a slight security concern here. If no uid is
@@ -250,7 +250,7 @@ that authentication fails."
 
 (defrecord MapBackedUserRegistry [m]
   UserAuthenticator
-  (allowed-user? [_ user password]
+  (authenticate-user [_ user password]
     ((set (seq m)) [user password])))
 
 (defn new-map-backed-user-registry [m]
@@ -301,7 +301,7 @@ that authentication fails."
         (let [[username password] (->> (String. (DatatypeConverter/parseBase64Binary basic-creds) "UTF-8")
                                        (re-matches #"(.*):(.*)")
                                        rest)]
-          (when (allowed-user? user-authenticator username password)
+          (when (authenticate-user user-authenticator username password)
             {::username username
              ::user-roles user-roles}))))))
 
@@ -369,7 +369,7 @@ that authentication fails."
 
     (if (and username
              (not-empty username)
-             (allowed-user? user-authenticator (.trim username) password))
+             (authenticate-user user-authenticator (.trim username) password))
 
       {:status 302
        :headers {"Location" (or requested-uri "/")} ; "/" can be parameterized (TODO)
