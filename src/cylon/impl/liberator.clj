@@ -1,14 +1,12 @@
 ;; Copyright © 2014 JUXT LTD.
 
 (ns ^{:doc "Support for Liberator's authorized? and allowed? decision points"}
-  cylon.liberator
+  cylon.impl.liberator
   (:require
-   [cylon.core :refer (new-composite-disjunctive-request-authenticator
-                       new-session-based-request-authenticator
-                       new-http-basic-request-authenticator
-                       HttpSessionStore
-                       UserAuthenticator
-                       allowed-request?)]
+   [cylon.session :refer (HttpSessionStore new-session-based-request-authenticator)]
+   [cylon.impl.request :refer (new-composite-disjunctive-request-authenticator)]
+   [cylon.request :refer (new-http-basic-request-authenticator authenticate-request)]
+   [cylon.user :refer (UserAuthenticator)]
    [schema.core :as s]))
 
 ;; For a REST API, it is useful to support both HTTP Basic
@@ -35,5 +33,5 @@
              (new-session-based-request-authenticator :http-session-store http-session-store)
              (new-http-basic-request-authenticator :user-authenticator user-authenticator))]
 
-        (when-let [auth (allowed-request? authenticator (:request context))]
+        (when-let [auth (authenticate-request authenticator (:request context))]
           {:auth-request auth})))))
