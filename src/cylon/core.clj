@@ -531,12 +531,10 @@ that authentication fails."
   (ring-handler [this]
     (-> (:ring-handler this)
         ring-handler
-        ;; TODO Just use the one authenticator if possible
-        (wrap-authentication (new-session-based-request-authenticator
-                              :http-session-store
-                              (-> this :protection-system :http-session-store)
-                              :user-roles
-                              (-> this :protection-system :user-roles))))))
+        (wrap-authentication
+         (new-session-based-request-authenticator
+          :http-session-store (-> this :protection-system :http-session-store)
+          :user-roles (-> this :protection-system :user-roles))))))
 
 (defn new-auth-binder
   "Constructor for a ring handler provider that amalgamates all bidi
