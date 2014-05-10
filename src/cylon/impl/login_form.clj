@@ -8,7 +8,7 @@
    [schema.core :as s]
    [ring.middleware.cookies :refer (wrap-cookies)]
    [cylon.user :refer (UserAuthenticator authenticate-user)]
-   [cylon.session :refer ( HttpSessionStore  start-session! end-session!)]
+   [cylon.session :refer (SessionStore  start-session! end-session!)]
    [ring.middleware.params :refer (wrap-params)]
    [modular.bidi :refer (WebService)]))
 
@@ -31,9 +31,9 @@
       {:status 200
        :body (if boilerplate (boilerplate (html form)) (html [:body form]))})))
 
-(defn new-login-post-handler [handlers-p & {:keys [user-authenticator http-session-store] :as opts}]
+(defn new-login-post-handler [handlers-p & {:keys [user-authenticator session-store] :as opts}]
   (s/validate {:user-authenticator (s/protocol UserAuthenticator)
-               :http-session-store (s/protocol HttpSessionStore)}
+               :session-store (s/protocol SessionStore)}
               opts)
   (fn [{{username "username" password "password" requested-uri "requested-uri"} :form-params
         routes :modular.bidi/routes}]
@@ -44,17 +44,17 @@
 
       {:status 302
        :headers {"Location" (or requested-uri "/")} ; "/" can be parameterized (TODO)
-       :cookies {"session" (start-session! http-session-store username)
+       :cookies {"session" (start-session! session-store username)
                  "requested-uri" ""}}
 
       ;; Return back to login form
       {:status 302
        :headers {"Location" (path-for routes (get @handlers-p :login))}})))
 
-(defn new-logout-handler [http-session-store]
+(defn new-logout-handler [session-store]
   (fn [{:keys [cookies]}]
     (end-session!
-     http-session-store
+     session-store
      (:value (get cookies "session")))
     {:status 302 :headers {"Location" "/"}}))
 
@@ -64,14 +64,15 @@
               {:login (apply new-login-get-handler p (apply concat (seq (select-keys opts [:boilerplate]))))
                :process-login (->
                                (apply new-login-post-handler
-                                      p (apply concat (seq (select-keys opts [:user-authenticator :http-session-store]))))
+                                      p (apply concat (seq (select-keys opts [:user-authenticator :session-store]))))
                                wrap-params)
-               :logout (new-logout-handler (:http-session-store opts))})))
+               :logout (new-logout-handler (:session-store opts))})))
 
 (defrecord LoginForm [uri-context boilerplate]
   component/Lifecycle
   (start [this]
-    (let [handlers (make-login-handlers (select-keys this [:user-authenticator :http-session-store :boilerplate]))]
+    (let [handlers (make-login-handlers
+                    (select-keys this [:user-authenticator :session-store :boilerplate]))]
       (assoc this
         :handlers handlers
         :routes
@@ -97,4 +98,4 @@
              (merge {:context ""
                      :boilerplate #(html [:body %])})
              (s/validate new-login-form-schema))]
-    (component/using (->LoginForm context boilerplate) [:user-authenticator :http-session-store])))
+    (component/using (->LoginForm context boilerplate) [:user-authenticator :session-store])))

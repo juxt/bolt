@@ -1,7 +1,7 @@
 ;; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
 (ns cylon.role
-  (:require [clojure.set :as set]) )
+  (:require [clojure.set :as set]))
 
 (defprotocol RoleQualifier
   (matches-role? [_ role]))

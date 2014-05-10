@@ -5,4 +5,5 @@
   cylon.impl.session-atom-state
   )
 
+;; This survives across resets because of the metadata on this namespace.
 (def sessions-atom (atom {}))

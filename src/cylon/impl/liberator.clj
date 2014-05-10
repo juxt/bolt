@@ -3,7 +3,7 @@
 (ns ^{:doc "Support for Liberator's authorized? and allowed? decision points"}
   cylon.impl.liberator
   (:require
-   [cylon.session :refer (HttpSessionStore new-session-based-request-authenticator)]
+   [cylon.session :refer (SessionStore new-session-based-request-authenticator)]
    [cylon.impl.request :refer (new-composite-disjunctive-request-authenticator)]
    [cylon.request :refer (new-http-basic-request-authenticator authenticate-request)]
    [cylon.user :refer (UserAuthenticator)]
@@ -21,16 +21,17 @@
 
 (defn make-composite-authenticator
   "Construct a composite authenticator"
-  [protection-domain]
+  [& {:as opts}]
 
-  (let [{:keys [http-session-store user-authenticator]}
-        (s/validate {:http-session-store (s/protocol HttpSessionStore)
-                     :user-authenticator (s/protocol UserAuthenticator)}
-           (select-keys protection-domain [:http-session-store :user-authenticator]))]
+  (let [{:keys [session-store user-authenticator]}
+        (->> opts
+             (s/validate {:session-store (s/protocol SessionStore)
+                          :user-authenticator (s/protocol UserAuthenticator)}))]
+
     (fn [context]
       (let [authenticator
             (new-composite-disjunctive-request-authenticator
-             (new-session-based-request-authenticator :http-session-store http-session-store)
+             (new-session-based-request-authenticator :session-store session-store)
              (new-http-basic-request-authenticator :user-authenticator user-authenticator))]
 
         (when-let [auth (authenticate-request authenticator (:request context))]
