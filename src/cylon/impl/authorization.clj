@@ -11,7 +11,7 @@
   [m authorizer rejectfn]
   (reduce-kv (fn [acc k v] (assoc acc k (restrict-handler v authorizer rejectfn))) {} m))
 
-(defrecord MapBackedRoleBasedRequestAuthorizer []
+(defrecord RoleBasedRequestAuthorizer []
   RingBinding
   (ring-binding [this req]
     ;; TODO Look in (:session req) for roles
@@ -25,6 +25,6 @@
     (when-let [user-roles (::user-roles request)]
       (user-roles requirement))))
 
-(defn new-map-backed-role-based-request-authorizer [& {:as opts}]
+(defn new-role-based-request-authorizer [& {:as opts}]
   (->> opts
-       map->MapBackedRoleBasedRequestAuthorizer))
+       map->RoleBasedRequestAuthorizer))
