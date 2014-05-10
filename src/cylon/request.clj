@@ -10,18 +10,22 @@
 
 ;; Define HTTP request authentication
 
+;; TODO
 #_(defprotocol HttpRequestAuthenticator
   ;; Return a map, potentially containing entries to be merged with the request.
   (authenticate-request [_ request]))
 
+;; TODO
 #_(extend-protocol HttpRequestAuthenticator
   Boolean
   (authenticate-request [this request]
     (when this {})))
 
+;; TODO
 #_(defprotocol FailedAuthenticationHandler
   (failed-authentication [_ request]))
 
+;; TODO
 #_(defrecord HttpBasicRequestAuthenticator [user-authenticator user-roles]
   HttpRequestAuthenticator
   (authenticate-request [_ request]
@@ -34,6 +38,7 @@
             {::username username
              ::user-roles user-roles}))))))
 
+;; TODO
 #_(defn new-http-basic-request-authenticator [& {:as opts}]
   (->> opts
        (s/validate {:user-authenticator (s/protocol UserAuthenticator)

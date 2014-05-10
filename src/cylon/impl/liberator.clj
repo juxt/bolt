@@ -3,8 +3,11 @@
 (ns ^{:doc "Support for Liberator's authorized? and allowed? decision points"}
   cylon.impl.liberator
   (:require
+;; TODO
    #_[cylon.session :refer (SessionStore new-session-based-request-authenticator)]
+;; TODO
    #_[cylon.impl.request :refer (new-composite-disjunctive-request-authenticator)]
+;; TODO
    #_[cylon.request :refer (new-http-basic-request-authenticator authenticate-request)]
    [cylon.user :refer (UserAuthenticator)]
    [schema.core :as s]))
@@ -19,6 +22,7 @@
 ;; request is authenticated. This is useful to implement the authorized?
 ;; or allowed? decision points in Liberator.
 
+;; TODO
 #_(defn make-composite-authenticator
   "Construct a composite authenticator"
   [& {:as opts}]

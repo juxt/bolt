@@ -4,6 +4,7 @@
   (:require
    [com.stuartsierra.component :as component]
    [modular.ring :refer (ring-handler RingHandler)]
+;; TODO
    #_[cylon.request :refer (HttpRequestAuthenticator authenticate-request failed-authentication)]
    [ring.middleware.cookies :refer (cookies-request)]
    [schema.core :as s]))
@@ -13,6 +14,7 @@
   (get-session [_ request])
   (end-session! [_ value]))
 
+;; TODO
 #_(defrecord SessionBasedRequestAuthenticator [http-session-store user-roles]
   HttpRequestAuthenticator
   (authenticate-request [_ request]
@@ -22,11 +24,13 @@
        ::session session
        ::username (:username session)})))
 
+;; TODO
 #_(defn new-session-based-request-authenticator [& {:as opts}]
   (->> opts
        (s/validate {:session-store (s/protocol SessionStore)})
        map->SessionBasedRequestAuthenticator))
 
+;; TODO
 #_(defn wrap-authentication
   "Ring middleware to pre-authenticate a request through an authenticator. If
 given, the failure-handler is given the request to handle in the event
@@ -44,6 +48,7 @@ that authentication fails."
 ;; This record wraps an existing RingHandler and sets
 ;; authentication entries in the incoming request, according to its
 ;; protection system dependency.
+;; TODO
 #_(defrecord AuthenticationInterceptor []
   RingHandler
   (ring-handler [this]
@@ -53,6 +58,7 @@ that authentication fails."
          (new-session-based-request-authenticator
           :session-store (:session-store this))))))
 
+;; TODO
 #_(defn new-authentication-interceptor
   ""
   []
