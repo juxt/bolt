@@ -2,9 +2,9 @@
 
 (ns cylon.user)
 
-(defprotocol UserAuthenticator
-  (authenticate-user [_ user password]))
+(defprotocol UserStore
+  (lookup-user [_ user password]))
 
-(extend-protocol UserAuthenticator
+(extend-protocol UserStore
   Boolean
-  (authenticate-user [this user password] this))
+  (lookup-user [this user password] this))

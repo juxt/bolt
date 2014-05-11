@@ -5,7 +5,7 @@
    [clojure.java.io :as io]
    [clojure.pprint :refer (pprint)]
    [com.stuartsierra.component :as component]
-   [cylon.user :refer (UserAuthenticator)]
+   [cylon.user :refer (UserStore)]
    [cylon.password :refer (PasswordStore store-user-hash! get-hash-for-uid NewUserCreator PasswordHashAlgorithm make-hash)])
   (:import
    (java.security SecureRandom)
@@ -55,17 +55,10 @@
   (start [this] (assoc this :rng (SecureRandom.)))
   (stop [this] this)
 
-  UserAuthenticator
-  (authenticate-user [this uid pw]
+  UserStore
+  (lookup-user [this uid pw]
     (when-let [hash (get-hash-for-uid (:password-store this) uid)]
-      (verify-password pw hash)
-      ;; TODO There is a slight security concern here. If no uid is
-      ;; found, then the system will return slightly faster and this can
-      ;; be measured by an attacker to discover usernames. I don't know
-      ;; what the current advice is regarding this problem. I have
-      ;; consdiered priming the user store with a 'nobody' password to
-      ;; use.
-      ))
+      (verify-password pw hash)))
 
   NewUserCreator
   (add-user! [this uid pw]

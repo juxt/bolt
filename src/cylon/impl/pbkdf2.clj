@@ -1,6 +1,6 @@
 ;; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
-(ns cylon.impl.password.pbkdf2
+(ns cylon.impl.pbkdf2
   (:require
    [cylon.password :refer (PasswordHashAlgorithm)])
   (:import

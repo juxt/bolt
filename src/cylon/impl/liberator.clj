@@ -9,7 +9,7 @@
    #_[cylon.impl.request :refer (new-composite-disjunctive-request-authenticator)]
 ;; TODO
    #_[cylon.request :refer (new-http-basic-request-authenticator authenticate-request)]
-   [cylon.user :refer (UserAuthenticator)]
+   [cylon.user :refer (UserStore)]
    [schema.core :as s]))
 
 ;; For a REST API, it is useful to support both HTTP Basic
@@ -30,13 +30,14 @@
   (let [{:keys [session-store user-authenticator]}
         (->> opts
              (s/validate {:session-store (s/protocol SessionStore)
-                          :user-authenticator (s/protocol UserAuthenticator)}))]
+                          :user-store (s/protocol UserStore)}))]
 
     (fn [context]
       (let [authenticator
             (new-composite-disjunctive-request-authenticator
              (new-session-based-request-authenticator :session-store session-store)
-             (new-http-basic-request-authenticator :user-authenticator user-authenticator))]
+             (new-http-basic-request-authenticator :user-store user-store))]
 
-        (when-let [auth (authenticate-request authenticator (:request context))]
+        (when-let [auth (authenticate authenticator (:request context))]
+          ;; Not sure about this...
           {:auth-request auth})))))

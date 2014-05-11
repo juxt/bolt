@@ -7,7 +7,7 @@
    [hiccup.core :refer (html)]
    [schema.core :as s]
    [ring.middleware.cookies :refer (wrap-cookies)]
-   [cylon.user :refer (UserAuthenticator authenticate-user)]
+   [cylon.user :refer (UserStore lookup-user)]
    [cylon.session :refer (SessionStore  start-session! end-session!)]
    [ring.middleware.params :refer (wrap-params)]
    [modular.bidi :refer (WebService)]))
@@ -31,8 +31,8 @@
       {:status 200
        :body (if boilerplate (boilerplate (html form)) (html [:body form]))})))
 
-(defn new-login-post-handler [handlers-p & {:keys [user-authenticator session-store] :as opts}]
-  (s/validate {:user-authenticator (s/protocol UserAuthenticator)
+(defn new-login-post-handler [handlers-p & {:keys [user-store session-store] :as opts}]
+  (s/validate {:user-store (s/protocol UserStore)
                :session-store (s/protocol SessionStore)}
               opts)
   (fn [{{username "username" password "password" requested-uri "requested-uri"} :form-params
@@ -40,7 +40,7 @@
 
     (if (and username
              (not-empty username)
-             (authenticate-user user-authenticator (.trim username) password))
+             (lookup-user user-store (.trim username) password))
 
       {:status 302
        :headers {"Location" (or requested-uri "/")} ; "/" can be parameterized (TODO)
@@ -64,7 +64,7 @@
               {:login (apply new-login-get-handler p (apply concat (seq (select-keys opts [:boilerplate]))))
                :process-login (->
                                (apply new-login-post-handler
-                                      p (apply concat (seq (select-keys opts [:user-authenticator :session-store]))))
+                                      p (apply concat (seq (select-keys opts [:user-store :session-store]))))
                                wrap-params)
                :logout (new-logout-handler (:session-store opts))})))
 
@@ -72,7 +72,7 @@
   component/Lifecycle
   (start [this]
     (let [handlers (make-login-handlers
-                    (select-keys this [:user-authenticator :session-store :boilerplate]))]
+                    (select-keys this [:user-store :session-store :boilerplate]))]
       (assoc this
         :handlers handlers
         :routes
@@ -98,4 +98,4 @@
              (merge {:context ""
                      :boilerplate #(html [:body %])})
              (s/validate new-login-form-schema))]
-    (component/using (->LoginForm context boilerplate) [:user-authenticator :session-store])))
+    (component/using (->LoginForm context boilerplate) [:user-store :session-store])))

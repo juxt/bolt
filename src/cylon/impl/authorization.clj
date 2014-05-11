@@ -11,20 +11,27 @@
   [m authorizer rejectfn]
   (reduce-kv (fn [acc k v] (assoc acc k (restrict-handler v authorizer rejectfn))) {} m))
 
-(defrecord RoleBasedRequestAuthorizer []
-  RingBinding
-  (ring-binding [this req]
-    ;; TODO Look in (:session req) for roles
-    {::user-roles #{:user}})
+(defrecord UserBasedAuthorizer []
+  Authorizer
+  (validate [this req] nil)
 
+  (satisfies-requirement? [this request user]
+    (= user (:cylon/user request))))
+
+(defn new-user-based-authorizer [& {:as opts}]
+  (->> opts
+       map->UserBasedAuthorizer))
+
+(defrecord RoleBasedAuthorizer []
   Authorizer
   (validate [this req]
-    (assoc req ::user-roles #{:user}))
+    {:cylon/roles #{:user}})
 
   (satisfies-requirement? [this request requirement]
-    (when-let [user-roles (::user-roles request)]
-      (user-roles requirement))))
+    (when-let [roles (:cylon/roles request)]
+      (println "roles: " roles ", requirement" requirement)
+      (roles requirement))))
 
-(defn new-role-based-request-authorizer [& {:as opts}]
+(defn new-role-based-authorizer [& {:as opts}]
   (->> opts
-       map->RoleBasedRequestAuthorizer))
+       map->RoleBasedAuthorizer))
