@@ -18,7 +18,7 @@
         routes :modular.bidi/routes}]
     (let [form
           [:form {:method "POST" :style "border: 1px dotted #555"
-                  :action (path-for routes ::process-login)}
+                  :action (path-for routes :process-login)}
            (when (not-empty requested-uri)
              [:input {:type "hidden" :name :requested-uri :value requested-uri}])
            [:div
@@ -55,7 +55,7 @@
 
       ;; Return back to login form
       {:status 302
-       :headers {"Location" (path-for routes ::login)}})))
+       :headers {"Location" (path-for routes :login)}})))
 
 
 (defn new-logout-handler [session-store]
@@ -68,16 +68,16 @@
 (defrecord LoginForm [uri-context boilerplate]
   WebService
   (ring-handler-map [this]
-    {::login (-> (apply new-login-get-handler (apply concat (seq (select-keys this [:boilerplate]))))
+    {:login (-> (apply new-login-get-handler (apply concat (seq (select-keys this [:boilerplate]))))
                  wrap-cookies)
-     ::process-login (-> (apply new-login-post-handler
+     :process-login (-> (apply new-login-post-handler
                                 (apply concat (seq (select-keys this [:user-domain :session-store]))))
                          wrap-params wrap-cookies)
-     ::logout (-> (new-logout-handler (:session-store this))
+     :logout (-> (new-logout-handler (:session-store this))
                   wrap-cookies)})
   (routes [this]
-    ["" { "/login" {:get ::login :post ::process-login}
-          "/logout" {:get ::logout}}])
+    ["" { "/login" {:get :login :post :process-login}
+          "/logout" {:get :logout}}])
 
   (uri-context [this] uri-context))
 
