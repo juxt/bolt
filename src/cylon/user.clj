@@ -3,8 +3,9 @@
 (ns cylon.user)
 
 (defprotocol UserStore
-  (lookup-user [_ user password]))
+  (get-user [_ uid])
+  (store-user! [_ uid user]))
 
-(extend-protocol UserStore
-  Boolean
-  (lookup-user [this user password] this))
+(defprotocol UserDomain
+  (verify-user [_ uid password])
+  (add-user! [_ uid user password]))

@@ -57,4 +57,4 @@
      (restrict-fn handler authorizer requirement rejectfn))
   ([handler authorizer requirement]
      (restrict-fn handler authorizer requirement
-                  (constantly {:status 401 :body "Unauthorized handler"}))))
+                  (constantly {:status 401 :body "Unauthorized"}))))

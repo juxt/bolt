@@ -11,18 +11,6 @@
    [schema.core :as s])
   )
 
-;; A request authenticator that tries multiple authenticators in turn
-
-;; TODO
-#_(defrecord CompositeDisjunctiveRequestAuthenticator [delegates]
-  HttpRequestAuthenticator
-  (authenticate-request [_ request]
-    (some #(authenticate-request % request) delegates)))
-
-;; TODO
-#_(defn new-composite-disjunctive-request-authenticator [& delegates]
-  (->CompositeDisjunctiveRequestAuthenticator (s/validate [(s/protocol HttpRequestAuthenticator)] delegates)))
-
 ;; Difficult to know what to call this because it does both authentication and authorization
 
 (defrecord AuthenticatingRequestBinding []

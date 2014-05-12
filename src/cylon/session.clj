@@ -3,10 +3,7 @@
 (ns cylon.session
   (:require
    [com.stuartsierra.component :as component]
-   [modular.ring :refer (ring-handler RingHandler)]
-;; TODO
-   [cylon.authentication :refer (Authenticator authenticate)]
-   [ring.middleware.cookies :refer (cookies-request)]
+
    [schema.core :as s]))
 
 (defprotocol SessionStore
@@ -14,21 +11,7 @@
   (get-session [_ request])
   (end-session! [_ value]))
 
-;; TODO
-(defrecord CookieAuthenticator [http-session-store user-roles]
-    Authenticator
-    (authenticate [_ request]
-      (when-let [session (get-session http-session-store
-                                      (-> request cookies-request :cookies (get "session") :value))]
-        {:session session ; retain compatibility with Ring's wrap-session
-         ::session session
-         ::username (:username session)})))
 
-;; TODO
-#_(defn new-cookie-authenticator [& {:as opts}]
-  (->> opts
-       (s/validate {:session-store (s/protocol SessionStore)})
-       map->SessionBasedRequestAuthenticator))
 
 ;; TODO
 #_(defn wrap-authentication

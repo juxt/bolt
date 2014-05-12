@@ -24,3 +24,6 @@ http://adambard.com/blog/3-wrong-ways-to-store-a-password/"
   PasswordHashAlgorithm
   (make-hash [_ password salt]
     (pbkdf2 password salt)))
+
+(defn new-pbkdf2-password-hash [& {:as opts}]
+  (->> opts map->Pbkdf2PasswordHash))
