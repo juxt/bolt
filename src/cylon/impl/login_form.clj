@@ -11,26 +11,29 @@
    [cylon.user :refer (UserDomain verify-user)]
    [cylon.session :refer (SessionStore start-session! end-session!)]
    [ring.middleware.params :refer (wrap-params)]
-   [modular.bidi :refer (WebService)]))
+   [modular.bidi :refer (WebService)]
+   [clojure.tools.logging :refer :all]))
 
-(defn new-login-get-handler [& {:keys [boilerplate] :as opts}]
-  (fn [{{{requested-uri :value} "requested-uri"} :cookies
-        routes :modular.bidi/routes}]
-    (let [form
-          [:form {:method "POST" :style "border: 1px dotted #555"
-                  :action (path-for routes :process-login)}
-           (when (not-empty requested-uri)
-             [:input {:type "hidden" :name :requested-uri :value requested-uri}])
-           [:div
-            [:label {:for "username"} "Username"]
-            [:input {:id "username" :name "username" :type "input"}]]
-           [:div
-            [:label {:for "password"} "Password"]
-            [:input {:id "password" :name "password" :type "password"}]]
-           [:input {:type "submit" :value "Login"}]
-           ]]
-      {:status 200
-       :body (if boilerplate (boilerplate (html form)) (html [:body form]))})))
+(defn new-login-get-handler [& {:keys [boilerplate middleware] :as opts}]
+  (let [f
+        (fn [{{{requested-uri :value} "requested-uri"} :cookies
+              routes :modular.bidi/routes}]
+          (let [form
+                [:form {:method "POST" :style "border: 1px dotted #555"
+                        :action (path-for routes :process-login)}
+                 (when (not-empty requested-uri)
+                   [:input {:type "hidden" :name :requested-uri :value requested-uri}])
+                 [:div
+                  [:label {:for "username"} "Username"]
+                  [:input {:id "username" :name "username" :type "input"}]]
+                 [:div
+                  [:label {:for "password"} "Password"]
+                  [:input {:id "password" :name "password" :type "password"}]]
+                 [:input {:type "submit" :value "Login"}]
+                 ]]
+            {:status 200
+             :body (if boilerplate (boilerplate (html form)) (html [:body form]))}))]
+    (if middleware (middleware f) f)))
 
 (defn new-login-post-handler [& {:keys [user-domain session-store] :as opts}]
   (s/validate {:user-domain (s/protocol UserDomain)
@@ -38,11 +41,6 @@
               opts)
   (fn [{{username "username" password "password" requested-uri "requested-uri"} :form-params
         routes :modular.bidi/routes}]
-
-    ;; Check password
-    (debugf "Checking username: %s" username)
-    (debugf "Checking password: %s" password)
-    (debugf "user-domain is %s" user-domain)
 
     (if (and username
              (not-empty username)
@@ -65,10 +63,10 @@
      (:value (get cookies "session")))
     {:status 302 :headers {"Location" "/"}}))
 
-(defrecord LoginForm [uri-context boilerplate]
+(defrecord LoginForm [uri-context boilerplate middleware]
   WebService
   (ring-handler-map [this]
-    {:login (-> (apply new-login-get-handler (apply concat (seq (select-keys this [:boilerplate]))))
+    {:login (-> (new-login-get-handler :boilerplate boilerplate :middleware middleware)
                  wrap-cookies)
      :process-login (-> (apply new-login-post-handler
                                 (apply concat (seq (select-keys this [:user-domain :session-store]))))
@@ -83,7 +81,8 @@
 
 (def new-login-form-schema
   {(s/optional-key :uri-context) s/Str
-   (s/optional-key :boilerplate) (s/=> 1)})
+   (s/optional-key :boilerplate) (s/=> 1)
+   (s/optional-key :middleware) (s/=> 1)})
 
 (defn new-login-form [& {:as opts}]
   (component/using
