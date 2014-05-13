@@ -14,7 +14,6 @@
 (defrecord CookieAuthenticator []
   Authenticator
   (authenticate [this request]
-    (debugf "Session store is %s" (:session-store this))
     (when-let [session (get-session (:session-store this)
                                     (-> request cookies-request :cookies (get "session") :value))]
       {:session session  ; retain compatibility with Ring's wrap-session
