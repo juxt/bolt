@@ -33,7 +33,7 @@
 
 (defn new-user-file [& {f :file}]
   (let [f (io/file f)]
-    (assert (.exists (.getParentFile f))
+    (assert (.exists (.getParentFile (.getCanonicalFile f)))
             (format "Please create the directory structure which should contain the file: %s" f))
     (->UserFile f)))
 
