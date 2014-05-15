@@ -52,3 +52,5 @@
   (component/using
    (->CompositeDisjunctiveAuthenticator)
    (vec deps)))
+
+;; If you're looking for CookieAuthenticator, it's in cylon.impl.session
