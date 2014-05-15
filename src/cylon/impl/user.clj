@@ -6,6 +6,7 @@
    ;;[cylon.impl.password :refer (create-hash)]
    [clojure.java.io :as io]
    [clojure.pprint :refer (pprint)]
+   [clojure.tools.logging :refer :all]
    [com.stuartsierra.component :as component]
    [cylon.user :refer (UserStore get-user store-user! UserDomain)]
    [cylon.password :refer (create-hash verify-password)])
@@ -44,9 +45,18 @@
 
   UserDomain
   (verify-user [this uid password]
-    (verify-password (:password-hash-algo this)
-                     password
-                     (get-user (:user-store this) uid)))
+    (debugf "Lookup user by id %s" uid)
+    (if-let [user (get-user (:user-store this) uid)]
+      (do
+        (debugf "Lookup user by id %s, get-user returned %s" uid user)
+        (let [res
+              (verify-password (:password-hash-algo this)
+                               password
+                               (::salt-hash user))]
+          (debugf "Verify of password for user %s: %s" uid res)
+          res))
+      (debugf "No user found in store for uid %s" uid)))
+
   (add-user! [this uid password user]
     (store-user! (:user-store this) uid
                  (assoc user ::salt-hash (create-hash (:password-hash-algo this)
