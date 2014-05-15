@@ -2,18 +2,8 @@
 
 (ns cylon.authorization
   (:require
-   [schema.core :as s]))
-
-(defprotocol Restricted
-  (authorized? [_ credentials]))
-
-(extend-protocol Restricted
-  clojure.lang.Fn
-  ;; Unrestricted functions are not wrapped in a record, but must be able to
-  ;; give an answer on a call to authorized? above.
-  (authorized? [_ credentials] true)
-  nil
-  (authorized? [_ credentials] nil))
+   [schema.core :as s]
+   [cylon.restricted :as restricted]))
 
 ;; Now we can define authorization for Ring handlers (and other
 ;; functions). In Cylon, it is handlers that are restricted, rather than
@@ -29,20 +19,18 @@
 ;; accessor.
 
 (defprotocol Authorizer
-  ;; Augment a Ring request with credentials.
-  (validate [_ req])
   ;; Determine if given credentials (found in request) meet a given
   ;; requirement
-  (satisfies-requirement? [_ req requirement]))
+  (authorized? [_ req requirement]))
 
 (defrecord RestrictedHandler [f authorizer requirement rejectfn]
-  Restricted
-  (authorized? [this req]
-    (satisfies-requirement? authorizer req requirement))
+  restricted/Restricted
+  (restricted/authorized? [this req]
+    (authorized? authorizer req requirement))
 
   clojure.lang.IFn
   (invoke [this req]
-    (if (authorized? this req)
+    (if (restricted/authorized? this req)
       (f req)
       ;; If you don't want this default, call authorized? first
       (rejectfn req))))

@@ -2,8 +2,12 @@
 
 (ns cylon.impl.authorization
   (:require
+   [clojure.set :refer (union)]
+   [clojure.tools.logging :refer :all]
+   [cylon.role :refer (user-in-role?)]
    [cylon.authorization :refer (Authorizer restrict-handler)]
-   [modular.ring :refer (RingBinding)]))
+   [modular.ring :refer (RingBinding)]
+   [schema.core :as s]))
 
 (defn restrict-handler-map
   "Restrict all the values in the given map according to the given
@@ -13,25 +17,20 @@
 
 (defrecord UserBasedAuthorizer []
   Authorizer
-  (validate [this req] nil)
-
-  (satisfies-requirement? [this request user]
+  (authorized? [this request user]
     (= user (:cylon/user request))))
 
 (defn new-user-based-authorizer [& {:as opts}]
   (->> opts
        map->UserBasedAuthorizer))
 
-(defrecord RoleBasedAuthorizer []
+(defrecord RoleBasedAuthorizer [user-role-mappings]
   Authorizer
-  (validate [this req]
-    {:cylon/roles #{:user}})
-
-  (satisfies-requirement? [this request requirement]
+  (authorized? [this request requirement]
     (when-let [roles (:cylon/roles request)]
-      (println "roles: " roles ", requirement" requirement)
-      (roles requirement))))
+      (user-in-role? user-role-mappings (:cylon/user request) requirement))))
 
 (defn new-role-based-authorizer [& {:as opts}]
   (->> opts
+       (s/validate {:user-role-mappings s/Any})
        map->RoleBasedAuthorizer))
