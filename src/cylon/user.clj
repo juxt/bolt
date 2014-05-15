@@ -8,4 +8,4 @@
 
 (defprotocol UserDomain
   (verify-user [_ uid password])
-  (add-user! [_ uid user password]))
+  (add-user! [_ uid password user]))

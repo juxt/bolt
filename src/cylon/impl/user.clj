@@ -47,7 +47,7 @@
     (verify-password (:password-hash-algo this)
                      password
                      (get-user (:user-store this) uid)))
-  (add-user! [this uid user password]
+  (add-user! [this uid password user]
     (store-user! (:user-store this) uid
                  (assoc user ::salt-hash (create-hash (:password-hash-algo this)
                                                       (:rng this) password)))))
