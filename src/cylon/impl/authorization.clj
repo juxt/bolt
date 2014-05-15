@@ -15,14 +15,22 @@
   [m authorizer rejectfn]
   (reduce-kv (fn [acc k v] (assoc acc k (restrict-handler v authorizer rejectfn))) {} m))
 
-(defrecord UserBasedAuthorizer []
+(defrecord LoggedInAuthorizer []
+  Authorizer
+  (authorized? [this request _]
+    (:cylon/user request)))
+
+(defn new-logged-in-authorizer []
+  (->LoggedInAuthorizer))
+
+(defrecord StaticUserAuthorizer []
   Authorizer
   (authorized? [this request user]
     (= user (:cylon/user request))))
 
-(defn new-user-based-authorizer [& {:as opts}]
+(defn new-static-user-authorizer [& {:as opts}]
   (->> opts
-       map->UserBasedAuthorizer))
+       map->StaticUserAuthorizer))
 
 (defrecord RoleBasedAuthorizer [user-role-mappings]
   Authorizer
