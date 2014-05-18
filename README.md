@@ -20,74 +20,8 @@ application.
 Add the following dependency to your `project.clj` file
 
 ```clojure
-[cylon "0.1.0"]
+[cylon "0.2.0"]
 ```
-
-## Usage
-
-Create a protection system, add it into a system-map as a component
-under the ```:protection-system``` key.
-
-```clojure
-(ns example
-  (:require
-    [com.stuartsierra.component :as component]
-    [cylon.core :as cylon]))
-
-(component/system-map
-...
-:protection-system
-(cylon/new-default-protection-system
-  :password-file "passwords.edn")
-...
-)
-
-```
-
-Create a component that provides [bidi](https://github.com/juxt/bidi) routes :-
-
-```clojure
-(component/system-map
-...
-:my-routes
-(cylon/new-protected-bidi-routes
-    ["/index.html" my-handler])
-...
-)
-```
-
-Declare a dependency between the component providing the routes and the
-component providing the protection system.
-
-```clojure
-(component/system-using {:my-routes [:protection-system]}
-```
-
-To test, add the following code to your `user.clj` :-
-
-```clojure
-(ns user
-  (:require
-...
-   [cylon.core :as cylon]))
-
-(defn add-user! [uid pw]
-  (cylon/add-user!
-   (-> system :protection-system :user-password-authenticator)
-   uid pw))
-```
-
-At the REPL
-
-    user> (add-user! "bob" "password")
-
-Navigate to your `/index.html` and you will be presented with a
-login-form. Enter "bob" as the user id and "password" for the password.
-
-## Example
-
-If you want to see a simple working example, one can be found here:
-https://github.com/juxt/msf
 
 ## Terms
 
