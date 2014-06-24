@@ -7,3 +7,6 @@ pom.xml.asc
 *.class
 /.lein-*
 /.nrepl-port
+/contrib/bootstrap-login-form/.nrepl-port
+/contrib/bootstrap-login-form/target/repl-port
+/contrib/bootstrap-login-form/target/stale/extract-native.dependencies
