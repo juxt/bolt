@@ -32,6 +32,7 @@
             {:cylon/user user
              :cylon/authentication-method :http-basic}))))))
 
+
 (defn new-http-basic-authenticator [& {:as opts}]
   (component/using
    (->> opts

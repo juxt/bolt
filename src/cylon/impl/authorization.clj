@@ -6,7 +6,6 @@
    [clojure.tools.logging :refer :all]
    [cylon.role :refer (user-in-role?)]
    [cylon.authorization :refer (Authorizer restrict-handler)]
-   [modular.ring :refer (RingBinding)]
    [schema.core :as s]))
 
 (defn restrict-handler-map
