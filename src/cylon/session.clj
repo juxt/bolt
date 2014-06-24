@@ -8,8 +8,9 @@
 
 (defprotocol SessionStore
   (start-session! [_ username]) ; return cookie map compatible with wrap-cookies
-  (get-session [_ request])
-  (end-session! [_ value]))
+  (renew-session! [_ uuid])
+  (end-session! [_ uuid])
+  (get-session [_ uuid]))
 
 
 
