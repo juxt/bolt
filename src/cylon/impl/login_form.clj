@@ -20,18 +20,35 @@
   LoginFormRenderer
   (render-login-form [_ request {:keys [requested-uri action login-status fields]}]
     (html
-     [:body
-      [:form {:method "POST" :style "border: 1px dotted #555"
+     [:div
+      [:form {:method "POST"
+              :style "border: 1px dotted #555; padding: 10pt"
               :action action}
+
+       [:h2 "Please sign in"]
+
+       (when login-status
+         [:div
+          [:p
+           (case login-status
+             :failed [:span [:strong "Failed: "] "Please check login credentials and try again or " [:a.alert-link {:href "#"} "reset your password"] "."])]])
+
+       (for [{:keys [id label name type value placeholder required autofocus]} fields]
+         [:div
+          [:label {:for id} label]
+          [:input (merge
+                   {:name name :type type :value value}
+                   (when placeholder {:placeholder placeholder})
+                   (when required {:required required})
+                   (when autofocus {:autofocus autofocus}))]])
+
        (when (not-empty requested-uri)
          [:input {:type "hidden" :name :requested-uri :value requested-uri}])
 
-       (for [{:keys [id label name type]} fields]
-         [:div
-          [:label {:for id} label]
-          [:input {:id id :name name :type type}]])
+       [:input {:type "submit" :value "Sign in"}]
 
-       [:input {:type "submit" :value "Login"}]
+       [:p
+        [:a {:href "#"} "Reset password"]]
        ]])))
 
 (defn new-plain-login-form-renderer []
@@ -55,7 +72,7 @@
 
         {:status 302
          :headers {"Location" (or (get params "requested-uri") "/")} ; "/" can be parameterized (TODO)
-         :cookies {"session" (start-session! session-store id)
+         :cookies {"session-id" (start-session! session-store id)
                    "requested-uri" ""}}
 
         ;; Return back to login form
@@ -68,12 +85,12 @@
   (fn [{:keys [cookies]}]
     (end-session!
      session-store
-     (:value (get cookies "session")))
+     (:value (get cookies "session-id")))
     {:status 302 :headers {"Location" "/"}}))
 
 (defrecord LoginForm [uri-context renderer middleware fields uid]
   WebService
-  (ring-handler-map [this]
+  (request-handlers [this]
     {:login
      (let [f (fn [{{{requested-uri :value} "requested-uri"
                     {login-status :value} "login-status"
@@ -107,7 +124,7 @@
          wrap-cookies)})
 
   (routes [this]
-    ["" {"/login" {:get :login :post :process-login}
+    ["" {"/login" {:get :login, :post :process-login}
          "/logout" {:get :logout}}])
 
   (uri-context [this] uri-context))
@@ -122,8 +139,7 @@
                               (s/required-key :type) s/Str
                               (s/optional-key :label) s/Str
                               (s/optional-key :placeholder) s/Str
-                              (s/optional-key :required) s/Bool}]
-   })
+                              (s/optional-key :required) s/Bool}]})
 
 (defn new-login-form [& {:as opts}]
   (component/using
@@ -133,8 +149,7 @@
                 :renderer (->PlainLoginFormRenderer)
                 :fields
                 [{:id "username" :name "username" :type "input" :label "Username"}
-                         {:id "password" :name "password" :type "password" :label "password"}
-                         ]
+                 {:id "password" :name "password" :type "password" :label "Password"}]
                 :uid "username"})
         (s/validate new-login-form-schema)
         map->LoginForm)
