@@ -3,7 +3,9 @@
 (ns cylon.authorization
   (:require
    [schema.core :as s]
-   [cylon.restricted :as restricted]))
+   [cylon.restricted :as restricted]
+   [cylon.authentication :refer (authenticate)]
+   [clojure.tools.logging :refer :all]))
 
 ;; Now we can define authorization for Ring handlers (and other
 ;; functions). In Cylon, it is handlers that are restricted, rather than
@@ -23,14 +25,31 @@
   ;; requirement
   (authorized? [_ req requirement]))
 
+(extend-protocol Authorizer
+  nil
+  (authorized? [_ req requirement]
+    (warnf "Authorizer is nil, so failing authorization check")
+    false))
+
+;; Note: this implementation will cause the authenticator to be called twice if calling code wraps an invoke call with a restricted/authorized? check
+
 (defrecord RestrictedHandler [f authorizer requirement rejectfn]
   restricted/Restricted
   (restricted/authorized? [this req]
-    (authorized? authorizer req requirement))
+    (authorized?
+     authorizer
+     (if-let [authenticator (:authenticator authorizer)]
+       (merge req (authenticate authenticator req))
+       req)
+     requirement))
 
   clojure.lang.IFn
   (invoke [this req]
-    (if (restricted/authorized? this req)
+    (if (restricted/authorized?
+         this
+         (if-let [authenticator (:authenticator authorizer)]
+           (merge req (authenticate authenticator req))
+           req))
       (f req)
       ;; If you don't want this default, call authorized? first
       (rejectfn req))))
