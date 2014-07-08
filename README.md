@@ -74,7 +74,7 @@ number of people who can understand it and point out potential
 weaknesses.
 
 Ultimately, whether Cylon is right for you will depend on how you build
-you Clojure web applications. For smaller applications with a single set
+your Clojure web applications. For smaller applications with a single set
 of Compojure routes, friend is a better choice.
 
 For larger applications, especially those with multiple modules and
