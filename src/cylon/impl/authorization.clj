@@ -2,25 +2,24 @@
 
 (ns cylon.impl.authorization
   (:require
+   [com.stuartsierra.component :as component]
    [clojure.set :refer (union)]
    [clojure.tools.logging :refer :all]
    [cylon.role :refer (user-in-role?)]
-   [cylon.authorization :refer (Authorizer restrict-handler)]
+   [cylon.authorization :refer (Authorizer)]
+   [cylon.authentication :refer (authenticate)]
    [schema.core :as s]))
 
-(defn restrict-handler-map
-  "Restrict all the values in the given map according to the given
-  authorizer."
-  [m authorizer rejectfn]
-  (reduce-kv (fn [acc k v] (assoc acc k (restrict-handler v authorizer rejectfn))) {} m))
-
-(defrecord LoggedInAuthorizer []
+;; A ValidUserAuthorizer simply checks for :cylon/user in the
+;; request. If there is one, they are authorized.
+(defrecord ValidUserAuthorizer []
   Authorizer
   (authorized? [this request _]
-    (:cylon/user request)))
+    (:cylon/user (authenticate (:authenticator this) request))))
 
-(defn new-logged-in-authorizer []
-  (->LoggedInAuthorizer))
+(defn new-valid-user-authorizer []
+  (component/using
+   (->ValidUserAuthorizer) [:authenticator]))
 
 (defrecord StaticUserAuthorizer []
   Authorizer
