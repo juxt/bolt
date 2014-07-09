@@ -45,6 +45,7 @@
 
   clojure.lang.IFn
   (invoke [this req]
+    ;; We are applying the restricted/authorized? function defined above
     (if (restricted/authorized?
          this
          (if-let [authenticator (:authenticator authorizer)]
@@ -62,6 +63,16 @@
 (defn restrict-handler
   ([handler authorizer requirement rejectfn]
      (restrict-fn handler authorizer requirement rejectfn))
+  ([handler authorizer]
+     (restrict-fn handler authorizer nil))
   ([handler authorizer requirement]
      (restrict-fn handler authorizer requirement
                   (constantly {:status 401 :body "Unauthorized"}))))
+
+(defn restrict-handlers
+  "Restrict all the values in the given map according to the given
+  authorizer."
+  ([m authorizer]
+     (reduce-kv (fn [acc k v] (assoc acc k (restrict-handler v authorizer))) {} m))
+  ([m authorizer rejectfn]
+     (reduce-kv (fn [acc k v] (assoc acc k (restrict-handler v authorizer rejectfn))) {} m)))
