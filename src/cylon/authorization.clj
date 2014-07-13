@@ -33,7 +33,7 @@
 
 ;; Note: this implementation will cause the authenticator to be called twice if calling code wraps an invoke call with a restricted/authorized? check
 
-(defrecord RestrictedHandler [f authorizer requirement rejectfn]
+(defrecord RestrictedFn [f authorizer requirement rejectfn]
   restricted/Restricted
   (restricted/authorized? [this req]
     (authorized?
@@ -58,7 +58,7 @@
 (defn restrict-fn
   "Restrict a given function, such as a Ring handler, by some classification (which could be a set of roles, or anything that indicates the qualifying credentials a caller must exhibit in order to call the function. A function (or IFn) is returned."
   [f authorizer requirement rejectfn]
-  (->RestrictedHandler f authorizer requirement rejectfn))
+  (->RestrictedFn f authorizer requirement rejectfn))
 
 (defn restrict-handler
   ([handler authorizer requirement rejectfn]
