@@ -24,15 +24,15 @@
   (stop [this] this)
 
   UserStore
-  (get-user [this uid] (get @(:ref this) uid))
-  (store-user! [this uid user]
+  (get-user [this identity] (get @(:ref this) identity))
+  (store-user! [this identity user]
     (dosync
-     (alter (:ref this) assoc uid user)
+     (alter (:ref this) assoc identity user)
      (send-off (:agent this)
                (fn [f]
                  (spit f (with-out-str (pprint @(:ref this))))
                  (:file this)))
-     (get @(:ref this) uid))))
+     (get @(:ref this) identity))))
 
 (defn check-file-parent [{f :file :as opts}]
   (assert (.exists (.getParentFile (.getCanonicalFile f)))
@@ -52,21 +52,21 @@
   (stop [this] this)
 
   UserDomain
-  (verify-user [this uid password]
-    (debugf "Lookup user by id %s" uid)
-    (if-let [user (get-user (:user-store this) uid)]
+  (verify-user [this identity password]
+    (debugf "Lookup user by identity %s" identity)
+    (if-let [user (get-user (:user-store this) identity)]
       (do
-        (debugf "Lookup user by id %s, get-user returned %s" uid user)
+        (debugf "Lookup user by id %s, get-user returned %s" identity user)
         (let [res
               (verify-password (:password-hash-algo this)
                                password
                                (::salt-hash user))]
-          (debugf "Verify of password for user %s: %s" uid res)
+          (debugf "Verify of password for user %s: %s" identity res)
           res))
-      (debugf "No user found in store for uid %s" uid)))
+      (debugf "No user found in store for identity %s" identity)))
 
-  (add-user! [this uid password user]
-    (store-user! (:user-store this) uid
+  (add-user! [this identity password user]
+    (store-user! (:user-store this) identity
                  (assoc user ::salt-hash (create-hash (:password-hash-algo this)
                                                       (:rng this) password)))))
 

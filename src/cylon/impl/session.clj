@@ -7,7 +7,7 @@
    [cylon.session :refer (SessionStore get-session)]
    [cylon.impl.session-atom-state :as state]
    [cylon.authentication :refer (Authenticator authenticate)]
-   [cylon.session :refer (renew-session!)]
+   [cylon.session :refer (renew-session! purge-session!)]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request)]
    [modular.ring :refer (WebRequestMiddleware WebRequestBinding)]
    [schema.core :as s]))
@@ -24,7 +24,7 @@
         {:session session  ; retain compatibility with Ring's wrap-session
          :cylon/session-id cookie-val
          :cylon/session session
-         :cylon/user (:username session)
+         :cylon/identity (:identity session)
          :cylon/authentication-method :cookie})))
 
   WebRequestMiddleware
@@ -48,31 +48,42 @@
 
 (defrecord AtomBackedSessionStore [expiry-seconds]
   component/Lifecycle
-  (start [this] (assoc this :sessions state/sessions-atom))
+  (start [this] (assoc this :sessions (atom {})))
   (stop [this] (dissoc this :sessions))
 
   SessionStore
-  (start-session! [this username]
-    (let [uuid (str (java.util.UUID/randomUUID))
-          expiry (+ (.getTime (java.util.Date.)) (* expiry-seconds 1000))]
-      (swap! (:sessions this) assoc uuid {:username username :expiry expiry})
-      {:value uuid :max-age expiry-seconds}))
+  (create-session! [this m]
+    (let [key (str (java.util.UUID/randomUUID))
+          expiry-in-ms (+ (.getTime (java.util.Date.)) (* expiry-seconds 1000))]
+      (println "CREATING SESSION: " key " for " this)
+      (let [res (merge m {:cylon.session/key key :cylon.session/expiry expiry-in-ms})]
+        (swap! (:sessions this) assoc key res)
+        res)))
 
-  (renew-session! [this uuid]
-    (let [expiry (+ (.getTime (java.util.Date.)) (* expiry-seconds 1000))]
-      (swap! (:sessions this) update-in [uuid] assoc :expiry expiry)
-      {:value uuid :max-age expiry-seconds}))
+  (get-session [this id]
+    (when-let [{expiry :cylon.session/expiry :as session} (get @(:sessions this) id)]
+      (if (< (.getTime (java.util.Date.)) expiry)
+        session
+        (purge-session! this id))))
 
-  (end-session! [this value]
-    (swap! (:sessions this) dissoc value))
+  (renew-session! [this id]
+    (let [expiry-in-ms (+ (.getTime (java.util.Date.)) (* expiry-seconds 1000))]
+      (swap! (:sessions this) update-in [id] assoc :cylon.session/expiry expiry-in-ms)
+      (get @(:sessions this) id)))
 
-  (get-session [this uuid]
-    (when-let [{:keys [expiry] :as session} (get @(:sessions this) uuid)]
-      (when (< (.getTime (java.util.Date.)) expiry)
-        session))))
+  (purge-session! [this id]
+    (swap! (:sessions this) dissoc id)
+    nil)
+
+  (assoc-session! [this id k v]
+    (swap! (:sessions this) update-in [id] assoc k v))
+
+  (dissoc-session! [this id k]
+    (swap! (:sessions this) update-in [id] dissoc k)))
 
 (defn new-atom-backed-session-store [& {:as opts}]
   (->> opts
-       (merge {:expiry-seconds 3600})
-       (s/validate {:expiry-seconds s/Int})
+       (merge {:expiry-seconds (* 4 60 60)})
+       (s/validate {:expiry-seconds s/Int
+                    :id s/Keyword})
        map->AtomBackedSessionStore))

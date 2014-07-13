@@ -11,7 +11,7 @@
    [bidi.bidi :refer (path-for ->WrapMiddleware)]
    [modular.bidi :refer (WebService)]
    [cylon.user :refer (UserDomain verify-user)]
-   [cylon.session :refer (SessionStore start-session! end-session!)]))
+   [cylon.session :refer (SessionStore create-session! purge-session! ->cookie)]))
 
 (defprotocol LoginFormRenderer
   (render-login-form [_ request attrs]))
@@ -56,45 +56,47 @@
 
 ;; TODO Because we're using email, not username - need to make this configurable.
 
-(defn new-login-post-handler [& {:keys [user-domain session-store uid] :as opts}]
+(defn new-login-post-handler [& {:keys [user-domain session-store identity-field] :as opts}]
   (s/validate {:user-domain (s/protocol UserDomain)
                :session-store (s/protocol SessionStore)
-               :uid s/Str}
+               :identity-field s/Str}
               opts)
   (fn [{params :form-params
         routes :modular.bidi/routes}]
 
-    (let [id (get params uid) password (get params "password")]
+    (let [identity (get params identity-field)
+          password (get params "password")]
 
-      (if (and id
-               (not-empty id)
-               (verify-user user-domain (.trim id) password))
+      (if (and identity
+               (not-empty identity)
+               (verify-user user-domain (.trim identity) password))
 
-        {:status 302
-         :headers {"Location" (or (get params "requested-uri") "/")} ; "/" can be parameterized (TODO)
-         :cookies {"session-id" (start-session! session-store id)
-                   "requested-uri" ""}}
+        (do
+          (println (->cookie (create-session! session-store {:cylon/identity identity})))
+
+          {:status 302
+           :headers {"Location" (or (get params "requested-uri") "/")} ; "/" can be parameterized (TODO)
+           :cookies {"session-id" (->cookie (create-session! session-store {:cylon/identity identity}))
+                     "requested-uri" ""}})
 
         ;; Return back to login form
         {:status 302
          :headers {"Location" (path-for routes :login)}
-         :cookies {"login-status" "failed"
-                   "uid" id}}))))
+         :cookies (merge {"login-status" "failed"}
+                         (when identity {identity-field identity}))}))))
 
 (defn new-logout-handler [session-store]
   (fn [{:keys [cookies]}]
-    (end-session!
-     session-store
-     (:value (get cookies "session-id")))
+    (purge-session! session-store (:value (get cookies "session-id")))
     {:status 302 :headers {"Location" "/"}}))
 
-(defrecord LoginForm [uri-context renderer middleware fields uid]
+(defrecord LoginForm [uri-context renderer middleware fields identity-field]
   WebService
   (request-handlers [this]
     {:login
      (let [f (fn [{{{requested-uri :value} "requested-uri"
                     {login-status :value} "login-status"
-                    {uid-value :value} "uid"} :cookies
+                    {identity-value :value} "identity"} :cookies
                     routes :modular.bidi/routes :as request}]
                {:status 200
                 :body (render-login-form
@@ -102,21 +104,21 @@
                        request
                        (merge
                         {:action (path-for routes :process-login)
-                         :fields (if uid-value
+                         :fields (if identity-value
                                    (->> fields
-                                        (map #(if (= (:name %) uid) (assoc % :value uid-value) %))
+                                        (map #(if (= (:name %) identity-field) (assoc % :value identity-value) %))
                                         (map #(if (= (:name %) "password") (assoc % :autofocus true) %)))
                                    (->> fields
-                                        (map #(if (= (:name %) uid) (assoc % :autofocus true) %))))}
+                                        (map #(if (= (:name %) identity-field) (assoc % :autofocus true) %))))}
                         (when (not-empty requested-uri) {:requested-uri requested-uri})
                         (when (not-empty login-status) {:login-status (keyword login-status)})))
                 :cookies {"login-status" ""
-                          "uid" ""}})]
+                          "identity" ""}})]
        (wrap-cookies (if middleware (middleware f) f)))
 
      :process-login
      (-> (apply new-login-post-handler
-                (apply concat (seq (select-keys this [:user-domain :session-store :uid]))))
+                (apply concat (seq (select-keys this [:user-domain :session-store :identity-field]))))
          wrap-params wrap-cookies)
 
      :logout
@@ -133,7 +135,7 @@
   {(s/optional-key :uri-context) s/Str
    (s/optional-key :renderer) (s/protocol LoginFormRenderer)
    (s/optional-key :middleware) (s/=> 1)
-   (s/required-key :uid) s/Str
+   (s/required-key :identity-field) s/Str
    (s/required-key :fields) [{(s/optional-key :id) s/Str
                               (s/required-key :name) s/Str
                               (s/required-key :type) s/Str
@@ -150,7 +152,7 @@
                 :fields
                 [{:id "username" :name "username" :type "input" :label "Username"}
                  {:id "password" :name "password" :type "password" :label "Password"}]
-                :uid "username"})
+                :identity-field "username"})
         (s/validate new-login-form-schema)
         map->LoginForm)
    [:user-domain :session-store]))

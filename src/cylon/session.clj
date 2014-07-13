@@ -3,47 +3,23 @@
 (ns cylon.session
   (:require
    [com.stuartsierra.component :as component]
-
+   [ring.middleware.cookies :refer (cookies-request)]
    [schema.core :as s]))
 
 (defprotocol SessionStore
-  (start-session! [_ username]) ; return cookie map compatible with wrap-cookies
-  (renew-session! [_ uuid])
-  (end-session! [_ uuid])
-  (get-session [_ uuid]))
+  (create-session! [_ m])
+  (get-session [_ id])
+  (renew-session! [_ id])
+  (purge-session! [_ id])
+  (assoc-session! [_ id k v])
+  (dissoc-session! [_ id k]))
 
+(defn ->cookie [session]
+  {:value (::key session)
+   :max-age (long (/ (::expiry session) 1000))})
 
+(defn get-cookie-value [request cookie-name]
+  (-> request cookies-request :cookies (get cookie-name) :value))
 
-;; TODO
-#_(defn wrap-authentication
-  "Ring middleware to pre-authenticate a request through an authenticator. If
-given, the failure-handler is given the request to handle in the event
-that authentication fails."
-  ([h authenticator failure-handler]
-     (fn [req]
-       (let [auth (authenticate-request authenticator req)]
-         (cond auth (h (merge req auth))
-               failure-handler (failed-authentication failure-handler req)
-               ;; Continue without merging auth
-               :otherwise (h req)))))
-  ([h authenticator]
-     (wrap-authentication h authenticator nil)))
-
-;; This record wraps an existing RingHandler and sets
-;; authentication entries in the incoming request, according to its
-;; protection system dependency.
-;; TODO
-#_(defrecord AuthenticationInterceptor []
-  RingHandler
-  (ring-handler [this]
-    (-> (:ring-handler this)
-        ring-handler
-        (wrap-authentication
-         (new-session-based-request-authenticator
-          :session-store (:session-store this))))))
-
-;; TODO
-#_(defn new-authentication-interceptor
-  ""
-  []
-  (component/using (->AuthenticationInterceptor) [:session-store :ring-handler]))
+(defn get-session-value [request cookie-name session-store k]
+  (get (get-session session-store (get-cookie-value request cookie-name)) k))

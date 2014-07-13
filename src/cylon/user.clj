@@ -3,9 +3,9 @@
 (ns cylon.user)
 
 (defprotocol UserStore
-  (get-user [_ uid])
-  (store-user! [_ uid user]))
+  (get-user [_ identity])
+  (store-user! [_ identity user-details]))
 
 (defprotocol UserDomain
-  (verify-user [_ uid password])
-  (add-user! [_ uid password user]))
+  (verify-user [_ identity password])
+  (add-user! [_ identity password user-details]))
