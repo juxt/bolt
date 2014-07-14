@@ -251,7 +251,7 @@
   (expect-state [_ state])
   (expecting-state? [this state]))
 
-(defrecord Application [client-id secret store]
+(defrecord Application [client-id client-secret store access-token-uri]
   WebService
   (request-handlers [this]
     {::grant
@@ -270,7 +270,7 @@
                   at-resp
                   @(http-request
                     {:method :post
-                     :url "http://localhost:8020/login/oauth/access_token"
+                     :url access-token-uri
                      :headers {"content-type" "application/x-www-form-urlencoded"}
                      ;; Exchange the code for an access token - application/x-www-form-urlencoded format
 
@@ -279,7 +279,7 @@
                      ;; that looks to be a github thing.
 
                      :body (format "client_id=%s&client_secret=%s&code=%s"
-                                   client-id secret code)}
+                                   client-id client-secret code)}
                     #(if (:error %)
                        %
                        (update-in % [:body] (comp decode-stream io/reader))))]
@@ -343,11 +343,13 @@
   (component/using
    (->> opts
         (merge {:store (atom {:expected-states #{}})
-                :secret "sekfuhalskuehfalk"})
+                })
         (s/validate {:client-id s/Str
-                     :secret s/Str
+                     :client-secret s/Str
                      :store s/Any
                      :required-scopes #{s/Keyword}
+                     :authorize-uri s/Str
+                     :access-token-uri s/Str
                      })
         map->Application)
    [:session-store]))
@@ -358,13 +360,15 @@
         session (create-session!
                  (:session-store app)
                  {:original-uri original-uri})
-        state (str (java.util.UUID/randomUUID))
-        ]
+        state (str (java.util.UUID/randomUUID))]
+
     (expect-state app state)
     (cookies-response
      {:status 302
       :headers {"Location"
-                (format "http://localhost:8020/login/oauth/authorize?client_id=%s&state=%s&scope=%s"
+                (format "%s?client_id=%s&state=%s&scope=%s"
+                        (:authorize-uri app)
+                        ;;
                         (:client-id app)
                         state
                         (url-encode "openid profile email")
