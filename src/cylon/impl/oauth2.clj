@@ -22,10 +22,38 @@
    [clj-time.core :refer (now plus days)]
    ))
 
-
-
 (defprotocol Scopes
   (valid-scope? [_ scope]))
+
+(defprotocol ApplicationRegistry
+  (register-application [_ properties])
+  (lookup-application [_ client-id]))
+
+(s/defn register-application+ :- {:client-id s/Str
+                                  :client-secret s/Str}
+  [p :- (s/protocol ApplicationRegistry)
+   ;; If client-id and/or client-secret are not specified, they will be
+   ;; generated.
+   properties :- {(s/optional-key :client-id) s/Str
+                  (s/optional-key :client-secret) s/Str
+                  :application-name s/Str
+                  :homepage-uri s/Str
+                  (s/optional-key :description) s/Str
+                  :callback-uri s/Str}]
+  (register-application p properties))
+
+(s/defn lookup-application+ :- {:application-name s/Str
+                                :homepage-uri s/Str
+                                (s/optional-key :description) s/Str
+                                :callback-uri s/Str
+                                :client-id s/Str
+                                :client-secret s/Str}
+  [p :- (s/protocol ApplicationRegistry)
+   client-id :- s/Str]
+  (lookup-application p client-id))
+
+;; TODO: client secret
+;; TODO: callback uri
 
 (defrecord AuthServer [store scopes iss]
   Scopes
@@ -74,7 +102,10 @@
                  client-id (get params "client_id")
                  scope (get params "scope")
                  state (get params "state")
-                 scopes (set (str/split scope #"[\s]+"))]
+                 scopes (set (str/split scope #"[\s]+"))
+                 ;; Lookup application
+                 {:keys [callback-uri] :as application}
+                 (lookup-application+ (:application-registry this) client-id)]
 
              ;; openid-connect core 3.1.2.2
              ;;(if (contains? scopes "openid"))
@@ -122,19 +153,17 @@
                      {:status 302
                       :headers {"Location"
                                 (format
-                                 "http://localhost:8010/oauth/grant?code=%s&state=%s"
-                                 code state
+                                 ;; TODO: Replace this with the callback uri
+                                 "%s?code=%s&state=%s"
+                                 callback-uri code state
                                  )}
                       :cookies {"session-id" (->cookie session)}})))
                ;; Fail
                {:status 302
-                :headers {"Location" (str "/login/oauth/authorize?client_id=" client-id)}
-                :body "Try again"}
-               )
+                :headers {"Location" (format "%s?client_id=%s" (path-for (:modular.bidi/routes req) ::get-authenticate-form) client-id)}
+                :body "Try again"})))
 
-             )
-           )
-         wrap-params wrap-cookies)
+         wrap-params wrap-cookies s/with-fn-validation)
 
      ::get-totp-code
      (fn [req]
@@ -154,14 +183,17 @@
      ::post-totp-code
      (-> (fn [req]
            (let [code (-> req :form-params (get "code"))
-                 secret (get-session-value req "session-id" (:session-store this) :totp-secret)]
+                 secret (get-session-value req "session-id" (:session-store this) :totp-secret)
+                 ]
              (if (= code (totp-token secret))
                ;; Success, set up the exchange
                (let [session (get-session (:session-store this) (get-cookie-value req "session-id"))
                      client-id (get session :client-id)
+                     _ (infof "Looking up app with client-id %s yields %s" client-id (lookup-application+ (:application-registry this) client-id))
+                     {:keys [callback-uri] :as application}
+                     (lookup-application+ (:application-registry this) client-id)
                      state (get session :state)
                      identity (get session :cylon/identity)
-
                      code (str (java.util.UUID/randomUUID))]
 
                  ;; Remember the code for the possible exchange - TODO expire these
@@ -172,10 +204,7 @@
 
                  {:status 302
                   :headers {"Location"
-                            (format
-                             "http://localhost:8010/oauth/grant?code=%s&state=%s"
-                             code state
-                             )}})
+                            (format "%s?code=%s&state=%s" callback-uri code state)}})
 
                ;; Failed, have another go!
                {:status 302
@@ -184,44 +213,50 @@
                 }
 
                )))
-         wrap-params wrap-cookies)
+         wrap-params wrap-cookies s/with-fn-validation)
 
      ::exchange-code-for-access-token
      (-> (fn [req]
            (let [params (:form-params req)
                  code (get params "code")
-                 client-id (get params "client_id")]
-             (if-let [{identity :cylon/identity}
-                      (get @store
-                           ;; I don't think this key has to include client-id
-                           ;; - it can just be 'code'.
-                           {:client-id client-id :code code})]
+                 client-id (get params "client_id")
+                 client-secret (get params "client_secret")
+                 application (lookup-application+ (:application-registry this) client-id)]
 
-               (let [{access-token :cylon.session/key}
-                     (create-session! (:access-token-store this) {:scopes #{:superuser/read-users :repo :superuser/gist :admin}})
-                     claim {:iss iss
-                            :sub identity
-                            :aud client-id
-                            :exp (plus (now) (days 1)) ; expiry
-                            :iat (now)}]
+             (if (not= (:client-secret application) client-secret)
+               {:status 400 :body "Invalid request - bad secret"}
 
-                 (info "Claim is %s" claim)
+               (if-let [{identity :cylon/identity}
+                        (get @store
+                             ;; I don't think this key has to include client-id
+                             ;; - it can just be 'code'.
+                             {:client-id client-id :code code})]
 
-                 {:status 200
-                  :body (encode {"access_token" access-token
-                                 "scope" "repo gist openid profile email"
-                                 "token_type" "Bearer"
-                                 "expires_in" 3600
-                                 ;; TODO Refresh token (optional)
-                                 ;; ...
-                                 ;; OpenID Connect ID Token
-                                 "id_token" (-> claim
-                                                jwt
-                                                (sign :HS256 "secret") to-str)
-                                 })})
-               {:status 400
-                :body "You did not supply a valid code!"})))
-         wrap-params)})
+                 (let [{access-token :cylon.session/key}
+                       (create-session! (:access-token-store this) {:scopes #{:superuser/read-users :repo :superuser/gist :admin}})
+                       claim {:iss iss
+                              :sub identity
+                              :aud client-id
+                              :exp (plus (now) (days 1)) ; expiry
+                              :iat (now)}]
+
+                   (info "Claim is %s" claim)
+
+                   {:status 200
+                    :body (encode {"access_token" access-token
+                                   "scope" "repo gist openid profile email"
+                                   "token_type" "Bearer"
+                                   "expires_in" 3600
+                                   ;; TODO Refresh token (optional)
+                                   ;; ...
+                                   ;; OpenID Connect ID Token
+                                   "id_token" (-> claim
+                                                  jwt
+                                                  (sign :HS256 "secret") to-str)
+                                   })})
+                 {:status 400
+                  :body "Invalid request - unknown code"}))))
+         wrap-params s/with-fn-validation)})
 
   (routes [this]
     ["/" {"authorize" {:get ::get-authenticate-form
@@ -243,7 +278,8 @@
         map->AuthServer)
    [:access-token-store
     :session-store
-    :user-domain]))
+    :user-domain
+    :application-registry]))
 
 ;; --------
 
@@ -251,7 +287,31 @@
   (expect-state [_ state])
   (expecting-state? [this state]))
 
-(defrecord Application [client-id client-secret store access-token-uri]
+(defrecord Application [store access-token-uri]
+  component/Lifecycle
+  (start [this]
+    ;; If there's an :application-registry dependency, use it to
+    ;; register this app.
+    (if-let [reg (:application-registry this)]
+      (let [{:keys [client-id client-secret]}
+            (s/with-fn-validation
+              (register-application+
+               reg
+               (select-keys this [:client-id
+                                  :client-secret
+                                  :application-name
+                                  :homepage-uri
+                                  :description
+                                  :callback-uri])))]
+        ;; In case these are generated
+        (assoc this :client-id client-id :client-secret client-secret))
+
+      ;; If no app registry, make sure we can standalone as an app.
+      (s/validate {:client-id s/Str
+                   :client-secret s/Str
+                   s/Keyword s/Any} this)))
+  (stop [this] this)
+
   WebService
   (request-handlers [this]
     {::grant
@@ -279,7 +339,7 @@
                      ;; that looks to be a github thing.
 
                      :body (format "client_id=%s&client_secret=%s&code=%s"
-                                   client-id client-secret code)}
+                                   (:client-id this) (:client-secret this) code)}
                     #(if (:error %)
                        %
                        (update-in % [:body] (comp decode-stream io/reader))))]
@@ -342,12 +402,16 @@
   [& {:as opts}]
   (component/using
    (->> opts
-        (merge {:store (atom {:expected-states #{}})
-                })
-        (s/validate {:client-id s/Str
-                     :client-secret s/Str
-                     :store s/Any
+        (merge {:store (atom {:expected-states #{}})})
+        (s/validate {(s/optional-key :client-id) s/Str
+                     (s/optional-key :client-secret) s/Str
+                     :application-name s/Str
+                     :homepage-uri s/Str
+                     :callback-uri s/Str
+
                      :required-scopes #{s/Keyword}
+                     :store s/Any
+
                      :authorize-uri s/Str
                      :access-token-uri s/Str
                      })
@@ -390,18 +454,38 @@
       (let [access-token (second (re-matches #"\Qtoken\E\s+(.*)" (get (:headers request) "authorization")))
             session (get-session (:access-token-store this) access-token)
             scopes (:scopes session)]
-
         (infof "session is %s, scopes is %s" session scopes)
-
-        (when scopes
-          (scopes scope)))
+        (when scopes (scopes scope)))
 
       ;; Not a valid scope
-
-      (throw (ex-info "Not a valid scope!" {:scope scope}))
-
-      )))
+      (throw (ex-info "Not a valid scope!" {:scope scope})))))
 
 (defn new-oauth2-access-token-authorizer [& {:as opts}]
-  (component/using (->OAuth2AccessTokenAuthorizer) [:access-token-store :auth-server])
-)
+  (component/using (->OAuth2AccessTokenAuthorizer) [:access-token-store :auth-server]))
+
+;; Optional ApplicationRegistry implementation
+
+(defrecord RefBackedApplicationRegistry []
+  component/Lifecycle
+  (start [this]
+    (assoc this :store {:last-client-id (ref 1000)
+                        :applications (ref {})}))
+  (stop [this] this)
+
+  ApplicationRegistry
+  (register-application [this properties]
+    (dosync
+     (let [client-id (or (:client-id properties)
+                         (str (alter (-> this :store :last-client-id) inc)))
+           properties (assoc properties
+                        :client-id client-id
+                        :client-secret (or (:client-secret properties)
+                                           (str (java.util.UUID/randomUUID))))]
+       (alter (-> this :store :applications) assoc client-id properties)
+       (select-keys properties [:client-id :client-secret]))))
+
+  (lookup-application [this client-id]
+    (-> this :store :applications deref (get client-id))))
+
+(defn new-ref-backed-application-registry []
+  (->RefBackedApplicationRegistry))
