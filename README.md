@@ -20,13 +20,32 @@ application.
 Add the following dependency to your `project.clj` file
 
 ```clojure
-[cylon "0.2.0"]
+[cylon "0.4.0"]
 ```
 
 ## Terms
 
 The precise meanings of the terms component, system-map and system are
-those in [component](https://github.com/stuartsierra/component).
+those in [component](https://github.com/stuartsierra/component). In
+summary, a _component_ is a map of data, usually implemented as a record
+with associated protocols specifying functions for start/stop and
+others. A _system_ is a set of these components, with the inclusion of
+declared dependency references into each component.
+
+## Quick start
+
+To create a modular website integrated with Cylon security comonents, use `lein modular`.
+
+    $ lein new modular myapp +cylon
+
+If you plan to create web APIs, Cylon also offers OAuth2, allowing you
+to expose this APIs securely for use by other applications.
+
+Add __`+idp`__ (__+__ __id__entity __p__rovider) if you wish to store
+
+You can add them individually or both together in the same application :-
+
+    $ lein new modular myapp +cylon +idp +rp
 
 ## Discussion
 
@@ -34,34 +53,18 @@ Cylon provides an _integrated system_, rather than requiring developers
 to roll their own from smaller libraries.
 
 Alternative systems _can_ be created by interchanging components,
-providing flexibility where absolutely necessary, This gives developers
-the control over certain aspects of the security system (by substituting
-one or more of the components that it contains) without forcing them to
-roll-their-own system from scratch (with all the risks that go with
-that) if there's someting in the defaults that is incompatible with
-their needs.
+providing necessary flexibility for bespoke Clojure applications.
 
-However, the 'out-of-the-box' defaults (which many will use) do provide
-good security, at a level at least on par with other languages and
-frameworks. That is what is currently missing in the Clojure landscape
-and the gap that Cylon aims to fill.
+Nevertheless, 'out-of-the-box' defaults should provide good security, on
+par with other languages and frameworks. That is what is currently
+missing in the Clojure landscape and the gap that Cylon aims to fill.
 
 ### Differences with friend
 
 The key difference is that [friend](https://github.com/cemerick/friend)
-is designed upon compojure, whereas Cylon is designed upon
-component. Every other difference stems from that.
-
-Friend is built around a routing library. Arguably, security systems are
-broader than just the routing. For a start, there are stores for
-passwords and persistent sessions to consider. Hash and salting of
-passwords too. There are also other web libraries (such as
-[Liberator](http://clojure-liberator.github.io/liberator/)) that
-providing authorizing hooks outside the routing layer. Furthermore, a
-system might need other components, such as emailers for password change
-requests. So it makes sense to see all these as equal parts of a system,
-each playing a role, rather than privileging one of the parts (i.e. the
-routing).
+is designed upon compojure, whereas Cylon is designed upon component,
+and is designed specifically for modular applications, where
+functionality can be added through the addition of extra components.
 
 Stuart Sierra's component library provides a balanced, elegant and
 "essential" foundation for bringing all these parts together into a
@@ -87,13 +90,17 @@ Cylon is intented to be pronounced as in the 1978 movie of
 [Battlestar Gallactica](http://en.wikipedia.org/wiki/Cylon_%28Battlestar_Galactica%29),
 with the stress on the first syllable.  It is NOT pronounced 'Ceylon'.
 
+
+
+
+
 ## TODO
 
 Cylon is new. Here's some of the items which will be covered soon or very soon.
 
-* Persistent sessions
 * CSRF
-* OpenId
+* OpenId-Connect
+* Persistent sessions
 
 ## Limitations
 
@@ -130,6 +137,10 @@ the development on Cylon, and using it in their kixi projects
 Also, to Neale Swinnerton [@sw1nn](https://twitter.com/sw1nn) for the
 original work in adopting Stuart's component library and showing how to
 migrate [Jig](https://github.com/juxt/jig) components to it.
+
+[Juan Antonio Ruz](https://github.com/tangrammar) designed and developed
+the TOTP two-factor authentication support. Additionally Juan conducted
+the background research and co-authored the OAuth2 support.
 
 ## Copyright & License
 
