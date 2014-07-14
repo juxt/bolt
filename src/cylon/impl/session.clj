@@ -55,7 +55,6 @@
   (create-session! [this m]
     (let [key (str (java.util.UUID/randomUUID))
           expiry-in-ms (+ (.getTime (java.util.Date.)) (* expiry-seconds 1000))]
-      (println "CREATING SESSION: " key " for " this)
       (let [res (merge m {:cylon.session/key key :cylon.session/expiry expiry-in-ms})]
         (swap! (:sessions this) assoc key res)
         res)))

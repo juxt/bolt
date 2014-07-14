@@ -13,10 +13,11 @@
                  [hiccup "1.0.5"]
                  [org.clojure/tools.logging "0.2.6"]
 
-                 ;; Required for OAuth2 support
+                 ;; Required for OAuth2/OpenID-Connect support
                  [cheshire "5.3.1"]
                  [juxt.modular/http-kit "0.5.1"]
                  [liberator "0.11.0"]
+                 [clj-jwt "0.0.8"]
                  ]
 
   :profiles {:dev {:dependencies [[org.clojure/clojure "1.6.0"]]}})
