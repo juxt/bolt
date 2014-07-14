@@ -33,7 +33,7 @@
 
   WebService
   (request-handlers [this]
-    {::authorize-form
+    {::get-authenticate-form
      (->
       (fn [req]
         {:status 200
@@ -43,7 +43,7 @@
                  [:p "The application with client id " (-> req :query-params (get "client_id"))
                   " is requesting access to the Azondi API on your behalf. Please login if you are happy to authorize this application."]
                  [:form {:method :post
-                         :action (path-for (:modular.bidi/routes req) ::authorize)}
+                         :action (path-for (:modular.bidi/routes req) ::post-authenticate-form)}
                   [:p
                    [:label {:for "user"} "User"]
                    [:input {:name "user" :id "user" :type "text" :value "juan"}]]
@@ -66,7 +66,7 @@
                   [:p [:a {:href (path-for (:modular.bidi/routes req) :cylon.impl.signup/signup-form)} "Signup"]]]])})
       wrap-params)
 
-     ::authorize
+     ::post-authenticate-form
      (-> (fn [req]
            (let [params (-> req :form-params)
                  identity (get params "user")
@@ -106,7 +106,7 @@
                                      :state state)
 
                      {:status 302
-                      :headers {"Location" (path-for (:modular.bidi/routes req) ::second-authenticator-form)}
+                      :headers {"Location" (path-for (:modular.bidi/routes req) ::get-totp-code)}
                       :cookies {"session-id" (->cookie session)}})
 
                    ;; So it's not 2FA, continue with OAuth exchange
@@ -136,7 +136,7 @@
            )
          wrap-params wrap-cookies)
 
-     ::second-authenticator-form
+     ::get-totp-code
      (fn [req]
        {:status 200
         :body (html
@@ -148,10 +148,10 @@
 
                [:form {:method :post
                        :action (path-for (:modular.bidi/routes req)
-                                         ::process-authenticator-code)}
+                                         ::post-totp-code)}
                 [:input {:type "text" :id "code" :name "code"}]])})
 
-     ::process-authenticator-code
+     ::post-totp-code
      (-> (fn [req]
            (let [code (-> req :form-params (get "code"))
                  secret (get-session-value req "session-id" (:session-store this) :totp-secret)]
@@ -180,7 +180,7 @@
                ;; Failed, have another go!
                {:status 302
                 :headers {"Location"
-                          (path-for (:modular.bidi/routes req) ::second-authenticator-form)}
+                          (path-for (:modular.bidi/routes req) ::get-totp-code)}
                 }
 
                )))
@@ -224,10 +224,10 @@
          wrap-params)})
 
   (routes [this]
-    ["/" {"authorize" {:get ::authorize-form
-                       :post ::authorize}
-          "second-authenticator" {:get ::second-authenticator-form
-                                  :post ::process-authenticator-code}
+    ["/" {"authorize" {:get ::get-authenticate-form
+                       :post ::post-authenticate-form}
+          "totp" {:get ::get-totp-code
+                  :post ::post-totp-code}
           "access_token" {:post ::exchange-code-for-access-token}}])
 
   (uri-context [this] "/login/oauth"))
