@@ -61,7 +61,29 @@
 
   WebService
   (request-handlers [this]
-    {::get-authenticate-form
+    {::authorize
+     (fn [req]
+       ;; TODO Establish whether the user-agent is already authenticated.
+       ;; If not, create a session with client-id, scope and state and redirect to the login form
+       (if-let [session
+                (get-session
+                 (:session-store this)
+                 (-> req cookies-request :cookies (get "session-id") :value))]
+         ;; TODO Obey the 'prompt' value in OpenID/Connect
+         {:status 200 :body (str "Hi - it appears you're already logged in, session is " (pr-str session))}
+
+         (let [session (create-session!
+                        (:session-store this)
+                        {:client-id (-> req :query-params (get "client_id"))
+                         :scope (-> req :query-params (get "scope"))
+                         :state (-> req :query-params (get "state"))
+                         })]
+           (cookies-response
+            {:status 200
+             :body "Hi - it appears you're not already logged in, so I'm going to create a session for you and redirect you"
+             :cookies {"session-id" (->cookie session)}}))))
+
+     ::get-authenticate-form
      (->
       (fn [req]
         {:status 200
@@ -259,8 +281,9 @@
          wrap-params s/with-fn-validation)})
 
   (routes [this]
-    ["/" {"authorize" {:get ::get-authenticate-form
-                       :post ::post-authenticate-form}
+    ["/" {"authorize" {:get ::authorize}
+          "login" {:get ::get-authenticate-form
+                   :post ::post-authenticate-form}
           "totp" {:get ::get-totp-code
                   :post ::post-totp-code}
           "access_token" {:post ::exchange-code-for-access-token}}])
