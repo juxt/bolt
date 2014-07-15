@@ -11,12 +11,11 @@
    [org.httpkit.client :refer (request) :rename {request http-request}]
    [cheshire.core :refer (encode decode-stream)]
    [cylon.authorization :refer (Authorizer)]
-   [cylon.session :refer (create-session! get-session assoc-session!)]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]
    [ring.util.codec :refer (url-encode)]
    [schema.core :as s]
    [cylon.user :refer (verify-user)]
-   [cylon.session :refer (create-session! assoc-session! ->cookie get-session-value get-cookie-value)]
+   [cylon.session :refer (create-session! assoc-session! ->cookie get-session-value get-cookie-value get-session)]
    [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)]
    [clj-jwt.core :refer (to-str jwt sign str->jwt verify encoded-claims)]
    [clj-time.core :refer (now plus days)]
@@ -70,18 +69,21 @@
                   (:session-store this)
                   (-> req cookies-request :cookies (get "session-id") :value))]
           ;; TODO Obey the 'prompt' value in OpenID/Connect
-          {:status 200 :body (str "Hi - it appears you're already logged in, session is " (pr-str session))}
-
+          (do
+            (infof "Hi - it appears you're already logged in, session is %s" (pr-str session))
+            {:status 302
+             :headers {"Location" (path-for (:modular.bidi/routes req) ::get-authenticate-form)}})
           (let [session (create-session!
                          (:session-store this)
                          {:client-id (-> req :query-params (get "client_id"))
                           :scope (-> req :query-params (get "scope"))
                           :state (-> req :query-params (get "state"))
                           })]
+            (infof "Hi - it appears you're not already logged in, so I'm going to create a session for you and redirect you")
             (cookies-response
-             {:status 200
-              :body "Hi - it appears you're not already logged in, so I'm going to create a session for you and redirect you"
-              :cookies {"session-id" (->cookie session)}}))))
+                      {:status 302
+                       :headers {"Location" (path-for (:modular.bidi/routes req) ::get-authenticate-form)}
+                       :cookies {"session-id" (->cookie session)}}))))
          wrap-params)
 
      ::get-authenticate-form
@@ -91,7 +93,7 @@
          :body (html
                 [:body
                  [:h1 "Azondi MQTT Broker API Server"]
-                 [:p "The application with client id " (-> req :query-params (get "client_id"))
+                 [:p "The application with client id " (get-session-value req  "session-id" (:session-store this) :client-id)
                   " is requesting access to the Azondi API on your behalf. Please login if you are happy to authorize this application."]
                  [:form {:method :post
                          :action (path-for (:modular.bidi/routes req) ::post-authenticate-form)}
@@ -101,18 +103,6 @@
                   [:p
                    [:label {:for "password"} "Password"]
                    [:input {:name "password" :id "password" :type "password"}]]
-
-                  ;; TODO - Hidden fields - I think we should first
-                  ;; redirect to a oauth2 handler which validates the
-                  ;; request, if the request is valid, then tries to
-                  ;; authenticate the user against an existing session,
-                  ;; if no existing session then redirects to a login
-                  ;; form such as this. Then we wouldn't need to 'hide'
-                  ;; these fields in the form.
-                  [:input {:name "client_id" :type "hidden" :value (-> req :query-params (get "client_id"))}]
-                  [:input {:name "scope" :type "hidden" :value (-> req :query-params (get "scope"))}]
-                  [:input {:name "state" :type "hidden" :value (-> req :query-params (get "state"))}]
-
                   [:p [:input {:type "submit"}]]
                   [:p [:a {:href (path-for (:modular.bidi/routes req) :cylon.impl.signup/signup-form)} "Signup"]]]])})
       wrap-params)
@@ -122,9 +112,9 @@
            (let [params (-> req :form-params)
                  identity (get params "user")
                  password (get params "password")
-                 client-id (get params "client_id")
-                 scope (get params "scope")
-                 state (get params "state")
+                 client-id (get-session-value req  "session-id" (:session-store this) :client-id)
+                 scope (get-session-value req  "session-id" (:session-store this) :scope)
+                 state (get-session-value req  "session-id" (:session-store this) :state)
                  scopes (set (str/split scope #"[\s]+"))
                  ;; Lookup application
                  {:keys [callback-uri] :as application}
@@ -159,9 +149,9 @@
                                      (:cylon.session/key session)
                                      :state state)
 
-                     {:status 302
-                      :headers {"Location" (path-for (:modular.bidi/routes req) ::get-totp-code)}
-                      :cookies {"session-id" (->cookie session)}})
+                     (cookies-response {:status 302
+                       :headers {"Location" (path-for (:modular.bidi/routes req) ::get-totp-code)}
+                       :cookies {"session-id" (->cookie session)}}))
 
                    ;; So it's not 2FA, continue with OAuth exchange
                    ;; Generate the temporary code that we'll exchange for an access token later
@@ -173,17 +163,17 @@
                             {:created (java.util.Date.)
                              :cylon/identity identity})
 
-                     {:status 302
-                      :headers {"Location"
-                                (format
-                                 ;; TODO: Replace this with the callback uri
-                                 "%s?code=%s&state=%s"
-                                 callback-uri code state
-                                 )}
-                      :cookies {"session-id" (->cookie session)}})))
+                     (cookies-response {:status 302
+                       :headers {"Location"
+                                 (format
+                                  ;; TODO: Replace this with the callback uri
+                                  "%s?code=%s&state=%s"
+                                  callback-uri code state
+                                  )}
+                       :cookies {"session-id" (->cookie session)}}))))
                ;; Fail
                {:status 302
-                :headers {"Location" (format "%s?client_id=%s" (path-for (:modular.bidi/routes req) ::get-authenticate-form) client-id)}
+                :headers {"Location" (format "%s" (path-for (:modular.bidi/routes req) ::get-authenticate-form))}
                 :body "Try again"})))
 
          wrap-params wrap-cookies s/with-fn-validation)
