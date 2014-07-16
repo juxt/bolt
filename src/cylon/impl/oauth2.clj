@@ -430,7 +430,7 @@
                      :access-token-uri s/Str
                      })
         map->Application)
-   [:session-store]))
+   [:session-store :application-registry]))
 
 (defn authorize [app req]
   (let [original-uri (apply format "%s://%s%s" ((juxt (comp name :scheme) (comp #(get % "host") :headers) :uri) req))
