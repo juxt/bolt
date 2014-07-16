@@ -58,6 +58,7 @@
                [:div
                 [:p "Please scan this image into your 2-factor authentication application"]
                 [:img {:src (totp/qr-code (format "%s@%s" identity appname) totp-secret)}]
+                [:p "Alternatively, type in this secret into your authenticator application: " [:code totp-secret]]
                 ])
              ]
             )}))
