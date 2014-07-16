@@ -464,14 +464,17 @@
   Authorizer
   (authorized? [this request scope]
     (if (valid-scope? (:auth-server this) scope)
+      (when-let [auth-header (get (:headers request) "authorization")]
 
-      (let [access-token (second (re-matches #"\Qtoken\E\s+(.*)" (get (:headers request) "authorization")))
-            session (get-session (:access-token-store this) access-token)
-            scopes (:scopes session)]
-        (infof "session is %s, scopes is %s" session scopes)
-        (when scopes (scopes scope)))
+        (let [access-token (second (re-matches #"\Qtoken\E\s+(.*)" auth-header))
+              session (get-session (:access-token-store this) access-token)
+              scopes (:scopes session)]
+          (infof "session is %s, scopes is %s" session scopes)
+          (when session
+            (when scopes (scopes scope))
+            )))
 
-      ;; Not a valid scope
+      ;; Not a valid scope - (internal error)
       (throw (ex-info "Not a valid scope!" {:scope scope})))))
 
 (defn new-oauth2-access-token-authorizer [& {:as opts}]
