@@ -99,7 +99,7 @@
                          :action (path-for (:modular.bidi/routes req) ::post-authenticate-form)}
                   [:p
                    [:label {:for "user"} "User"]
-                   [:input {:name "user" :id "user" :type "text" :value "juan"}]]
+                   [:input {:name "user" :id "user" :type "text"}]]
                   [:p
                    [:label {:for "password"} "Password"]
                    [:input {:name "password" :id "password" :type "password"}]]

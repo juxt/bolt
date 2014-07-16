@@ -21,13 +21,13 @@
                 [:form {:method :post}
                  [:p
                   [:label {:for "user"} "User"]
-                  [:input {:name "user" :id "user" :type "text" :value "juan"}]]
+                  [:input {:name "user" :id "user" :type "text"}]]
                  [:p
                   [:label {:for "name"} "Name"]
-                  [:input {:name "name" :id "name" :type "text" :value "Juan Antonio Ruz"}]]
+                  [:input {:name "name" :id "name" :type "text"}]]
                  [:p
                   [:label {:for "email"} "Email"]
-                  [:input {:name "email" :id "email" :type "text" :value "juanantonioruz@gmail.com"}]]
+                  [:input {:name "email" :id "email" :type "text"}]]
                  [:p
                   [:label {:for "password"} "Password"]
                   [:input {:name "password" :id "password" :type "password"}]]
