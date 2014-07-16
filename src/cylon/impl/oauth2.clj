@@ -51,9 +51,6 @@
    client-id :- s/Str]
   (lookup-application p client-id))
 
-;; TODO: client secret
-;; TODO: callback uri
-
 (defrecord AuthServer [store scopes iss]
   Scopes
   (valid-scope? [_ scope] (contains? scopes scope))
