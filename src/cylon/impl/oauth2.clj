@@ -185,13 +185,16 @@
                [:h1 "Please can I have your auth code"]
 
                (let [secret (get-session-value req "session-id" (:session-store this) :totp-secret)]
-                 [:p "Secret is " secret]
-                 [:p "Hint, Type this: " (totp-token secret)])
+                 [:div
 
-               [:form {:method :post
-                       :action (path-for (:modular.bidi/routes req)
-                                         ::post-totp-code)}
-                [:input {:type "text" :id "code" :name "code"}]])})
+
+                  [:form {:method :post
+                          :action (path-for (:modular.bidi/routes req)
+                                            ::post-totp-code)}
+                   [:input {:type "text" :id "code" :name "code"}]
+                   [:input {:type "submit"}]]
+
+                  [:p "(Hint, maybe it's something like... this ? " (totp-token secret) ")"]]))})
 
      ::post-totp-code
      (-> (fn [req]
