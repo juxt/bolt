@@ -92,7 +92,7 @@
         {:status 200
          :body (html
                 [:body
-                 [:h1 "Azondi MQTT Broker API Server"]
+                 [:h1 "API Server"]
                  [:p "The application with client id " (get-session-value req  "session-id" (:session-store this) :client-id)
                   " is requesting access to the Azondi API on your behalf. Please login if you are happy to authorize this application."]
                  [:form {:method :post
