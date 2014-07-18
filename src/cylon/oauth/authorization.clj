@@ -1,14 +1,11 @@
-(ns cylon.oauth.impl.authorizer
+(ns cylon.oauth.authorization
   (require [com.stuartsierra.component :as component]
            [clojure.tools.logging :refer :all]
            [cylon.authorization :refer (Authorizer)]
            [cylon.session :refer (get-session)]
            [cylon.oauth.scopes :refer (valid-scope?)]))
 
-;; renamed from OAuth2AccessTokenAuthorizer to OAuth2Authorizer
-;; because I still don't know/find another way to authorize in oauth2 spec
-
-(defrecord OAuth2Authorizer []
+(defrecord OAuthAuthorizer []
   Authorizer
   (authorized? [this request scope]
     (if (valid-scope? (:auth-server this) scope)
@@ -24,5 +21,5 @@
       ;; Not a valid scope - (internal error)
       (throw (ex-info "Not a valid scope!" {:scope scope})))))
 
-(defn new-oauth2-authorizer [& {:as opts}]
-  (component/using (->OAuth2Authorizer) [:access-token-store :auth-server]))
+(defn new-oauth-authorizer [& {:as opts}]
+  (component/using (->OAuthAuthorizer) [:access-token-store :auth-server]))
