@@ -7,7 +7,7 @@
            [hiccup.core :refer (html h)]
            [schema.core :as s]
            [clojure.string :as str]
-           [cylon.oauth.application-registry :refer ( lookup-application+)]
+           [cylon.oauth.client-registry :refer (lookup-client+)]
            [cylon.user :refer (verify-user)]
            [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)]
            [clj-time.core :refer (now plus days)]
@@ -57,7 +57,7 @@
                 [:body
                  [:h1 "API Server"]
                  [:p "The application with client id " (get-session-value req  "session-id" (:session-store this) :client-id)
-                  " is requesting access to the Azondi API on your behalf. Please login if you are happy to authorize this application."]
+                  " is requesting access to the Azondi API on your behalf. Please login if you are happy to authorize this client."]
                  [:form {:method :post
                          :action (path-for (:modular.bidi/routes req) ::post-authenticate-form)}
                   [:p
@@ -79,9 +79,9 @@
                  scope (get-session-value req  "session-id" (:session-store this) :scope)
                  state (get-session-value req  "session-id" (:session-store this) :state)
                  scopes (set (str/split scope #"[\s]+"))
-                 ;; Lookup application
+                 ;; Lookup client
                  {:keys [callback-uri] :as application}
-                 (lookup-application+ (:application-registry this) client-id)]
+                 (lookup-client+ (:client-registry this) client-id)]
 
              ;; openid-connect core 3.1.2.2
              ;;(if (contains? scopes "openid"))
@@ -168,9 +168,9 @@
                ;; Success, set up the exchange
                (let [session (get-session (:session-store this) (get-cookie-value req "session-id"))
                      client-id (get session :client-id)
-                     _ (infof "Looking up app with client-id %s yields %s" client-id (lookup-application+ (:application-registry this) client-id))
-                     {:keys [callback-uri] :as application}
-                     (lookup-application+ (:application-registry this) client-id)
+                     _ (infof "Looking up app with client-id %s yields %s" client-id (lookup-client+ (:client-registry this) client-id))
+                     {:keys [callback-uri] :as client}
+                     (lookup-client+ (:client-registry this) client-id)
                      state (get session :state)
                      identity (get session :cylon/identity)
                      code (str (java.util.UUID/randomUUID))]
@@ -200,9 +200,9 @@
                  code (get params "code")
                  client-id (get params "client_id")
                  client-secret (get params "client_secret")
-                 application (lookup-application+ (:application-registry this) client-id)]
+                 client (lookup-client+ (:client-registry this) client-id)]
 
-             (if (not= (:client-secret application) client-secret)
+             (if (not= (:client-secret client) client-secret)
                {:status 400 :body "Invalid request - bad secret"}
 
                (if-let [{identity :cylon/identity}
@@ -259,4 +259,4 @@
    [:access-token-store
     :session-store
     :user-domain
-    :application-registry]))
+    :client-registry]))

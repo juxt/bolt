@@ -10,7 +10,7 @@
            [ring.middleware.params :refer (wrap-params)]
            [org.httpkit.client :refer (request) :rename {request http-request}]
            [cheshire.core :refer (encode decode-stream)]
-           [cylon.oauth.application-registry :refer (register-application+)]
+           [cylon.oauth.client-registry :refer (register-client+)]
            [clojure.java.io :as io]
            [clj-jwt.core :refer (to-str jwt sign str->jwt verify encoded-claims)]
            ))
@@ -24,12 +24,12 @@
 (defrecord OAuthClient [store access-token-uri]
   component/Lifecycle
   (start [this]
-    ;; If there's an :application-registry dependency, use it to
+    ;; If there's an :client-registry dependency, use it to
     ;; register this app.
-    (if-let [reg (:application-registry this)]
+    (if-let [reg (:client-registry this)]
       (let [{:keys [client-id client-secret]}
             (s/with-fn-validation
-              (register-application+
+              (register-client+
                reg
                (select-keys this [:client-id
                                   :client-secret
@@ -129,7 +129,7 @@
         true))))
 
 (defn new-oauth-client
-  "Represents an OAuth2 application. This component provides all the web
+  "Represents an OAuth2 client. This component provides all the web
   routes necessary to provide signup, login and password resets. It also
   acts as an Authorizer, which returns an OAuth2 access token from a
   call to authorized?"
@@ -150,7 +150,7 @@
                      :access-token-uri s/Str
                      })
         map->OAuthClient)
-   [:session-store :application-registry]))
+   [:session-store :client-registry]))
 
 (defn authorize [app req]
   (let [original-uri (apply format "%s://%s%s" ((juxt (comp name :scheme) (comp #(get % "host") :headers) :uri) req))
