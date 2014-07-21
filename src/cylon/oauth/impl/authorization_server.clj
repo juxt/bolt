@@ -253,15 +253,13 @@
     (if-not (contains? (set (keys scopes)) scope)
       (throw (ex-info "Invalid scope" {:scope scope}))
       (contains? (:scopes (get-session (:access-token-store this) access-token))
-scope)))
+                 scope)))
 
   RequestAuthorizer
   (request-authorized? [this request scope]
     (when-let [auth-header (get (:headers request) "authorization")]
       (let [access-token (second (re-matches #"\Qtoken\E\s+(.*)" auth-header))]
-        (authorized? this access-token scope))))
-
-)
+        (authorized? this access-token scope)))))
 
 (defn new-authorization-server [& {:as opts}]
   (component/using
