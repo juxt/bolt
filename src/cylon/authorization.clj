@@ -3,7 +3,7 @@
 (ns cylon.authorization
   (:require
    [schema.core :as s]
-   [cylon.restricted :as restricted]
+   [cylon.restricted :refer (authorized? Restricted)]
    [cylon.authentication :refer (authenticate)]
    [clojure.tools.logging :refer :all]))
 
@@ -16,27 +16,32 @@
 ;; handlers are accessed, whether via a particular routing library
 ;; (Compojure, bidi, etc.) or via some other mechanism.
 
-;; An Authorizer is responsible for protected sensitive resources in
-;; addition to determining the access credentials of a potential
+;; A RequestAuthorizer is responsible for protected sensitive resources
+;; in addition to determining the access credentials of a potential
 ;; accessor.
 
-(defprotocol Authorizer
+(defprotocol RequestAuthorizer
   ;; Determine if given credentials (found in request) meet a given
   ;; requirement
-  (authorized? [_ req requirement]))
+  ;; TODO: btw - i think we should rename this to authorized-request? ;)
+  ;; noun/verb ambiguity
+  (request-authorized? [_ req requirement]))
 
-(extend-protocol Authorizer
+(extend-protocol RequestAuthorizer
   nil
-  (authorized? [_ req requirement]
-    (warnf "Authorizer is nil, so failing authorization check")
+  (request-authorized? [_ req requirement]
+    (warnf "RequestAuthorizer is nil, so failing authorization check")
     false))
 
 ;; Note: this implementation will cause the authenticator to be called twice if calling code wraps an invoke call with a restricted/authorized? check
 
+;; ---------------------------------------------------------------------------------
+;; All the below is likely to be removed in future
+
 (defrecord RestrictedFn [f authorizer requirement rejectfn]
-  restricted/Restricted
-  (restricted/authorized? [this req]
-    (authorized?
+  Restricted
+  (authorized? [this req]
+    (request-authorized?
      authorizer
      (if-let [authenticator (:authenticator authorizer)]
        (merge req (authenticate authenticator req))
@@ -46,7 +51,7 @@
   clojure.lang.IFn
   (invoke [this req]
     ;; We are applying the restricted/authorized? function defined above
-    (if (restricted/authorized?
+    (if (authorized?
          this
          (if-let [authenticator (:authenticator authorizer)]
            (merge req (authenticate authenticator req))

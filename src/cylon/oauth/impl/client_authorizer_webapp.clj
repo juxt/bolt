@@ -1,25 +1,25 @@
 (ns cylon.oauth.impl.client-authorizer-webapp
-  (require [com.stuartsierra.component :as component]
-           [clojure.tools.logging :refer :all]
-           [cylon.oauth.scopes :refer (Scopes) ]
-           [modular.bidi :refer (WebService)]
-           [bidi.bidi :refer (path-for)]
-           [hiccup.core :refer (html h)]
-           [schema.core :as s]
-           [clojure.string :as str]
-           [cylon.oauth.client-registry :refer (lookup-client+)]
-           [cylon.user :refer (verify-user)]
-           [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)]
-           [clj-time.core :refer (now plus days)]
-           [cheshire.core :refer (encode)]
-           [clj-jwt.core :refer (to-str sign jwt)]
-           [ring.middleware.params :refer (wrap-params)]
-           [cylon.session :refer (create-session! assoc-session! ->cookie get-session-value get-cookie-value get-session)]
-           [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]))
+  (require
+   [com.stuartsierra.component :as component]
+   [clojure.tools.logging :refer :all]
+   [modular.bidi :refer (WebService)]
+   [bidi.bidi :refer (path-for)]
+   [hiccup.core :refer (html h)]
+   [schema.core :as s]
+   [clojure.string :as str]
+   [cylon.oauth.client-registry :refer (lookup-client+)]
+   [cylon.oauth.authorization :refer (AccessTokenAuthorizer authorized?)]
+   [cylon.authorization :refer (RequestAuthorizer request-authorized?)]
+   [cylon.user :refer (verify-user)]
+   [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)]
+   [clj-time.core :refer (now plus days)]
+   [cheshire.core :refer (encode)]
+   [clj-jwt.core :refer (to-str sign jwt)]
+   [ring.middleware.params :refer (wrap-params)]
+   [cylon.session :refer (create-session! assoc-session! ->cookie get-session-value get-cookie-value get-session)]
+   [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]))
 
-(defrecord ClientAuthorizerWebApp [store scopes iss]
-  Scopes
-  (valid-scope? [_ scope] (contains? scopes scope))
+(defrecord AuthorizationServer [store scopes iss]
 
   WebService
   (request-handlers [this]
@@ -161,10 +161,10 @@
 
      ::post-totp-code
      (-> (fn [req]
-           (let [code (-> req :form-params (get "code"))
+           (let [totp-code (-> req :form-params (get "code"))
                  secret (get-session-value req "session-id" (:session-store this) :totp-secret)
                  ]
-             (if (= code (totp-token secret))
+             (if (= totp-code (totp-token secret))
                ;; Success, set up the exchange
                (let [session (get-session (:session-store this) (get-cookie-value req "session-id"))
                      client-id (get session :client-id)
@@ -173,6 +173,7 @@
                      (lookup-client+ (:client-registry this) client-id)
                      state (get session :state)
                      identity (get session :cylon/identity)
+                     ;; This is the code that will be exchanged for an access-token
                      code (str (java.util.UUID/randomUUID))]
 
                  ;; Remember the code for the possible exchange - TODO expire these
@@ -245,9 +246,24 @@
                   :post ::post-totp-code}
           "access_token" {:post ::exchange-code-for-access-token}}])
 
-  (uri-context [this] "/login/oauth"))
+  (uri-context [this] "/login/oauth")
 
-(defn new-client-authorizer-webapp [& {:as opts}]
+  AccessTokenAuthorizer
+  (authorized? [this access-token scope]
+    (if-not (contains? (set (keys scopes)) scope)
+      (throw (ex-info "Invalid scope" {:scope scope}))
+      (contains? (:scopes (get-session (:access-token-store this) access-token))
+scope)))
+
+  RequestAuthorizer
+  (request-authorized? [this request scope]
+    (when-let [auth-header (get (:headers request) "authorization")]
+      (let [access-token (second (re-matches #"\Qtoken\E\s+(.*)" auth-header))]
+        (authorized? this access-token scope))))
+
+)
+
+(defn new-authorization-server [& {:as opts}]
   (component/using
    (->> opts
         (merge {:store (atom {})})
@@ -255,7 +271,7 @@
                      :store s/Any
                      :iss s/Str ; uri actually, see openid-connect ch 2.
                      })
-        map->ClientAuthorizerWebApp)
+        map->AuthorizationServer)
    [:access-token-store
     :session-store
     :user-domain
