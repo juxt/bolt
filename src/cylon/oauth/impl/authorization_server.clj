@@ -1,4 +1,4 @@
-(ns cylon.oauth.impl.client-authorizer-webapp
+(ns cylon.oauth.impl.authorization-server
   (require
    [com.stuartsierra.component :as component]
    [clojure.tools.logging :refer :all]

@@ -175,16 +175,10 @@
                                (.setTime (:cylon.session/expiry session))
                                ))}}})))
 
-  UserIdentity ; ??? or different name
+  UserIdentity
   (get-claims [this req]
     (let [app-session-id (-> req cookies-request :cookies (get APP-SESSION-ID) :value)]
       (-> (get-session (:session-store this) app-session-id) :open-id)))
-
-  #_RequestAuthorizer
-  ;; Return the access-token, if you can!
-  #_(request-authorized? [this req scope]
-      (let [app-session-id (-> req cookies-request :cookies (get APP-SESSION-ID) :value)]
-        (select-keys (get-session (:session-store this) app-session-id) [:access-token :cylon/identity])))
 
   ;; TODO Deprecate this!
   TempState
@@ -195,9 +189,6 @@
       (do
         (swap! store update-in [:expected-states] disj state)
         true))))
-
-(defn ->scope-string [scope]
-  )
 
 (defn new-web-client
   "Represents an OAuth2 client. This component provides all the web
