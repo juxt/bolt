@@ -226,7 +226,7 @@
                               :exp (plus (now) (days 1)) ; expiry
                               :iat (now)}]
 
-                   (info "Claim is %s" claim)
+                   (infof "Claim is %s" claim)
 
                    {:status 200
                     :body (encode {"access_token" access-token
