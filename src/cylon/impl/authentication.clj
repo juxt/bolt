@@ -91,16 +91,19 @@
                        (fn [req]
                          (if (not= (:request-method req) :post)
                            (h req)
-                           ;; We are intercepting the POST handler
                            (let [res (h req)]
                              (case (:status res)
                                200 (if next-step
                                      {:status 302
                                       :headers {"Location" (get-location next-step req)}
                                       :body "Authenticator: Move to the next step"}
+
+                                     ;; No more steps, we're done. Redirect to the initiator.
                                      {:status 200
                                       :body "Thank you - no more redirects, phew!"})
-                               ;; It is the default policy of this authenticator to allow the user to retry entering her credentials
+                               ;; It is the default policy of this
+                               ;; authenticator to allow the user to
+                               ;; retry entering her credentials
                                403 {:status 302
                                     :headers {"Location" (get-location step req)}
                                     :body "Authenticator: Try again"}))))))
@@ -112,7 +115,6 @@
                [(uri-context step) [(routes step)]]))])
 
   (uri-context [this] ""))
-
 
 (defn new-multi-factor-authentication-interaction [& {:as opts}]
   (component/using
