@@ -1,14 +1,12 @@
 (ns cylon.oauth.client)
 
-
-
 ;; I don't think this is a wonderful name but until we can think of
 ;; something better :)
 (defprotocol AccessTokenGrantee
   (get-access-token [_ req]
     "Get the access-token held by the client, if one has been granted, ")
 
-  (request-access-token
+  (solicit-access-token
     [_ req]
     [_ req scope-korks]
     "Initiate a process (typically via a HTTP redirect) that will result
@@ -19,7 +17,6 @@
     "Initiate a process (typically via a HTTP redirect) that will result
     in a new request being made with an access token, if possible."
     ))
-
 
 (defprotocol UserIdentity
   (get-claims [_ req]

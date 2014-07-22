@@ -6,7 +6,7 @@
    [clojure.set :refer (union)]
    [schema.core :as s]
    [modular.bidi :refer (WebService)]
-   [cylon.oauth.client :refer (AccessTokenGrantee UserIdentity request-access-token)]
+   [cylon.oauth.client :refer (AccessTokenGrantee UserIdentity solicit-access-token)]
    [cylon.authorization :refer (RequestAuthorizer)]
    [cylon.session :refer (get-session assoc-session! create-session!)]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]
@@ -142,10 +142,10 @@
     (let [app-session-id (-> req cookies-request :cookies (get APP-SESSION-ID) :value)]
       (-> (get-session (:session-store this) app-session-id) :access-token)))
 
-  (request-access-token [this req]
-    (request-access-token this req []))
+  (solicit-access-token [this req]
+    (solicit-access-token this req []))
 
-  (request-access-token [this req scopes]
+  (solicit-access-token [this req scopes]
     (let [original-uri (apply format "%s://%s%s" ((juxt (comp name :scheme) (comp #(get % "host") :headers) :uri) req))
           ;; We need a session to store the original uri
           session (create-session!
