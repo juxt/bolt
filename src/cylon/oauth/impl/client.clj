@@ -17,23 +17,10 @@
    [cylon.oauth.client-registry :refer (register-client+)]
    [clojure.java.io :as io]
    [clj-jwt.core :refer (to-str jwt sign str->jwt verify encoded-claims)]
+   [cylon.util :refer (as-set)]
    ))
 
 ;; -------- Convenience - TODO promote somewhere
-
-(defprotocol KorksSet
-  (as-set [_]))
-
-(extend-protocol KorksSet
-  clojure.lang.Keyword
-  (as-set [k] #{k})
-  clojure.lang.PersistentHashSet
-  (as-set [ks] ks)
-  clojure.lang.PersistentVector
-  (as-set [v] (set v))
-  clojure.lang.PersistentList
-  (as-set [l] (set l)))
-
 
 (defprotocol TempState
   (expect-state [_ state])
