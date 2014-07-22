@@ -19,7 +19,7 @@
    [cylon.session :refer (create-session! assoc-session! ->cookie get-session-value get-cookie-value get-session)]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]))
 
-(def SESSION-ID "session-id")
+(def SESSION-ID "auth-session-id")
 
 (defrecord AuthorizationServer [store scopes iss]
 
@@ -84,8 +84,9 @@
                  session (get-session (:session-store this) (get-cookie-value req SESSION-ID))
 
                  client-id (get session :client-id)
-                 scope (get session :scope)
-                 state (or (get session :state) "") ; to avoid a java.lang.NullPointerException on str/split
+                 scope (or (get session :scope) "") ; to avoid a java.lang.NullPointerException on str/split
+                 state (get session :state)
+
                  scopes (set (str/split scope #"[\s]+"))
 
                  ;; Lookup client
