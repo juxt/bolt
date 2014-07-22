@@ -19,6 +19,8 @@
    [cylon.session :refer (create-session! assoc-session! ->cookie get-session-value get-cookie-value get-session)]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]))
 
+(def SESSION-ID "session-id")
+
 (defrecord AuthorizationServer [store scopes iss]
 
   WebService
@@ -30,7 +32,7 @@
         (if-let [session
                  (get-session
                   (:session-store this)
-                  (-> req cookies-request :cookies (get "session-id") :value))]
+                  (-> req cookies-request :cookies (get SESSION-ID) :value))]
           ;; TODO Obey the 'prompt' value in OpenID/Connect
           (do
             (infof "Hi - it appears you're already logged in, session is %s" (pr-str session))
@@ -46,7 +48,7 @@
             (cookies-response
                       {:status 302
                        :headers {"Location" (path-for (:modular.bidi/routes req) ::get-authenticate-form)}
-                       :cookies {"session-id" (->cookie session)}}))))
+                       :cookies {SESSION-ID (->cookie session)}}))))
          wrap-params)
 
      ::get-authenticate-form
@@ -56,7 +58,7 @@
          :body (html
                 [:body
                  [:h1 "API Server"]
-                 [:p "The application with client id " (get-session-value req  "session-id" (:session-store this) :client-id)
+                 [:p "The application with client id " (get-session-value req  SESSION-ID (:session-store this) :client-id)
                   " is requesting access to the Azondi API on your behalf. Please login if you are happy to authorize this client."]
                  [:form {:method :post
                          :action (path-for (:modular.bidi/routes req) ::post-authenticate-form)}
@@ -75,10 +77,14 @@
            (let [params (-> req :form-params)
                  identity (get params "user")
                  password (get params "password")
-                 client-id (get-session-value req  "session-id" (:session-store this) :client-id)
-                 scope (get-session-value req  "session-id" (:session-store this) :scope)
-                 state (get-session-value req  "session-id" (:session-store this) :state)
+
+                 session (get-session (:session-store this) (get-cookie-value req SESSION-ID))
+
+                 client-id (get session :client-id)
+                 scope (get session :scope)
+                 state (or (get session :state) "") ; to avoid a java.lang.NullPointerException on str/split
                  scopes (set (str/split scope #"[\s]+"))
+
                  ;; Lookup client
                  {:keys [callback-uri] :as application}
                  (lookup-client+ (:client-registry this) client-id)]
@@ -114,7 +120,7 @@
 
                      (cookies-response {:status 302
                        :headers {"Location" (path-for (:modular.bidi/routes req) ::get-totp-code)}
-                       :cookies {"session-id" (->cookie session)}}))
+                       :cookies {SESSION-ID (->cookie session)}}))
 
                    ;; So it's not 2FA, continue with OAuth exchange
                    ;; Generate the temporary code that we'll exchange for an access token later
@@ -133,7 +139,7 @@
                                   "%s?code=%s&state=%s"
                                   callback-uri code state
                                   )}
-                       :cookies {"session-id" (->cookie session)}}))))
+                       :cookies {SESSION-ID (->cookie session)}}))))
                ;; Fail
                {:status 302
                 :headers {"Location" (format "%s" (path-for (:modular.bidi/routes req) ::get-authenticate-form))}
@@ -147,7 +153,7 @@
         :body (html
                [:h1 "Please can I have your auth code"]
 
-               (let [secret (get-session-value req "session-id" (:session-store this) :totp-secret)]
+               (let [secret (get-session-value req SESSION-ID (:session-store this) :totp-secret)]
                  [:div
 
 
@@ -162,11 +168,11 @@
      ::post-totp-code
      (-> (fn [req]
            (let [totp-code (-> req :form-params (get "code"))
-                 secret (get-session-value req "session-id" (:session-store this) :totp-secret)
+                 secret (get-session-value req SESSION-ID (:session-store this) :totp-secret)
                  ]
              (if (= totp-code (totp-token secret))
                ;; Success, set up the exchange
-               (let [session (get-session (:session-store this) (get-cookie-value req "session-id"))
+               (let [session (get-session (:session-store this) (get-cookie-value req SESSION-ID))
                      client-id (get session :client-id)
                      _ (infof "Looking up app with client-id %s yields %s" client-id (lookup-client+ (:client-registry this) client-id))
                      {:keys [callback-uri] :as client}
