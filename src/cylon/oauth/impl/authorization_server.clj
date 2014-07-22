@@ -27,31 +27,34 @@
   (request-handlers [this]
     {::authorize
      (-> (fn [req]
-        ;; TODO Establish whether the user-agent is already authenticated.
-        ;; If not, create a session with client-id, scope and state and redirect to the login form
-        (if-let [session
-                 (get-session
-                  (:session-store this)
-                  (-> req cookies-request :cookies (get SESSION-ID) :value))]
-          ;; TODO Obey the 'prompt' value in OpenID/Connect
-          (do
-            (infof "Hi - it appears you're already logged in, session is %s" (pr-str session))
-            {:status 302
-             :headers {"Location" (path-for (:modular.bidi/routes req) ::get-authenticate-form)}})
-          (let [session (create-session!
-                         (:session-store this)
-                         {:client-id (-> req :query-params (get "client_id"))
-                          :scope (-> req :query-params (get "scope"))
-                          :state (-> req :query-params (get "state"))
-                          })]
-            (infof "Hi - it appears you're not already logged in, so I'm going to create a session for you and redirect you")
-            (cookies-response
-                      {:status 302
-                       :headers {"Location" (path-for (:modular.bidi/routes req) ::get-authenticate-form)}
-                       :cookies {SESSION-ID (->cookie session)}}))))
+           ;; TODO Establish whether the user-agent is already authenticated.
+           ;; If not, create a session with client-id, scope and state and redirect to the login form
+           (let [session-id (-> req cookies-request :cookies (get SESSION-ID) :value)]
+             (infof "Session id is %s" session-id)
+             (if-let [session
+                      (get-session
+                       (:session-store this)
+                       session-id)]
+               ;; TODO Obey the 'prompt' value in OpenID/Connect
+               (do
+                 (infof "Hi - it appears you're already logged in, session is %s" (pr-str session))
+                 {:status 302
+                  :headers {"Location" (path-for (:modular.bidi/routes req) ::get-login-form)}})
+
+               (let [session (create-session!
+                              (:session-store this)
+                              {:client-id (-> req :query-params (get "client_id"))
+                               :scope (-> req :query-params (get "scope"))
+                               :state (-> req :query-params (get "state"))
+                               })]
+                 (infof "Hi - it appears you're not already logged in, so I'm going to create a session for you and redirect you")
+                 (cookies-response
+                  {:status 302
+                   :headers {"Location" (path-for (:modular.bidi/routes req) ::get-login-form)}
+                   :cookies {SESSION-ID (->cookie session)}})))))
          wrap-params)
 
-     ::get-authenticate-form
+     ::get-login-form
      (->
       (fn [req]
         {:status 200
@@ -61,7 +64,7 @@
                  [:p "The application with client id " (get-session-value req  SESSION-ID (:session-store this) :client-id)
                   " is requesting access to the Azondi API on your behalf. Please login if you are happy to authorize this client."]
                  [:form {:method :post
-                         :action (path-for (:modular.bidi/routes req) ::post-authenticate-form)}
+                         :action (path-for (:modular.bidi/routes req) ::post-login-form)}
                   [:p
                    [:label {:for "user"} "User"]
                    [:input {:name "user" :id "user" :type "text"}]]
@@ -72,7 +75,7 @@
                   [:p [:a {:href (path-for (:modular.bidi/routes req) :cylon.impl.signup/signup-form)} "Signup"]]]])})
       wrap-params)
 
-     ::post-authenticate-form
+     ::post-login-form
      (-> (fn [req]
            (let [params (-> req :form-params)
                  identity (get params "user")
@@ -119,8 +122,8 @@
                                      :state state)
 
                      (cookies-response {:status 302
-                       :headers {"Location" (path-for (:modular.bidi/routes req) ::get-totp-code)}
-                       :cookies {SESSION-ID (->cookie session)}}))
+                                        :headers {"Location" (path-for (:modular.bidi/routes req) ::get-totp-code)}
+                                        :cookies {SESSION-ID (->cookie session)}}))
 
                    ;; So it's not 2FA, continue with OAuth exchange
                    ;; Generate the temporary code that we'll exchange for an access token later
@@ -133,16 +136,16 @@
                              :cylon/identity identity})
 
                      (cookies-response {:status 302
-                       :headers {"Location"
-                                 (format
-                                  ;; TODO: Replace this with the callback uri
-                                  "%s?code=%s&state=%s"
-                                  callback-uri code state
-                                  )}
-                       :cookies {SESSION-ID (->cookie session)}}))))
+                                        :headers {"Location"
+                                                  (format
+                                                   ;; TODO: Replace this with the callback uri
+                                                   "%s?code=%s&state=%s"
+                                                   callback-uri code state
+                                                   )}
+                                        :cookies {SESSION-ID (->cookie session)}}))))
                ;; Fail
                {:status 302
-                :headers {"Location" (format "%s" (path-for (:modular.bidi/routes req) ::get-authenticate-form))}
+                :headers {"Location" (format "%s" (path-for (:modular.bidi/routes req) ::get-login-form))}
                 :body "Try again"})))
 
          wrap-params wrap-cookies s/with-fn-validation)
@@ -246,8 +249,8 @@
 
   (routes [this]
     ["/" {"authorize" {:get ::authorize}
-          "login" {:get ::get-authenticate-form
-                   :post ::post-authenticate-form}
+          "login" {:get ::get-login-form
+                   :post ::post-login-form}
           "totp" {:get ::get-totp-code
                   :post ::post-totp-code}
           "access_token" {:post ::exchange-code-for-access-token}}])
