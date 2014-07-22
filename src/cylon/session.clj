@@ -16,7 +16,9 @@
 
 (defn ->cookie [session]
   {:value (::key session)
-   :max-age (long (/ (::expiry session) 1000))})
+   :max-age (long (/ (::expiry session) 1000))
+   :path "/"
+   })
 
 (defn get-cookie-value [request cookie-name]
   (-> request cookies-request :cookies (get cookie-name) :value))

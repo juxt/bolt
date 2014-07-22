@@ -10,6 +10,7 @@
    [cylon.oauth.client-registry :refer (lookup-client+)]
    [cylon.oauth.authorization :refer (AccessTokenAuthorizer authorized?)]
    [cylon.authorization :refer (RequestAuthorizer request-authorized?)]
+   [cylon.authentication :refer (initiate-authentication-interaction)]
    [cylon.user :refer (verify-user)]
    [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)]
    [clj-time.core :refer (now plus days)]
@@ -29,29 +30,13 @@
      (-> (fn [req]
            ;; TODO Establish whether the user-agent is already authenticated.
            ;; If not, create a session with client-id, scope and state and redirect to the login form
-           (let [session-id (-> req cookies-request :cookies (get SESSION-ID) :value)]
-             (infof "Session id is %s" session-id)
-             (if-let [session
-                      (get-session
-                       (:session-store this)
-                       session-id)]
-               ;; TODO Obey the 'prompt' value in OpenID/Connect
-               (do
-                 (infof "Hi - it appears you're already logged in, session is %s" (pr-str session))
-                 {:status 302
-                  :headers {"Location" (path-for (:modular.bidi/routes req) ::get-login-form)}})
-
-               (let [session (create-session!
-                              (:session-store this)
-                              {:client-id (-> req :query-params (get "client_id"))
-                               :scope (-> req :query-params (get "scope"))
-                               :state (-> req :query-params (get "state"))
-                               })]
-                 (infof "Hi - it appears you're not already logged in, so I'm going to create a session for you and redirect you")
-                 (cookies-response
-                  {:status 302
-                   :headers {"Location" (path-for (:modular.bidi/routes req) ::get-login-form)}
-                   :cookies {SESSION-ID (->cookie session)}})))))
+           (initiate-authentication-interaction
+            (:authenticator this)
+            req
+            {:client-id (-> req :query-params (get "client_id"))
+             :scope (-> req :query-params (get "scope"))
+             :state (-> req :query-params (get "state"))
+             }))
          wrap-params)
 
      ::get-login-form
@@ -87,7 +72,7 @@
                  scope (or (get session :scope) "") ; to avoid a java.lang.NullPointerException on str/split
                  state (get session :state)
 
-                 scopes (set (str/split scope #"[\s]+"))
+                 ;;scopes (set (str/split scope #"[\s]+"))
 
                  ;; Lookup client
                  {:keys [callback-uri] :as application}
@@ -283,4 +268,5 @@
    [:access-token-store
     :session-store
     :user-domain
-    :client-registry]))
+    :client-registry
+    :authenticator]))

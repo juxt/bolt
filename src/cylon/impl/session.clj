@@ -55,12 +55,15 @@
   (create-session! [this m]
     (let [key (str (java.util.UUID/randomUUID))
           expiry-in-ms (+ (.getTime (java.util.Date.)) (* expiry-seconds 1000))]
-      (let [res (merge m {:cylon.session/key key :cylon.session/expiry expiry-in-ms})]
+      (let [res (merge m {:cylon.session/key key
+                          :cylon.session/expiry expiry-in-ms})]
         (swap! (:sessions this) assoc key res)
         res)))
 
   (get-session [this id]
     (when-let [{expiry :cylon.session/expiry :as session} (get @(:sessions this) id)]
+      (println "session is" session)
+      (println "expiry is" expiry)
       (if (< (.getTime (java.util.Date.)) expiry)
         session
         (purge-session! this id))))
@@ -75,7 +78,13 @@
     nil)
 
   (assoc-session! [this id k v]
-    (swap! (:sessions this) update-in [id] assoc k v))
+    (assert id)
+    (swap! (:sessions this)
+           (fn [sessions] (update-in sessions [id]
+                                     (fn [session]
+                                       (println "id is " id)
+                                       (assert session)
+                                       (assoc session k v))))))
 
   (dissoc-session! [this id k]
     (swap! (:sessions this) update-in [id] dissoc k)))

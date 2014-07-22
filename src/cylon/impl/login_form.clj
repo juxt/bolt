@@ -129,7 +129,11 @@
     ["" {"/login" {:get :login, :post :process-login}
          "/logout" {:get :logout}}])
 
-  (uri-context [this] uri-context))
+  (uri-context [this] uri-context)
+
+
+
+  )
 
 (def new-login-form-schema
   {(s/optional-key :uri-context) s/Str
