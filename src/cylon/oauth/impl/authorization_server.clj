@@ -44,33 +44,31 @@
                        client-id (:client-id session)
                        {:keys [callback-uri] :as client} (lookup-client+ (:client-registry this) client-id)]
 
-                                                 ;; Remember the code for the possible exchange - TODO expiry these
-                                                 (swap! store assoc
-                                                        {:client-id client-id
-                                                         :code code}
-                                                        {:created (java.util.Date.)
-                                                         :cylon/identity (:cylon/identity auth-interaction-session)})
-                                                 {:status 302
-                                                  :headers {"Location"
-                                                            (format
-                                                             ;; TODO: Replace this with the callback uri
-                                                             "%s?code=%s&state=%s"
-                                                             callback-uri  code (:state session))}})
+                   ;; Remember the code for the possible exchange - TODO expiry these
+                   (swap! store assoc
+                          {:client-id client-id
+                           :code code}
+                          {:created (java.util.Date.)
+                           :cylon/identity (:cylon/identity auth-interaction-session)})
+                   {:status 302
+                    :headers {"Location"
+                              (format
+                               ;; TODO: Replace this with the callback uri
+                               "%s?code=%s&state=%s"
+                               callback-uri  code (:state session))}})
 
 
 
                  ;; "you are NOT authenticated but you have auth-session already so we carry on with this session"
-                 (initiate-authentication-interaction
-                        (:authenticator this) req {})
-                 )
+                 (initiate-authentication-interaction (:authenticator this) req {}))
                ;; We are not authenticated, so let's authenticate first.
                (let [auth-session (create-session! (:session-store this)
                                                     {:client-id (-> req :query-params (get "client_id"))
                                                      :scope (-> req :query-params (get "scope"))
-                                                     :state (-> req :query-params (get "state"))})
-                   res (initiate-authentication-interaction
-                        (:authenticator this) req {})]
-               (cookies-response-with-session res SESSION-ID auth-session))
+                                                     :state (-> req :query-params (get "state"))})]
+                 (cookies-response-with-session
+                  (initiate-authentication-interaction (:authenticator this) req {})
+                  SESSION-ID auth-session))
                )))
          wrap-params)
 
