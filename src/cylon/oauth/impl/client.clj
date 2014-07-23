@@ -8,7 +8,7 @@
    [modular.bidi :refer (WebService)]
    [cylon.oauth.client :refer (AccessTokenGrantee UserIdentity solicit-access-token)]
    [cylon.authorization :refer (RequestAuthorizer)]
-   [cylon.session :refer (get-session assoc-session! create-session!)]
+   [cylon.session :refer (->cookie get-session assoc-session! create-session! cookies-response-with-session get-session-value get-session-id)]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]
    [ring.util.codec :refer (url-encode)]
    [ring.middleware.params :refer (wrap-params)]
@@ -100,11 +100,10 @@
                    :body (format "Something went wrong: status of underlying request %s" (:status at-resp))}
 
 
-                  (let [app-session-id (-> req cookies-request :cookies (get APP-SESSION-ID) :value)
-                        original-uri (:original-uri (get-session (:session-store this) app-session-id))
+                  (let [app-session-id (get-session-id req APP-SESSION-ID)
+                        original-uri (get-session-value req APP-SESSION-ID (:session-store this) :original-uri)
                         access-token (get (:body at-resp) "access_token")
-                        id-token (-> (get (:body at-resp) "id_token") str->jwt)
-                        ]
+                        id-token (-> (get (:body at-resp) "id_token") str->jwt)]
                     (if (verify id-token "secret")
                       (do
                         (infof "Verified id_token: %s" id-token)
@@ -112,14 +111,10 @@
                         (assoc-session! (:session-store this) app-session-id :access-token access-token)
                         (infof "Claims are %s" (:claims id-token))
                         (assoc-session! (:session-store this) app-session-id :open-id (-> id-token :claims))
-
                         {:status 302
-                         :headers {"Location" original-uri}
-                         :body (str "Logged in, and we got an access token: " (:body at-resp))
-                         })
-                      ;; Error response - id_token failed verification
+                         :headers {"Location" original-uri}})
                       ))))))))
-      wrap-params wrap-cookies)})
+      wrap-params)})
   (routes [this] ["/grant" {:get ::grant}])
   (uri-context [this] "/oauth")
 
@@ -140,7 +135,7 @@
           state (str (java.util.UUID/randomUUID))]
 
       (expect-state this state)
-      (cookies-response
+      (cookies-response-with-session
        {:status 302
         :headers {"Location"
                   (format "%s?client_id=%s&state=%s&scope=%s"
@@ -152,14 +147,9 @@
                                             (map
                                              #(apply str
                                                      (interpose ":" (remove nil? ((juxt namespace name) %))))
-                                             (union (as-set scopes) #{:openid :profile :email}))))
-                          )}
-        :cookies {APP-SESSION-ID
-                  {:value (:cylon.session/key session)
-                   :expires (.toGMTString
-                             (doto (new java.util.Date)
-                               (.setTime (:cylon.session/expiry session))
-                               ))}}})))
+                                             (union (as-set scopes) #{:openid :profile :email})))))}}
+       APP-SESSION-ID
+       session)))
 
   UserIdentity
   (get-claims [this req]

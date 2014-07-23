@@ -3,7 +3,7 @@
 (ns cylon.session
   (:require
    [com.stuartsierra.component :as component]
-   [ring.middleware.cookies :refer (cookies-request)]
+   [ring.middleware.cookies :refer (cookies-request cookies-response)]
    [schema.core :as s]))
 
 (defprotocol SessionStore
@@ -16,9 +16,15 @@
 
 (defn ->cookie [session]
   {:value (::key session)
-   :max-age (long (/ (::expiry session) 1000))
-   :path "/"
-   })
+   :expires (.toGMTString
+             (doto (new java.util.Date)
+               (.setTime (::expiry session))))
+   :path "/"})
+
+(defn cookies-response-with-session [response id-cookie session ]
+  (cookies-response
+   (merge response
+          { :cookies {id-cookie (->cookie session)}})))
 
 (defn get-session-id [request cookie-name]
   (-> request cookies-request :cookies (get cookie-name) :value))
@@ -30,3 +36,6 @@
    cookie-name :- s/Str
    session-store :- (s/protocol SessionStore)]
   (get-session session-store (get-session-id request cookie-name)))
+
+(defn get-session-value [request cookie-name session-store k]
+    (get (get-session-from-cookie request cookie-name session-store)  k))

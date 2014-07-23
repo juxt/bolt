@@ -10,7 +10,7 @@
    [cylon.oauth.client-registry :refer (lookup-client+)]
    [cylon.oauth.authorization :refer (AccessTokenAuthorizer authorized?)]
    [cylon.authorization :refer (RequestAuthorizer request-authorized?)]
-   [cylon.authentication :refer (initiate-authentication-interaction)]
+   [cylon.authentication :refer (initiate-authentication-interaction get-result)]
    [cylon.user :refer (verify-user)]
    [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)]
    [clj-time.core :refer (now plus days)]
@@ -18,7 +18,7 @@
    [clj-jwt.core :refer (to-str sign jwt)]
    [ring.middleware.params :refer (wrap-params)]
    [ring.middleware.cookies :refer (cookies-request)]
-   [cylon.session :refer (create-session! assoc-session! ->cookie get-session-value get-cookie-value get-session)]
+   [cylon.session :refer (create-session! assoc-session! ->cookie get-session-value get-session-id get-session cookies-response-with-session get-session-from-cookie)]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]))
 
 (def SESSION-ID "auth-session-id")
@@ -31,36 +31,130 @@
      (-> (fn [req]
            ;; TODO Establish whether the user-agent is already authenticated.
            ;; If not, create a session with client-id, scope and state and redirect to the login form
-           (let [session-id (get-cookie-value req SESSION-ID)
-                 session (get-session (:session-store this) session-id)]
-             (if (:cylon/authenticated? session)
-               (let [code (str (java.util.UUID/randomUUID))]
+           (println "")
+           (println "::::::::::::::::::::::::::::: authorize!! :::::::::::::::::::::::::::::")
+           (println "")
+           (let [session (get-session-from-cookie req  SESSION-ID (:session-store this))]
+             (if-let [auth-interaction-session (get-result (:authenticator this) req)]
+               ;; the session can be authenticated or maybe we are coming from the authenticator workflow
+               (if (:cylon/authenticated? auth-interaction-session)
+                 #_{:status 200
+                    :body (format "you: %s are authenticated now!" (:cylon/identity auth-interaction-session))}
+                 (let [code (str (java.util.UUID/randomUUID))
+                       client-id (:client-id session)
+                       {:keys [callback-uri] :as client} (lookup-client+ (:client-registry this) client-id)]
 
-                 ;; Remember the code for the possible exchange - TODO expiry these
-                 (swap! store assoc
-                        {:client-id client-id :code code}
-                        {:created (java.util.Date.)
-                         :cylon/identity identity})
+                                                 ;; Remember the code for the possible exchange - TODO expiry these
+                                                 (swap! store assoc
+                                                        {:client-id client-id
+                                                         :code code}
+                                                        {:created (java.util.Date.)
+                                                         :cylon/identity (:cylon/identity auth-interaction-session)})
+                                                 {:status 302
+                                                  :headers {"Location"
+                                                            (format
+                                                             ;; TODO: Replace this with the callback uri
+                                                             "%s?code=%s&state=%s"
+                                                             callback-uri  code (:state session))}})
 
-                 (cookies-response {:status 302
-                                    :headers {"Location"
-                                              (format
-                                               ;; TODO: Replace this with the callback uri
-                                               "%s?code=%s&state=%s"
-                                               callback-uri code state
-                                               )}
-                                    :cookies {SESSION-ID (->cookie session)}}))
 
+                 {:status 200
+                  :body "you are NOT authenticated!"}
+                 )
                ;; We are not authenticated, so let's authenticate first.
-               (initiate-authentication-interaction
-                (:authenticator this)
-                req
-                {:client-id (-> req :query-params (get "client_id"))
-                 :scope (-> req :query-params (get "scope"))
-                 :state (-> req :query-params (get "state"))
-                 }))))
+               (let [auth-session (create-session! (:session-store this)
+                                                   {:client-id (-> req :query-params (get "client_id"))
+                                                    :scope (-> req :query-params (get "scope"))
+                                                    :state (-> req :query-params (get "state"))})
+                   res (initiate-authentication-interaction
+                        (:authenticator this) req
+                        {:client-id (-> req :query-params (get "client_id"))
+                         :scope (-> req :query-params (get "scope"))
+                         :state (-> req :query-params (get "state"))})]
+               (cookies-response-with-session res SESSION-ID auth-session))
+               )))
          wrap-params)
 
+     ::exchange-code-for-access-token
+     (-> (fn [req]
+           (let [params (:form-params req)
+                 code (get params "code")
+                 client-id (get params "client_id")
+                 client-secret (get params "client_secret")
+                 client (lookup-client+ (:client-registry this) client-id)]
+
+             (if (not= (:client-secret client) client-secret)
+               {:status 400 :body "Invalid request - bad secret"}
+
+               (if-let [{identity :cylon/identity}
+                        (get @store
+                             ;; I don't think this key has to include client-id
+                             ;; - it can just be 'code'.
+                             {:client-id client-id :code code})]
+
+                 (let [{access-token :cylon.session/key}
+                       (create-session! (:access-token-store this) {:scopes #{:superuser/read-users :repo :superuser/gist :admin}})
+                       claim {:iss iss
+                              :sub identity
+                              :aud client-id
+                              :exp (plus (now) (days 1)) ; expiry
+                              :iat (now)}]
+
+                   (infof "Claim is %s" claim)
+
+                   {:status 200
+                    :body (encode {"access_token" access-token
+                                   "scope" "repo gist openid profile email"
+                                   "token_type" "Bearer"
+                                   "expires_in" 3600
+                                   ;; TODO Refresh token (optional)
+                                   ;; ...
+                                   ;; OpenID Connect ID Token
+                                   "id_token" (-> claim
+                                                  jwt
+                                                  (sign :HS256 "secret") to-str)
+                                   })})
+                 {:status 400
+                  :body "Invalid request - unknown code"}))))
+         wrap-params )})
+
+  (routes [this]
+    ["/" {"authorize" {:get ::authorize}
+          "access_token" {:post ::exchange-code-for-access-token}}])
+
+  (uri-context [this] "/login/oauth")
+
+  AccessTokenAuthorizer
+  (authorized? [this access-token scope]
+    (if-not (contains? (set (keys scopes)) scope)
+      (throw (ex-info "Invalid scope" {:scope scope}))
+      (contains? (:scopes (get-session (:access-token-store this) access-token))
+                 scope)))
+
+  RequestAuthorizer
+  (request-authorized? [this request scope]
+    (when-let [auth-header (get (:headers request) "authorization")]
+      (let [access-token (second (re-matches #"\Qtoken\E\s+(.*)" auth-header))]
+        (authorized? this access-token scope)))))
+
+(defn new-authorization-server [& {:as opts}]
+  (component/using
+   (->> opts
+        (merge {:store (atom {})})
+        (s/validate {:scopes {s/Keyword {:description s/Str}}
+                     :store s/Any
+                     :iss s/Str ; uri actually, see openid-connect ch 2.
+                     })
+        map->AuthorizationServer)
+   [:access-token-store
+    :session-store
+    :user-domain
+    :client-registry
+    :authenticator]))
+
+
+
+(comment
      ::get-login-form
      (->
       (fn [req]
@@ -88,7 +182,7 @@
                  identity (get params "user")
                  password (get params "password")
 
-                 session (get-session (:session-store this) (get-cookie-value req SESSION-ID))
+                 session (get-session (:session-store this) (get-session-id req SESSION-ID))
 
                  client-id (get session :client-id)
                  scope (or (get session :scope) "") ; to avoid a java.lang.NullPointerException on str/split
@@ -158,7 +252,7 @@
 
          wrap-params wrap-cookies s/with-fn-validation)
 
-     ::get-totp-code
+          ::get-totp-code
      (fn [req]
        {:status 200
         :body (html
@@ -183,7 +277,7 @@
                  ]
              (if (= totp-code (totp-token secret))
                ;; Success, set up the exchange
-               (let [session (get-session (:session-store this) (get-cookie-value req SESSION-ID))
+               (let [session (get-session (:session-store this) (get-session-id req SESSION-ID))
                      client-id (get session :client-id)
                      _ (infof "Looking up app with client-id %s yields %s" client-id (lookup-client+ (:client-registry this) client-id))
                      {:keys [callback-uri] :as client}
@@ -212,83 +306,4 @@
                )))
          wrap-params wrap-cookies s/with-fn-validation)
 
-     ::exchange-code-for-access-token
-     (-> (fn [req]
-           (let [params (:form-params req)
-                 code (get params "code")
-                 client-id (get params "client_id")
-                 client-secret (get params "client_secret")
-                 client (lookup-client+ (:client-registry this) client-id)]
-
-             (if (not= (:client-secret client) client-secret)
-               {:status 400 :body "Invalid request - bad secret"}
-
-               (if-let [{identity :cylon/identity}
-                        (get @store
-                             ;; I don't think this key has to include client-id
-                             ;; - it can just be 'code'.
-                             {:client-id client-id :code code})]
-
-                 (let [{access-token :cylon.session/key}
-                       (create-session! (:access-token-store this) {:scopes #{:superuser/read-users :repo :superuser/gist :admin}})
-                       claim {:iss iss
-                              :sub identity
-                              :aud client-id
-                              :exp (plus (now) (days 1)) ; expiry
-                              :iat (now)}]
-
-                   (infof "Claim is %s" claim)
-
-                   {:status 200
-                    :body (encode {"access_token" access-token
-                                   "scope" "repo gist openid profile email"
-                                   "token_type" "Bearer"
-                                   "expires_in" 3600
-                                   ;; TODO Refresh token (optional)
-                                   ;; ...
-                                   ;; OpenID Connect ID Token
-                                   "id_token" (-> claim
-                                                  jwt
-                                                  (sign :HS256 "secret") to-str)
-                                   })})
-                 {:status 400
-                  :body "Invalid request - unknown code"}))))
-         wrap-params s/with-fn-validation)})
-
-  (routes [this]
-    ["/" {"authorize" {:get ::authorize}
-          "login" {:get ::get-login-form
-                   :post ::post-login-form}
-          "totp" {:get ::get-totp-code
-                  :post ::post-totp-code}
-          "access_token" {:post ::exchange-code-for-access-token}}])
-
-  (uri-context [this] "/login/oauth")
-
-  AccessTokenAuthorizer
-  (authorized? [this access-token scope]
-    (if-not (contains? (set (keys scopes)) scope)
-      (throw (ex-info "Invalid scope" {:scope scope}))
-      (contains? (:scopes (get-session (:access-token-store this) access-token))
-                 scope)))
-
-  RequestAuthorizer
-  (request-authorized? [this request scope]
-    (when-let [auth-header (get (:headers request) "authorization")]
-      (let [access-token (second (re-matches #"\Qtoken\E\s+(.*)" auth-header))]
-        (authorized? this access-token scope)))))
-
-(defn new-authorization-server [& {:as opts}]
-  (component/using
-   (->> opts
-        (merge {:store (atom {})})
-        (s/validate {:scopes {s/Keyword {:description s/Str}}
-                     :store s/Any
-                     :iss s/Str ; uri actually, see openid-connect ch 2.
-                     })
-        map->AuthorizationServer)
-   [:access-token-store
-    :session-store
-    :user-domain
-    :client-registry
-    :authenticator]))
+)

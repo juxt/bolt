@@ -12,7 +12,7 @@
    [ring.util.response :refer (redirect-after-post)]
    [ring.middleware.params :refer (wrap-params)]
    [modular.bidi :refer (WebService request-handlers routes uri-context)]
-   [cylon.session :refer (->cookie create-session! get-session get-cookie-value assoc-session!)]
+   [cylon.session :refer (->cookie create-session! get-session get-session-id assoc-session! cookies-response-with-session get-session-from-cookie)]
    [hiccup.core :refer (html)])
   (:import
    (javax.xml.bind DatatypeConverter)))
@@ -76,11 +76,13 @@
                    (merge initial-session-state
                           {:cylon/original-uri (:uri req)}))]
 
-      (cookies-response
+      (cookies-response-with-session
        {:status 302
-        :headers {"Location" (get-location (first steps) req)}
-        :cookies {"mfa-auth-session-id" (->cookie session)}})
-      ))
+        :headers {"Location" (get-location (first steps) req)}}
+       "mfa-auth-session-id"
+       session)))
+  (get-result [this req]
+    (get-session-from-cookie  req "mfa-auth-session-id" (:session-store this)))
 
   ;; We proxy onto the dependencies which satisfy WebService in order to
   ;; change their behaviour.
@@ -95,7 +97,7 @@
                          (if (not= (:request-method req) :post)
                            (h req)
                            (let [res (h req)
-                                 session-id (get-cookie-value req "mfa-auth-session-id")
+                                 session-id (get-session-id req "mfa-auth-session-id")
                                  session (get-session (:session-store this) session-id)]
                              (case (:status res)
                                200 (if next-step
@@ -133,7 +135,7 @@
   (request-handlers [this]
     {:GET-login-form
      (fn [req]
-       (println "GET session id is " (get-cookie-value req "mfa-auth-session-id"))
+       (println "GET session id is " (get-session-id req "mfa-auth-session-id"))
        {:status 200
         :body (html
                [:body
@@ -155,16 +157,16 @@
               identity (get params "user")
               password (get params "password")
               _ (assert (:session-store this))
-              _ (println "session id is " (get-cookie-value req "mfa-auth-session-id"))
-              session (get-session (:session-store this) (get-cookie-value req "mfa-auth-session-id"))]
+              _ (println "session id is " (get-session-id req "mfa-auth-session-id"))
+              session (get-session (:session-store this) (get-session-id req "mfa-auth-session-id"))]
           (assert session)
           (if (and identity
                    (not-empty identity)
                    (verify-user (:user-domain this) (.trim identity) password))
             (do
               (println "Existing session: " session)
-              (assoc-session! (:session-store this) (get-cookie-value req "mfa-auth-session-id") :cylon/identity identity)
-              (println "New session: " (get-session (:session-store this) (get-cookie-value req "mfa-auth-session-id")))
+              (assoc-session! (:session-store this) (get-session-id req "mfa-auth-session-id") :cylon/identity identity)
+              (println "New session: " (get-session (:session-store this) (get-session-id req "mfa-auth-session-id")))
               {:status 200
                :body "Thank you! - you gave the correct information!"})
             {:status 403
@@ -183,7 +185,7 @@
 
 
 (defn new-authentication-login-form [& {:as opts}]
-  (component/using (->LoginForm) [:user-domain]))
+  (component/using (->LoginForm) [:user-domain :session-store]))
 
 
 (defrecord TimeBasedOneTimePasswordForm []
@@ -208,7 +210,7 @@
       (fn [req]
         (let [params (-> req :form-params)
               totp-code (get params "totp-code")
-              session (get-session (:session-store this) (get-cookie-value req "mfa-auth-session-id"))]
+              session (get-session (:session-store this) (get-session-id req "mfa-auth-session-id"))]
           (println ">>> session is " session)
           (if
               true ; assume it's the correct code for now
