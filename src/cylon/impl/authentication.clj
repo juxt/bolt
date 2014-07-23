@@ -12,8 +12,9 @@
    [ring.util.response :refer (redirect-after-post)]
    [ring.middleware.params :refer (wrap-params)]
    [modular.bidi :refer (WebService request-handlers routes uri-context)]
-   [cylon.session :refer (->cookie create-session! get-session get-session-id assoc-session! cookies-response-with-session get-session-from-cookie)]
-   [hiccup.core :refer (html)])
+   [cylon.session :refer (->cookie create-session! get-session get-session-id assoc-session! cookies-response-with-session get-session-from-cookie get-session-value)]
+   [hiccup.core :refer (html)]
+   [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)])
   (:import
    (javax.xml.bind DatatypeConverter)))
 
@@ -149,6 +150,7 @@
                   [:label {:for "password"} "Password"]
                   [:input {:name "password" :id "password" :type "password"}]]
                  [:p [:input {:type "submit"}]]
+                 [:p [:a {:href (path-for (:modular.bidi/routes req) :cylon.impl.signup/signup-form)} "Signup"]]
                  ]])})
      :POST-login-form
      (->
@@ -156,19 +158,27 @@
         (let [params (-> req :form-params)
               identity (get params "user")
               password (get params "password")
-              _ (assert (:session-store this))
-              _ (println "session id is " (get-session-id req "mfa-auth-session-id"))
               session (get-session (:session-store this) (get-session-id req "mfa-auth-session-id"))]
           (assert session)
           (if (and identity
                    (not-empty identity)
                    (verify-user (:user-domain this) (.trim identity) password))
             (do
-              (println "Existing session: " session)
+
+              (when (satisfies? OneTimePasswordStore (:user-domain this))
+                (when-let [secret (get-totp-secret (:user-domain this) identity password)]
+                  (assoc-session! (:session-store this)
+                                  (:cylon.session/key session)
+                                  :totp-secret secret)
+                  true ; it does, but just in case assoc-session! semantics change
+                  ))
+
+
               (assoc-session! (:session-store this) (get-session-id req "mfa-auth-session-id") :cylon/identity identity)
-              (println "New session: " (get-session (:session-store this) (get-session-id req "mfa-auth-session-id")))
+
               {:status 200
                :body "Thank you! - you gave the correct information!"})
+
             {:status 403
              :body "Bad guess!!! Please try again :)"}
             )))
@@ -193,27 +203,31 @@
   (request-handlers [this]
     {:GET-totp-form
      (fn [req]
-       {:status 200
-        :body (html
-               [:body
-                [:h1 "TOTP Form"]
-                [:form {:method :post
-                        :action (path-for (:modular.bidi/routes req) ::POST-totp-form)}
-                 [:p
-                  [:label {:for "totp-code"} "Code"]
-                  [:input {:name "totp-code" :id "totp-code" :type "text"}]]
-                 [:p [:input {:type "submit"}]]
-                 ]])})
+       (let [secret (get-session-value req  "mfa-auth-session-id" (:session-store this) :totp-secret)]
+        {:status 200
+         :body (html
+                [:body
+                 [:h1 "TOTP Form"]
+                 [:form {:method :post
+                         :action (path-for (:modular.bidi/routes req) ::POST-totp-form)}
+                  [:p
+                   [:label {:for "totp-code"} "Code"]
+                   [:input {:name "totp-code" :id "totp-code" :type "text"}]]
+                  [:p [:input {:type "submit"}]]
+                  (when secret [:p "(Hint, maybe it's something like... this ? " (totp-token secret) ")"])
+                  ]])}))
 
      :POST-totp-form
      (->
       (fn [req]
         (let [params (-> req :form-params)
               totp-code (get params "totp-code")
-              session (get-session (:session-store this) (get-session-id req "mfa-auth-session-id"))]
+              session (get-session (:session-store this) (get-session-id req "mfa-auth-session-id"))
+              secret (get-session-value req "mfa-auth-session-id" (:session-store this) :totp-secret)
+              ]
           (println ">>> session is " session)
           (if
-              true ; assume it's the correct code for now
+              (= totp-code (totp-token secret))
 
             {:status 200
              :body "Thank you! That was the correct code"

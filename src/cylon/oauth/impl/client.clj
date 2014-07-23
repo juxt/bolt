@@ -113,6 +113,7 @@
                         (assoc-session! (:session-store this) app-session-id :open-id (-> id-token :claims))
                         {:status 302
                          :headers {"Location" original-uri}})
+
                       ))))))))
       wrap-params)})
   (routes [this] ["/grant" {:get ::grant}])

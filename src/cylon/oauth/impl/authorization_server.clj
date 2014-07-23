@@ -58,19 +58,18 @@
                                                              callback-uri  code (:state session))}})
 
 
-                 {:status 200
-                  :body "you are NOT authenticated!"}
+
+                 ;; "you are NOT authenticated but you have auth-session already so we carry on with this session"
+                 (initiate-authentication-interaction
+                        (:authenticator this) req {})
                  )
                ;; We are not authenticated, so let's authenticate first.
                (let [auth-session (create-session! (:session-store this)
-                                                   {:client-id (-> req :query-params (get "client_id"))
-                                                    :scope (-> req :query-params (get "scope"))
-                                                    :state (-> req :query-params (get "state"))})
+                                                    {:client-id (-> req :query-params (get "client_id"))
+                                                     :scope (-> req :query-params (get "scope"))
+                                                     :state (-> req :query-params (get "state"))})
                    res (initiate-authentication-interaction
-                        (:authenticator this) req
-                        {:client-id (-> req :query-params (get "client_id"))
-                         :scope (-> req :query-params (get "scope"))
-                         :state (-> req :query-params (get "state"))})]
+                        (:authenticator this) req {})]
                (cookies-response-with-session res SESSION-ID auth-session))
                )))
          wrap-params)
@@ -209,7 +208,8 @@
                                         (:cylon.session/key session)
                                         :totp-secret secret)
                         true ; it does, but just in case assoc-session! semantics change
-                        ))
+                        )
+                      )
 
                    ;; So it's 2FA
                    (do
