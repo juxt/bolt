@@ -10,7 +10,7 @@
    [cylon.oauth.client-registry :refer (lookup-client+)]
    [cylon.oauth.authorization :refer (AccessTokenAuthorizer authorized?)]
    [cylon.authorization :refer (RequestAuthorizer request-authorized?)]
-   [cylon.authentication :refer (initiate-authentication-interaction get-result)]
+   [cylon.authentication :refer (initiate-authentication-interaction get-result clean-resources!)]
    [cylon.user :refer (verify-user)]
    [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)]
    [clj-time.core :refer (now plus days)]
@@ -38,9 +38,9 @@
              (if-let [auth-interaction-session (get-result (:authenticator this) req)]
                ;; the session can be authenticated or maybe we are coming from the authenticator workflow
                (if (:cylon/authenticated? auth-interaction-session)
-                 #_{:status 200
-                    :body (format "you: %s are authenticated now!" (:cylon/identity auth-interaction-session))}
-                 (let [code (str (java.util.UUID/randomUUID))
+                 ;; "you are authenticated now!"
+                 (let [_    (clean-resources! (:authenticator this) req)
+                       code (str (java.util.UUID/randomUUID))
                        client-id (:client-id session)
                        {:keys [callback-uri] :as client} (lookup-client+ (:client-registry this) client-id)]
 
@@ -56,20 +56,16 @@
                                ;; TODO: Replace this with the callback uri
                                "%s?code=%s&state=%s"
                                callback-uri  code (:state session))}})
-
-
-
-                 ;; "you are NOT authenticated but you have auth-session already so we carry on with this session"
+               ;; you have auth-session although you are NOT authenticated but ,,, we carry on with this session"
                  (initiate-authentication-interaction (:authenticator this) req {}))
-               ;; We are not authenticated, so let's authenticate first.
+               ;; You are not authenticated, so let's authenticate first.
                (let [auth-session (create-session! (:session-store this)
                                                     {:client-id (-> req :query-params (get "client_id"))
                                                      :scope (-> req :query-params (get "scope"))
                                                      :state (-> req :query-params (get "state"))})]
                  (cookies-response-with-session
                   (initiate-authentication-interaction (:authenticator this) req {})
-                  SESSION-ID auth-session))
-               )))
+                  SESSION-ID auth-session)))))
          wrap-params)
 
      ::exchange-code-for-access-token

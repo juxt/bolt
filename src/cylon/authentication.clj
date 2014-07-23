@@ -25,6 +25,7 @@
 (defprotocol AuthenticationInteraction
   (initiate-authentication-interaction [_ request initial-session-state])
   (get-result [_ request])
+  (clean-resources! [_ request])
 )
 
 (defprotocol InteractionStep

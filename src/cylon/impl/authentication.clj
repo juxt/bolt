@@ -12,7 +12,7 @@
    [ring.util.response :refer (redirect-after-post)]
    [ring.middleware.params :refer (wrap-params)]
    [modular.bidi :refer (WebService request-handlers routes uri-context)]
-   [cylon.session :refer (->cookie create-session! get-session get-session-id assoc-session! cookies-response-with-session get-session-from-cookie get-session-value)]
+   [cylon.session :refer (->cookie create-session! get-session get-session-id assoc-session! cookies-response-with-session get-session-from-cookie get-session-value purge-session!)]
    [hiccup.core :refer (html)]
    [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)])
   (:import
@@ -84,6 +84,8 @@
        session)))
   (get-result [this req]
     (get-session-from-cookie  req "mfa-auth-session-id" (:session-store this)))
+  (clean-resources! [this req]
+    (purge-session! (:session-store this) (get-session-id req "mfa-auth-session-id")))
 
   ;; We proxy onto the dependencies which satisfy WebService in order to
   ;; change their behaviour.
