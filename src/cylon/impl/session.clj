@@ -62,8 +62,6 @@
 
   (get-session [this id]
     (when-let [{expiry :cylon.session/expiry :as session} (get @(:sessions this) id)]
-      (println "session is" session)
-      (println "expiry is" expiry)
       (if (< (.getTime (java.util.Date.)) expiry)
         session
         (purge-session! this id))))

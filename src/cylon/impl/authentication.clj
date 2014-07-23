@@ -9,6 +9,7 @@
    [schema.core :as s]
    [ring.middleware.cookies :refer (cookies-response wrap-cookies)]
    [bidi.bidi :refer (path-for)]
+   [ring.util.response :refer (redirect-after-post)]
    [ring.middleware.params :refer (wrap-params)]
    [modular.bidi :refer (WebService request-handlers routes uri-context)]
    [cylon.session :refer (->cookie create-session! get-session get-cookie-value assoc-session!)]
@@ -72,7 +73,9 @@
     (let [steps ((apply juxt steps) this)
           session (create-session!
                    (:session-store this)
-                   initial-session-state)]
+                   (merge initial-session-state
+                          {:cylon/original-uri (:uri req)}))]
+
       (cookies-response
        {:status 302
         :headers {"Location" (get-location (first steps) req)}
@@ -91,7 +94,9 @@
                        (fn [req]
                          (if (not= (:request-method req) :post)
                            (h req)
-                           (let [res (h req)]
+                           (let [res (h req)
+                                 session-id (get-cookie-value req "mfa-auth-session-id")
+                                 session (get-session (:session-store this) session-id)]
                              (case (:status res)
                                200 (if next-step
                                      {:status 302
@@ -99,14 +104,14 @@
                                       :body "Authenticator: Move to the next step"}
 
                                      ;; No more steps, we're done. Redirect to the initiator.
-                                     {:status 200
-                                      :body "Thank you - no more redirects, phew!"})
+                                     (do
+                                       (assoc-session! (:session-store this) session-id :cylon/authenticated? true)
+                                       (redirect-after-post (:cylon/original-uri session))
+                                       ))
                                ;; It is the default policy of this
                                ;; authenticator to allow the user to
                                ;; retry entering her credentials
-                               403 {:status 302
-                                    :headers {"Location" (get-location step req)}
-                                    :body "Authenticator: Try again"}))))))
+                               403 (redirect-after-post (get-location step req))))))))
               {}
               (request-handlers step)))))
 

@@ -17,6 +17,7 @@
    [cheshire.core :refer (encode)]
    [clj-jwt.core :refer (to-str sign jwt)]
    [ring.middleware.params :refer (wrap-params)]
+   [ring.middleware.cookies :refer (cookies-request)]
    [cylon.session :refer (create-session! assoc-session! ->cookie get-session-value get-cookie-value get-session)]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]))
 
@@ -30,13 +31,34 @@
      (-> (fn [req]
            ;; TODO Establish whether the user-agent is already authenticated.
            ;; If not, create a session with client-id, scope and state and redirect to the login form
-           (initiate-authentication-interaction
-            (:authenticator this)
-            req
-            {:client-id (-> req :query-params (get "client_id"))
-             :scope (-> req :query-params (get "scope"))
-             :state (-> req :query-params (get "state"))
-             }))
+           (let [session-id (get-cookie-value req SESSION-ID)
+                 session (get-session (:session-store this) session-id)]
+             (if (:cylon/authenticated? session)
+               (let [code (str (java.util.UUID/randomUUID))]
+
+                 ;; Remember the code for the possible exchange - TODO expiry these
+                 (swap! store assoc
+                        {:client-id client-id :code code}
+                        {:created (java.util.Date.)
+                         :cylon/identity identity})
+
+                 (cookies-response {:status 302
+                                    :headers {"Location"
+                                              (format
+                                               ;; TODO: Replace this with the callback uri
+                                               "%s?code=%s&state=%s"
+                                               callback-uri code state
+                                               )}
+                                    :cookies {SESSION-ID (->cookie session)}}))
+
+               ;; We are not authenticated, so let's authenticate first.
+               (initiate-authentication-interaction
+                (:authenticator this)
+                req
+                {:client-id (-> req :query-params (get "client_id"))
+                 :scope (-> req :query-params (get "scope"))
+                 :state (-> req :query-params (get "state"))
+                 }))))
          wrap-params)
 
      ::get-login-form

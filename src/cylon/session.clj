@@ -20,8 +20,13 @@
    :path "/"
    })
 
-(defn get-cookie-value [request cookie-name]
+(defn get-session-id [request cookie-name]
   (-> request cookies-request :cookies (get cookie-name) :value))
 
-(defn get-session-value [request cookie-name session-store k]
-  (get (get-session session-store (get-cookie-value request cookie-name)) k))
+(s/defn get-session-from-cookie :- {:cylon.session/key s/Str
+                                    :cylon.session/expiry s/Num
+                                    s/Keyword s/Any}
+  [request
+   cookie-name :- s/Str
+   session-store :- (s/protocol SessionStore)]
+  (get-session session-store (get-session-id request cookie-name)))

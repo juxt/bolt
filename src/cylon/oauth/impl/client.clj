@@ -17,7 +17,7 @@
    [cylon.oauth.client-registry :refer (register-client+)]
    [clojure.java.io :as io]
    [clj-jwt.core :refer (to-str jwt sign str->jwt verify encoded-claims)]
-   [cylon.util :refer (as-set)]
+   [cylon.util :refer (as-set absolute-uri)]
    ))
 
 ;; -------- Convenience - TODO promote somewhere
@@ -116,7 +116,6 @@
                         {:status 302
                          :headers {"Location" original-uri}
                          :body (str "Logged in, and we got an access token: " (:body at-resp))
-
                          })
                       ;; Error response - id_token failed verification
                       ))))))))
@@ -126,14 +125,14 @@
 
   AccessTokenGrantee
   (get-access-token [this req]
-    (let [app-session-id (-> req cookies-request :cookies (get APP-SESSION-ID) :value)]
+    (when-let [app-session-id (-> req cookies-request :cookies (get APP-SESSION-ID) :value)]
       (-> (get-session (:session-store this) app-session-id) :access-token)))
 
   (solicit-access-token [this req]
     (solicit-access-token this req []))
 
   (solicit-access-token [this req scopes]
-    (let [original-uri (apply format "%s://%s%s" ((juxt (comp name :scheme) (comp #(get % "host") :headers) :uri) req))
+    (let [original-uri (absolute-uri req)
           ;; We need a session to store the original uri
           session (create-session!
                    (:session-store this)

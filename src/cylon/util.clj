@@ -12,3 +12,10 @@
   (as-set [v] (set v))
   clojure.lang.PersistentList
   (as-set [l] (set l)))
+
+(defn absolute-uri [req]
+  (apply format "%s://%s%s"
+         ((juxt (comp name :scheme)
+                (comp #(get % "host") :headers)
+                :uri)
+          req)))
