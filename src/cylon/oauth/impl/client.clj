@@ -8,7 +8,7 @@
    [modular.bidi :refer (WebService)]
    [cylon.oauth.client :refer (AccessTokenGrantee UserIdentity solicit-access-token)]
    [cylon.authorization :refer (RequestAuthorizer)]
-   [cylon.session :refer (->cookie get-session assoc-session! create-session! cookies-response-with-session get-session-value get-session-id)]
+   [cylon.session :refer (->cookie get-session assoc-session! create-session! cookies-response-with-session get-session-value get-session-id purge-session!)]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]
    [ring.util.codec :refer (url-encode)]
    [ring.middleware.params :refer (wrap-params)]
@@ -115,9 +115,17 @@
                          :headers {"Location" original-uri}})
 
                       ))))))))
-      wrap-params)})
-  (routes [this] ["/grant" {:get ::grant}])
-  (uri-context [this] "/oauth")
+      wrap-params)
+
+     ::logout (fn [req]
+                (purge-session! (:session-store this) (get-session-id req APP-SESSION-ID))
+                {:status 200
+                 :body "You have logged out"
+                 })})
+
+  (routes [this] ["/" {"oauth/grant" {:get ::grant}
+                       "logout" {:get ::logout}}])
+  (uri-context [this] "")
 
   AccessTokenGrantee
   (get-access-token [this req]
