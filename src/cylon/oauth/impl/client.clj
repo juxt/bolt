@@ -151,12 +151,14 @@
                           (:authorize-uri this)
                           (:client-id this)
                           state
-                          (apply str
-                                 (interpose " "
-                                            (map
-                                             #(apply str
-                                                     (interpose ":" (remove nil? ((juxt namespace name) %))))
-                                             (union (as-set scopes) #{:openid :profile :email})))))}}
+                          (url-encode
+                           (apply str
+                                  (interpose " "
+                                             (map
+                                              #(apply str
+                                                      (interpose ":" (remove nil? ((juxt namespace name) %))))
+                                              ;; Although, perhaps it should be up to the caller to add :openid if :profile and :email are required.
+                                              (union (as-set scopes) #{:openid :profile :email}))))))}}
        APP-SESSION-ID
        session)))
 

@@ -4,6 +4,7 @@
    [clojure.tools.logging :refer :all]
    [modular.bidi :refer (WebService)]
    [bidi.bidi :refer (path-for)]
+   [clojure.set :as set]
    [hiccup.core :refer (html h)]
    [schema.core :as s]
    [plumbing.core :refer (<-)]
@@ -20,9 +21,15 @@
    [ring.middleware.params :refer (wrap-params)]
    [ring.middleware.cookies :refer (cookies-request)]
    [cylon.session :refer (create-session! assoc-session! ->cookie get-session-value get-session-id get-session cookies-response-with-session get-session-from-cookie)]
-   [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]))
+   [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]
+   [ring.util.codec :refer (url-decode)]))
 
 (def SESSION-ID "auth-session-id")
+
+(defn decode-scopes [s]
+  (->> (str/split (url-decode s) #"\s")
+       (map (fn [x] (apply keyword (str/split x #":"))))
+       set))
 
 (defrecord AuthorizationServer [store scopes iss]
 
@@ -35,15 +42,21 @@
            (println "")
            (println "::::::::::::::::::::::::::::: authorize!! :::::::::::::::::::::::::::::")
            (println "")
-           (let [session (get-session-from-cookie req  SESSION-ID (:session-store this))]
+           (let [session (get-session-from-cookie req SESSION-ID (:session-store this))]
              (if-let [auth-interaction-session (get-result (:authenticator this) req)]
                ;; the session can be authenticated or maybe we are coming from the authenticator workflow
                (if (:cylon/authenticated? auth-interaction-session)
                  ;; "you are authenticated now!"
+
                  (let [_ (clean-resources! (:authenticator this) req)
                        code (str (java.util.UUID/randomUUID))
-                       client-id (:client-id session)
-                       {:keys [callback-uri] :as client} (lookup-client+ (:client-registry this) client-id)]
+                       [client-id requested-scopes] ((juxt :client-id :requested-scopes) session)
+                       {:keys [callback-uri
+                               application-name
+                               description] :as client} (lookup-client+ (:client-registry this) client-id)]
+
+                   (assoc-session! (:session-store this) (get-session-id req SESSION-ID) :cylon/authenticated? true)
+                   (assoc-session! (:session-store this) (get-session-id req SESSION-ID) :code code)
 
                    ;; Remember the code for the possible exchange - TODO expiry these
                    (swap! store assoc
@@ -51,25 +64,82 @@
                            :code code}
                           {:created (java.util.Date.)
                            :cylon/identity (:cylon/identity auth-interaction-session)})
-                   {:status 302
-                    :headers {"Location"
-                              (format
-                               ;; TODO: Replace this with the callback uri
-                               "%s?code=%s&state=%s"
-                               callback-uri  code (:state session))}})
-               ;; you have auth-session although you are NOT authenticated but ,,, we carry on with this session"
+
+                   ;; When a user permits a client, the client's scopes that they have accepted, are stored in the user preferences database
+                   ;; why?
+                   ;; because next time, we don't have to ask the user for their permission everytime they login
+                   ;; ok, i understand
+                   ;; however
+                   (if true
+                     {:status 200
+                      :body (html [:body
+                                   [:form {:method :post :action (path-for (:modular.bidi/routes req) ::permit)}
+                                    [:h1 "Authorize application?"]
+                                    [:p (format "An application (%s) is requesting to use your credentials" application-name)]
+                                    [:h2 "Application description"]
+                                    [:p description]
+                                    [:h2 "Scope"]
+                                    (for [s requested-scopes]
+                                      (let [s (apply str (interpose "/" (remove nil? ((juxt namespace name) s))))]
+                                        [:p [:label {:for s} s] [:input {:type "checkbox" :id s :name s :value s :checked true}]]))
+                                    [:input {:type "submit"}]]
+                                   ])}
+
+                     {:status 302
+                      :headers {"Location"
+                                (format
+                                 ;; TODO: Replace this with the callback uri
+                                 "%s?code=%s&state=%s"
+                                 callback-uri code (:state session))}}))
+
+
+                 ;; you have auth-session although you are NOT authenticated but ,,, we carry on with this session"
                  (initiate-authentication-interaction (:authenticator this) req {}))
                ;; You are not authenticated, so let's authenticate first.
                (let [auth-session (create-session! (:session-store this)
-                                                    {:client-id (-> req :query-params (get "client_id"))
-                                                     :scope (-> req :query-params (get "scope"))
-                                                     :state (-> req :query-params (get "state"))})]
+                                                   {:client-id (-> req :query-params (get "client_id"))
+                                                    :requested-scopes (decode-scopes (-> req :query-params (get "scope")))
+                                                    :state (-> req :query-params (get "state"))})]
                  (cookies-response-with-session
                   (initiate-authentication-interaction (:authenticator this) req {})
                   SESSION-ID auth-session)))))
          wrap-params)
 
+     ::permit
+     (->
+      ;; TODO I'm worred about the fact we must ensure that the session
+      ;; represents a true authenticated user
+      (fn [req]
+        (let [session (get-session-from-cookie req SESSION-ID (:session-store this))]
+          (if (:cylon/authenticated? session)
+            (let [permitted-scopes (set (map
+                                         (fn [x] (apply keyword (str/split x #"/")))
+                                         (keys (:form-params req))))
+                  _ (println "permitted-scopes is" permitted-scopes)
+                  requested-scopes (:requested-scopes session)
+                  _ (println "requested-scopes is" requested-scopes)
+
+                  granted-scopes (set/intersection permitted-scopes requested-scopes)
+                  code (:code session)
+                  client-id (:client-id session)
+                  {:keys [callback-uri] :as client} (lookup-client+ (:client-registry this) client-id)
+                  ]
+
+              (println "Granting scopes: " granted-scopes)
+              (swap! store update-in
+                     [{:client-id client-id
+                       :code code}]
+                     assoc :granted-scopes granted-scopes)
+
+              {:status 302
+               :headers {"Location"
+                         (format
+                          "%s?code=%s&state=%s"
+                          callback-uri code (:state session))}}))))
+      wrap-params)
+
      ::exchange-code-for-access-token
+     ;; This is initiated by the client
      (-> (fn [req]
            (let [params (:form-params req)
                  code (get params "code")
@@ -80,14 +150,17 @@
              (if (not= (:client-secret client) client-secret)
                {:status 400 :body "Invalid request - bad secret"}
 
-               (if-let [{identity :cylon/identity}
+               (if-let [{identity :cylon/identity
+                         granted-scopes :granted-scopes}
                         (get @store
                              ;; I don't think this key has to include client-id
                              ;; - it can just be 'code'.
                              {:client-id client-id :code code})]
 
                  (let [{access-token :cylon.session/key}
-                       (create-session! (:access-token-store this) {:scopes #{:superuser/read-users :repo :superuser/gist :admin}})
+                       (create-session! (:access-token-store this) {:client-id client-id
+                                                                    :identity identity
+                                                                    :scopes granted-scopes})
                        claim {:iss iss
                               :sub identity
                               :aud client-id
@@ -98,7 +171,7 @@
 
                    {:status 200
                     :body (encode {"access_token" access-token
-                                   "scope" "repo gist openid profile email"
+                                   "scope" granted-scopes
                                    "token_type" "Bearer"
                                    "expires_in" 3600
                                    ;; TODO Refresh token (optional)
@@ -114,6 +187,8 @@
 
   (routes [this]
     ["/" {"authorize" {:get ::authorize}
+          "permit-client" {:post ::permit}
+          ;; TODO: Can we use a hyphen instead here?
           "access_token" {:post ::exchange-code-for-access-token}}])
 
   (uri-context [this] "/login/oauth")

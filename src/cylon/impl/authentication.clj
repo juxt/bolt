@@ -85,7 +85,7 @@
        MFA-AUTH-COOKIE
        session)))
   (get-result [this req]
-    (get-session-from-cookie  req "mfa-auth-session-id" (:session-store this)))
+    (get-session-from-cookie req "mfa-auth-session-id" (:session-store this)))
   (clean-resources! [this req]
     (purge-session! (:session-store this) (get-session-id req "mfa-auth-session-id")))
 
