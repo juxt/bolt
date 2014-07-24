@@ -8,6 +8,7 @@
   :dependencies [[juxt.modular/bidi "0.5.0"]
                  [juxt.modular/ring "0.5.0"]
                  [prismatic/schema "0.2.1"]
+                 [prismatic/plumbing "0.2.2"]
                  [ring/ring-core "1.2.2"]
 
                  [hiccup "1.0.5"]

@@ -7,6 +7,7 @@
    [clojure.tools.logging :refer :all]
    [cylon.user :refer (UserStore verify-user)]
    [schema.core :as s]
+   [plumbing.core :refer (<-)]
    [ring.middleware.cookies :refer (cookies-response wrap-cookies)]
    [bidi.bidi :refer (path-for)]
    [ring.util.response :refer (redirect-after-post)]
@@ -208,11 +209,11 @@
 
 
 (defn new-authentication-login-form [& {:as opts}]
-  (component/using (->> opts
-                        (merge {:cookie-id MFA-AUTH-COOKIE})
-                        (s/validate {(s/required-key :cookie-id) s/Str})
-                        map->LoginForm) [:user-domain :session-store]))
-
+  (->> opts
+       (merge {:cookie-id MFA-AUTH-COOKIE})
+       (s/validate {(s/required-key :cookie-id) s/Str})
+       map->LoginForm
+       (<- (component/using [:user-domain :session-store]))))
 
 (defrecord TimeBasedOneTimePasswordForm [cookie-id]
   WebService
@@ -272,7 +273,9 @@
     ))
 
 (defn new-authentication-totp-form [& {:as opts}]
-  (component/using (->> opts
-                        (merge {:cookie-id MFA-AUTH-COOKIE})
-                        (s/validate {(s/required-key :cookie-id) s/Str})
-                        map->TimeBasedOneTimePasswordForm) [:session-store]))
+  (->>
+   opts
+   (merge {:cookie-id MFA-AUTH-COOKIE})
+   (s/validate {(s/required-key :cookie-id) s/Str})
+   map->TimeBasedOneTimePasswordForm
+   (<- (component/using [:session-store :user-domain]))))
