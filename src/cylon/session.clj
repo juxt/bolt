@@ -21,10 +21,12 @@
                (.setTime (::expiry session))))
    :path "/"})
 
-(defn cookies-response-with-session [response id-cookie session ]
+(defn cookies-response-with-session [response id-cookie session]
+  ;; Use of cookies-response mean it is non-destructive - existing
+  ;; cookies are preserved (but existing :cookies entries are not)
   (cookies-response
-   (merge response
-          { :cookies {id-cookie (->cookie session)}})))
+   (merge-with merge response
+    {:cookies {id-cookie (->cookie session)}})))
 
 (defn get-session-id [request cookie-name]
   (-> request cookies-request :cookies (get cookie-name) :value))

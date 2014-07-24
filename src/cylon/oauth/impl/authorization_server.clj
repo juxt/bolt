@@ -40,7 +40,7 @@
                ;; the session can be authenticated or maybe we are coming from the authenticator workflow
                (if (:cylon/authenticated? auth-interaction-session)
                  ;; "you are authenticated now!"
-                 (let [_    (clean-resources! (:authenticator this) req)
+                 (let [_ (clean-resources! (:authenticator this) req)
                        code (str (java.util.UUID/randomUUID))
                        client-id (:client-id session)
                        {:keys [callback-uri] :as client} (lookup-client+ (:client-registry this) client-id)]
