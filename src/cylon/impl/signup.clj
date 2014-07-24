@@ -47,7 +47,7 @@
                       :email (get (:form-params req) "email")})
 
           (when (satisfies? OneTimePasswordStore (:user-domain this))
-            (set-totp-secret (:user-domain this) identity totp-secret password)
+            (set-totp-secret (:user-domain this) identity totp-secret)
             )
 
           {:status 200 :body
@@ -57,7 +57,7 @@
              (when (satisfies? OneTimePasswordStore (:user-domain this))
                [:div
                 [:p "Please scan this image into your 2-factor authentication application"]
-                [:img {:src (totp/qr-code (format "%s@%s" identity appname) totp-secret)}]
+                [:img {:src (totp/qr-code (format "%s@%s" identity appname) totp-secret) }]
                 [:p "Alternatively, type in this secret into your authenticator application: " [:code totp-secret]]
                 ])
              ]

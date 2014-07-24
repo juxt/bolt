@@ -62,6 +62,7 @@
    (->CompositeDisjunctiveAuthenticator)
    (vec deps)))
 
+(def MFA-AUTH-COOKIE "mfa-auth-session-id")
 ;; (If you're looking for CookieAuthenticator, it's in cylon.impl.session)
 
 
@@ -80,7 +81,7 @@
       (cookies-response-with-session
        {:status 302
         :headers {"Location" (get-location (first steps) req)}}
-       "mfa-auth-session-id"
+       MFA-AUTH-COOKIE
        session)))
   (get-result [this req]
     (get-session-from-cookie  req "mfa-auth-session-id" (:session-store this)))
@@ -89,19 +90,33 @@
 
   ;; We proxy onto the dependencies which satisfy WebService in order to
   ;; change their behaviour.
+
   WebService
-  (request-handlers [this]
+ (request-handlers [this]
     (apply merge
            (for [[step next-step] (partition 2 1 nil ((apply juxt steps) this))]
              (reduce-kv
               (fn [acc k h]
                 (assoc acc k
                        (fn [req]
-                         (if (not= (:request-method req) :post)
-                           (h req)
-                           (let [res (h req)
-                                 session-id (get-session-id req "mfa-auth-session-id")
-                                 session (get-session (:session-store this) session-id)]
+                         (let [session-id (get-session-id req "mfa-auth-session-id")
+                               session (get-session (:session-store this) session-id)
+                               res (h req)]
+                           (if (not= (:request-method req) :post)
+                             ;; TODO FIX the redundat code, only testing now
+                             (case (:status res)
+                               999 (if next-step
+                                     {:status 302
+                                      :headers {"Location" (get-location next-step req)}
+                                      :body "Authenticator: Move to the next step"}
+
+                                     ;; No more steps, we're done. Redirect to the initiator.
+                                     (do
+                                       (assoc-session! (:session-store this) session-id :cylon/authenticated? true)
+                                       (redirect-after-post (:cylon/original-uri session))
+                                       ))
+                               200 res
+                               )
                              (case (:status res)
                                200 (if next-step
                                      {:status 302
@@ -120,6 +135,8 @@
               {}
               (request-handlers step)))))
 
+
+
   (routes [this]
     ["" (vec (for [step ((apply juxt steps) this)]
                [(uri-context step) [(routes step)]]))])
@@ -133,12 +150,12 @@
         map->MultiFactorAuthenticationInteraction)
    (conj (:steps opts) :session-store)))
 
-(defrecord LoginForm []
+(defrecord LoginForm [cookie-id]
   WebService
   (request-handlers [this]
     {:GET-login-form
      (fn [req]
-       (println "GET session id is " (get-session-id req "mfa-auth-session-id"))
+       (println "GET session id is " (get-session-id req cookie-id))
        {:status 200
         :body (html
                [:body
@@ -160,23 +177,17 @@
         (let [params (-> req :form-params)
               identity (get params "user")
               password (get params "password")
-              session (get-session (:session-store this) (get-session-id req "mfa-auth-session-id"))]
+              session (get-session (:session-store this) (get-session-id req cookie-id))]
           (assert session)
           (if (and identity
                    (not-empty identity)
                    (verify-user (:user-domain this) (.trim identity) password))
             (do
 
-              (when (satisfies? OneTimePasswordStore (:user-domain this))
-                (when-let [secret (get-totp-secret (:user-domain this) identity password)]
-                  (assoc-session! (:session-store this)
-                                  (:cylon.session/key session)
-                                  :totp-secret secret)
-                  true ; it does, but just in case assoc-session! semantics change
-                  ))
 
 
-              (assoc-session! (:session-store this) (get-session-id req "mfa-auth-session-id") :cylon/identity identity)
+
+              (assoc-session! (:session-store this) (get-session-id req cookie-id) :cylon/identity identity)
 
               {:status 200
                :body "Thank you! - you gave the correct information!"})
@@ -197,37 +208,46 @@
 
 
 (defn new-authentication-login-form [& {:as opts}]
-  (component/using (->LoginForm) [:user-domain :session-store]))
+  (component/using (->> opts
+                        (merge {:cookie-id MFA-AUTH-COOKIE})
+                        (s/validate {(s/required-key :cookie-id) s/Str})
+                        map->LoginForm) [:user-domain :session-store]))
 
 
-(defrecord TimeBasedOneTimePasswordForm []
+(defrecord TimeBasedOneTimePasswordForm [cookie-id]
   WebService
   (request-handlers [this]
     {:GET-totp-form
      (fn [req]
-       (let [secret (get-session-value req  "mfa-auth-session-id" (:session-store this) :totp-secret)]
-        {:status 200
-         :body (html
-                [:body
-                 [:h1 "TOTP Form"]
-                 [:form {:method :post
-                         :action (path-for (:modular.bidi/routes req) ::POST-totp-form)}
-                  [:p
-                   [:label {:for "totp-code"} "Code"]
-                   [:input {:name "totp-code" :id "totp-code" :type "text"}]]
-                  [:p [:input {:type "submit"}]]
-                  (when secret [:p "(Hint, maybe it's something like... this ? " (totp-token secret) ")"])
-                  ]])}))
+       ;; TODO this "let .. secret " is only for showing the helper message to the developer
+       ;; TODO  remove in production
+       (let [identity (get-session-value req  cookie-id (:session-store this) :cylon/identity)
+             secret (get-totp-secret (:user-domain this) identity)]
+         (if secret
+           {:status 200
+            :body (html
+                   [:body
+                    [:h1 "TOTP Form"]
+                    [:form {:method :post
+                            :action (path-for (:modular.bidi/routes req) ::POST-totp-form)}
+                     [:p
+                      [:label {:for "totp-code"} "Code"]
+                      [:input {:name "totp-code" :id "totp-code" :type "text"}]]
+                     [:p [:input {:type "submit"}]]
+                     (when secret [:p "(Hint, maybe it's something like... this ? " (totp-token secret) ")"])
+                     ]])}
+           ;; skip interaction step with flag => :status 999
+           {:status 999}))
+       )
 
      :POST-totp-form
      (->
       (fn [req]
         (let [params (-> req :form-params)
               totp-code (get params "totp-code")
-              session (get-session (:session-store this) (get-session-id req "mfa-auth-session-id"))
-              secret (get-session-value req "mfa-auth-session-id" (:session-store this) :totp-secret)
+              identity (get-session-value req  cookie-id (:session-store this) :cylon/identity)
+              secret (get-totp-secret (:user-domain this) identity)
               ]
-          (println ">>> session is " session)
           (if
               (= totp-code (totp-token secret))
 
@@ -252,4 +272,7 @@
     ))
 
 (defn new-authentication-totp-form [& {:as opts}]
-  (->TimeBasedOneTimePasswordForm))
+  (component/using (->> opts
+                        (merge {:cookie-id MFA-AUTH-COOKIE})
+                        (s/validate {(s/required-key :cookie-id) s/Str})
+                        map->TimeBasedOneTimePasswordForm) [:session-store]))

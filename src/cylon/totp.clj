@@ -3,8 +3,8 @@
 (ns cylon.totp)
 
 (defprotocol OneTimePasswordStore
-  (set-totp-secret [_ identity secret password] "Encrypts the secret with the password")
-  (get-totp-secret [_ identity password] "Returns nil if no TOTP secret"))
+  (set-totp-secret [_ identity secret] "this level add security to previous checked user/password identity")
+  (get-totp-secret [_ identity] "Returns nil if no TOTP secret"))
 
 
 ;; Google Authenticator clojure code
