@@ -5,7 +5,7 @@
   :url "https://github.com/juxt/cylon"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
-  :dependencies [[juxt.modular/bidi "0.5.0"]
+  :dependencies [[juxt.modular/bidi "0.5.2-SNAPSHOT"]
                  [juxt.modular/ring "0.5.0"]
                  [prismatic/schema "0.2.1"]
                  [prismatic/plumbing "0.2.2"]

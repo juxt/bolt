@@ -9,10 +9,9 @@
    [schema.core :as s]
    [plumbing.core :refer (<-)]
    [ring.middleware.cookies :refer (cookies-response wrap-cookies)]
-   [bidi.bidi :refer (path-for)]
    [ring.util.response :refer (redirect-after-post)]
    [ring.middleware.params :refer (wrap-params)]
-   [modular.bidi :refer (WebService request-handlers routes uri-context)]
+   [modular.bidi :refer (WebService request-handlers routes uri-context path-for)]
    [cylon.session :refer (->cookie create-session! get-session get-session-id assoc-session! cookies-response-with-session get-session-from-cookie get-session-value purge-session!)]
    [hiccup.core :refer (html)]
    [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)])
@@ -151,27 +150,22 @@
         map->MultiFactorAuthenticationInteraction)
    (conj (:steps opts) :session-store)))
 
+(defprotocol LoginFormRenderer
+  (render-login-form [_ req model]))
+
 (defrecord LoginForm [cookie-id]
   WebService
   (request-handlers [this]
     {:GET-login-form
      (fn [req]
-       (println "GET session id is " (get-session-id req cookie-id))
        {:status 200
-        :body (html
-               [:body
-                [:h1 "Login Form"]
-                [:form {:method :post
-                        :action (path-for (:modular.bidi/routes req) ::POST-login-form)}
-                 [:p
-                  [:label {:for "user"} "User"]
-                  [:input {:name "user" :id "user" :type "text"}]]
-                 [:p
-                  [:label {:for "password"} "Password"]
-                  [:input {:name "password" :id "password" :type "password"}]]
-                 [:p [:input {:type "submit"}]]
-                 [:p [:a {:href (path-for (:modular.bidi/routes req) :cylon.impl.signup/signup-form)} "Signup"]]
-                 ]])})
+        :body (render-login-form
+               (:renderer this) req
+               {:form {:method :port
+                       :action (path-for req ::POST-login-form)
+                       :fields [{:label "User"}
+                                {:label "Password" :password? true}]}})})
+
      :POST-login-form
      (->
       (fn [req]
@@ -184,12 +178,7 @@
                    (not-empty identity)
                    (verify-user (:user-domain this) (.trim identity) password))
             (do
-
-
-
-
               (assoc-session! (:session-store this) (get-session-id req cookie-id) :cylon/identity identity)
-
               {:status 200
                :body "Thank you! - you gave the correct information!"})
 
@@ -200,20 +189,19 @@
 
   (routes [_] ["/" {"login" {:get :GET-login-form
                              :post :POST-login-form}}])
-  (uri-context [_] "/login-form")
+  (uri-context [_] "")
 
   InteractionStep
   (get-location [this req]
-    (path-for (:modular.bidi/routes req) :GET-login-form)
+    (path-for req :GET-login-form)
     ))
-
 
 (defn new-authentication-login-form [& {:as opts}]
   (->> opts
        (merge {:cookie-id MFA-AUTH-COOKIE})
        (s/validate {(s/required-key :cookie-id) s/Str})
        map->LoginForm
-       (<- (component/using [:user-domain :session-store]))))
+       (<- (component/using [:user-domain :session-store :renderer]))))
 
 (defrecord TimeBasedOneTimePasswordForm [cookie-id]
   WebService
@@ -230,7 +218,7 @@
                    [:body
                     [:h1 "TOTP Form"]
                     [:form {:method :post
-                            :action (path-for (:modular.bidi/routes req) ::POST-totp-form)}
+                            :action (path-for req ::POST-totp-form)}
                      [:p
                       [:label {:for "totp-code"} "Code"]
                       [:input {:name "totp-code" :id "totp-code" :type "text"}]]
@@ -269,7 +257,7 @@
 
   InteractionStep
   (get-location [this req]
-    (path-for (:modular.bidi/routes req) :GET-totp-form)
+    (path-for req :GET-totp-form)
     ))
 
 (defn new-authentication-totp-form [& {:as opts}]
