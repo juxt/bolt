@@ -88,12 +88,11 @@
      (:value (get cookies "session-id")))
     {:status 302 :headers {"Location" "/"}}))
 
-(defrecord LoginForm [uri-context renderer middleware fields uid]
+(defrecord LoginForm [uri-context renderer middleware fields uid requested-uri]
   WebService
   (request-handlers [this]
     {:login
-     (let [f (fn [{{{requested-uri :value} "requested-uri"
-                    {login-status :value} "login-status"
+     (let [f (fn [{{{login-status :value} "login-status"
                     {uid-value :value} "uid"} :cookies
                     routes :modular.bidi/routes :as request}]
                {:status 200
@@ -139,12 +138,14 @@
                               (s/required-key :type) s/Str
                               (s/optional-key :label) s/Str
                               (s/optional-key :placeholder) s/Str
-                              (s/optional-key :required) s/Bool}]})
+                              (s/optional-key :required) s/Bool}]
+   (s/optional-key :requested-uri) s/Str})
 
 (defn new-login-form [& {:as opts}]
   (component/using
    (->> opts
         (merge {:uri-context ""
+                :requested-uri "/"
                 ;; If you don't provide a renderer, one will be provided for you
                 :renderer (->PlainLoginFormRenderer)
                 :fields
