@@ -156,17 +156,27 @@
 (defrecord LoginForm [cookie-id]
   WebService
   (request-handlers [this]
-    {:GET-login-form
-     (fn [req]
-       {:status 200
-        :body (render-login-form
-               (:renderer this) req
-               {:form {:method :port
-                       :action (path-for req ::POST-login-form)
-                       :fields [{:label "User"}
-                                {:label "Password" :password? true}]}})})
+    {::GET-login-form
 
-     :POST-login-form
+     (fn [req]
+       (->
+        {:status 200
+         :body (render-login-form
+                (:renderer this) req
+                {:form {:method :post
+                        :action (path-for req ::POST-login-form)
+                        :fields [{:name "user" :label "User"}
+                                 {:name "password" :label "Password" :password? true}]}})}
+        ;; Conditional response post-processing
+        (cond->
+         ;; In the absence of a session...
+         (not (get-session-from-cookie req cookie-id (:session-store this)))
+         ;; We create an empty one. This is because the POST handler
+         ;; requires that a session exists within which it can store the
+         ;; identity on a successful login
+         (cookies-response-with-session cookie-id (create-session! (:session-store this) {})))))
+
+     ::POST-login-form
      (->
       (fn [req]
         (let [params (-> req :form-params)
@@ -174,26 +184,29 @@
               password (get params "password")
               session (get-session (:session-store this) (get-session-id req cookie-id))]
           (assert session)
+
           (if (and identity
                    (not-empty identity)
                    (verify-user (:user-domain this) (.trim identity) password))
             (do
               (assoc-session! (:session-store this) (get-session-id req cookie-id) :cylon/identity identity)
-              {:status 200
+              {:status 302
+               :headers {"Location" "/"}
                :body "Thank you! - you gave the correct information!"})
 
-            {:status 403
+            {:status 302
+             :headers {"Location" (path-for req ::GET-login-form)}
              :body "Bad guess!!! Please try again :)"}
             )))
       wrap-params wrap-cookies)})
 
-  (routes [_] ["/" {"login" {:get :GET-login-form
-                             :post :POST-login-form}}])
+  (routes [_] ["/" {"login" {:get ::GET-login-form
+                             :post ::POST-login-form}}])
   (uri-context [_] "")
 
   InteractionStep
   (get-location [this req]
-    (path-for req :GET-login-form)
+    (path-for req ::GET-login-form)
     ))
 
 (defn new-authentication-login-form [& {:as opts}]
@@ -206,7 +219,7 @@
 (defrecord TimeBasedOneTimePasswordForm [cookie-id]
   WebService
   (request-handlers [this]
-    {:GET-totp-form
+    {::GET-totp-form
      (fn [req]
        ;; TODO this "let .. secret " is only for showing the helper message to the developer
        ;; TODO  remove in production
@@ -229,7 +242,7 @@
            {:status 999}))
        )
 
-     :POST-totp-form
+     ::POST-totp-form
      (->
       (fn [req]
         (let [params (-> req :form-params)
@@ -251,13 +264,13 @@
             )))
       wrap-params wrap-cookies)})
 
-  (routes [_] ["/" {"login" {:get :GET-totp-form
-                             :post :POST-totp-form}}])
+  (routes [_] ["/" {"login" {:get ::GET-totp-form
+                             :post ::POST-totp-form}}])
   (uri-context [_] "/totp-form")
 
   InteractionStep
   (get-location [this req]
-    (path-for req :GET-totp-form)
+    (path-for req ::GET-totp-form)
     ))
 
 (defn new-authentication-totp-form [& {:as opts}]

@@ -31,13 +31,13 @@
 (defn get-session-id [request cookie-name]
   (-> request cookies-request :cookies (get cookie-name) :value))
 
-(s/defn get-session-from-cookie :- {:cylon.session/key s/Str
-                                    :cylon.session/expiry s/Num
-                                    s/Keyword s/Any}
+(s/defn get-session-from-cookie :- (s/maybe {:cylon.session/key s/Str
+                                             :cylon.session/expiry s/Num
+                                             s/Keyword s/Any})
   [request
    cookie-name :- s/Str
    session-store :- (s/protocol SessionStore)]
   (get-session session-store (get-session-id request cookie-name)))
 
 (defn get-session-value [request cookie-name session-store k]
-    (get (get-session-from-cookie request cookie-name session-store)  k))
+    (get (get-session-from-cookie request cookie-name session-store) k))
