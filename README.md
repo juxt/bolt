@@ -138,7 +138,7 @@ Also, to Neale Swinnerton [@sw1nn](https://twitter.com/sw1nn) for the
 original work in adopting Stuart's component library and showing how to
 migrate [Jig](https://github.com/juxt/jig) components to it.
 
-[Juan Antonio Ruz](https://github.com/tangrammar) designed and developed
+[Juan Antonio Ruz](https://github.com/tangrammer) designed and developed
 the TOTP two-factor authentication support. Additionally Juan conducted
 the background research and co-authored the OAuth2 support.
 
