@@ -8,9 +8,10 @@
    [clojure.pprint :refer (pprint)]
    [clojure.tools.logging :refer :all]
    [com.stuartsierra.component :as component]
-   [cylon.user :refer (UserStore get-user store-user! UserDomain)]
+   [cylon.user :refer (UserStore get-user store-user! UserDomain add-user!)]
    [cylon.password :refer (create-hash verify-password)]
-   [schema.core :as s])
+   [schema.core :as s]
+   [plumbing.core :refer (<-)])
   (:import
    (java.security SecureRandom)))
 
@@ -75,3 +76,21 @@
    (->> opts
         map->DefaultUserDomain)
    [:user-store :password-hash-algo]))
+
+;; Seeder (only to be used in dev systems)
+
+(defrecord UserDomainSeeder [users]
+  component/Lifecycle
+  (start [component]
+    (doseq [{:keys [id password]} users]
+      (do
+        (println (format "Adding user '%s' with password: %s" id password))
+        (add-user! (:cylon/user-domain component) id password {:name "Development user"})))
+    component)
+  (stop [component] component))
+
+(defn new-user-domain-seeder [& {:as opts}]
+  (->> opts
+       (s/validate {:users [{:id s/Str :password s/Str}]})
+       map->UserDomainSeeder
+       (<- (component/using [:cylon/user-domain]))))

@@ -157,7 +157,6 @@
   WebService
   (request-handlers [this]
     {::GET-login-form
-
      (fn [req]
        (->
         {:status 200
