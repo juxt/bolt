@@ -80,7 +80,6 @@
     (swap! (:sessions this)
            (fn [sessions] (update-in sessions [id]
                                      (fn [session]
-                                       (println "id is " id)
                                        (assert session)
                                        (assoc session k v))))))
 
