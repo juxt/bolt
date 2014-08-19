@@ -18,14 +18,19 @@
     (tracef "Authenticating with cookie: %s" (:uri request))
     (when-let [cookie-val (-> request cookies-request :cookies (get "session-id") :value)]
       (tracef "Authenticating %s with cookie value of %s" (:uri request) cookie-val)
-
       (when-let [session (get-session (:session-store this) cookie-val)]
         (tracef "Found session, user is %s" (:username session))
-        {:session session  ; retain compatibility with Ring's wrap-session
-         :cylon/session-id cookie-val
-         :cylon/session session
-         :cylon/user (:username session)
-         :cylon/authentication-method :cookie})))
+        (let [ring-session {:session session ; retain compatibility with Ring's wrap-session
+                            :cylon/session-id cookie-val
+                            :cylon/session session
+                            :cylon/user (:username session)
+                            :cylon/authentication-method :cookie}]
+          (println check-csrf-cookie-to-header? ring-session (get (:headers request) "x-csrf-token"))
+          (if check-csrf-cookie-to-header?
+            (if (= cookie-val (get (:headers request) "x-csrf-token"))
+              ring-session
+              (tracef "CSRF cookie-to-header invalid %s" (get (:headers request) "x-csrf-token")))
+            ring-session)))))
 
   WebRequestMiddleware
   (request-middleware [this]
@@ -43,6 +48,7 @@
 (defn new-cookie-authenticator [& {:as opts}]
   (component/using
    (->> opts
+        (merge {:check-csrf-cookie-to-header? false})
         map->CookieAuthenticator)
    [:session-store]))
 
