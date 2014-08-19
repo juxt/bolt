@@ -12,7 +12,7 @@
    [modular.ring :refer (WebRequestMiddleware WebRequestBinding)]
    [schema.core :as s]))
 
-(defrecord CookieAuthenticator []
+(defrecord CookieAuthenticator [check-csrf-cookie-to-header?]
   Authenticator
   (authenticate [this request]
     (tracef "Authenticating with cookie: %s" (:uri request))
