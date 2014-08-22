@@ -145,20 +145,21 @@
 
       (expect-state this state)
       (cookies-response-with-session
-       {:status 302
-        :headers {"Location"
-                  (format "%s?client_id=%s&state=%s&scope=%s"
-                          (:authorize-uri this)
-                          (:client-id this)
-                          state
-                          (url-encode
-                           (apply str
-                                  (interpose " "
-                                             (map
-                                              #(apply str
-                                                      (interpose ":" (remove nil? ((juxt namespace name) %))))
-                                              ;; Although, perhaps it should be up to the caller to add :openid if :profile and :email are required.
-                                              (union (as-set scopes) #{:openid :profile :email}))))))}}
+       (let [loc (format "%s?client_id=%s&state=%s&scope=%s"
+                         (:authorize-uri this)
+                         (:client-id this)
+                         state
+                         (url-encode
+                          (apply str
+                                 (interpose " "
+                                            (map
+                                             #(apply str
+                                                     (interpose ":" (remove nil? ((juxt namespace name) %))))
+                                             ;; Although, perhaps it should be up to the caller to add :openid if :profile and :email are required.
+                                             (union (as-set scopes) #{:openid :profile :email}))))))]
+         (debugf "Redirecting to %s" loc)
+         {:status 302
+          :headers {"Location" loc}})
        APP-SESSION-ID
        session)))
 

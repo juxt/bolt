@@ -29,10 +29,9 @@
 )
 
 (defprotocol InteractionStep
-  (get-location [_ request]))
-
-
-
+  (get-location [_ request])
+  ;; Given the request, is this step required? If not, continue to the next step
+  (step-required? [_ request]))
 
 ;; Each step is a REDIRECT-GET / POST pair
 
