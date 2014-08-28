@@ -63,7 +63,7 @@
 
   WebService
   (request-handlers [this]
-    {::grant
+    {::redirection-endpoint
      (->
       (fn [req]
         (let [params (:query-params req)
@@ -134,7 +134,7 @@
                  :body "You have logged out"
                  })})
 
-  (routes [this] ["/" {"oauth/grant" {:get ::grant}
+  (routes [this] ["/" {"oauth/grant" {:get ::redirection-endpoint}
                        "logout" {:get ::logout}}])
   (uri-context [this] "")
 
