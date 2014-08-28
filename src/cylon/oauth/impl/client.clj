@@ -43,15 +43,17 @@
             (s/with-fn-validation
               (register-client+
                reg
-               (select-keys this [:client-id
-                                  :client-secret
-                                  :application-name
-                                  :homepage-uri
-                                  :description
-                                  :redirection-uri
-                                  :required-scopes
-                                  :requires-user-acceptance?
-                                  ])))]
+               (select-keys
+                this
+                [:client-id
+                 :client-secret
+                 :application-name
+                 :homepage-uri
+                 :description
+                 :redirection-uri
+                 :required-scopes
+                 :requires-user-acceptance?
+                 ])))]
         ;; In case these are generated
         (assoc this :client-id client-id :client-secret client-secret))
 
@@ -64,9 +66,9 @@
   WebService
   (request-handlers [this]
     {::redirection-endpoint ; used by the authorization server to return
-                            ; responses containing authorization
-                            ; credentials to the client via the resource
-                            ; owner user-agent.
+                                        ; responses containing authorization
+                                        ; credentials to the client via the resource
+                                        ; owner user-agent.
      (->
       (fn [req]
         (let [params (:query-params req)
@@ -92,10 +94,22 @@
                      ;; authentication scheme (or other password-based
                      ;; HTTP authentication schemes)."
 
-                     :body (format "client_id=%s&client_secret=%s&code=%s"
+                     ;; TODO Support Basic Authentication in preference
+                     ;; to client secrets.
+
+                     ;; 4.1.3. Access Token Request redirect_uri
+                     ;; REQUIRED, if the "redirect_uri" parameter was
+                     ;; included in the authorization request as
+                     ;; described in Section 4.1.1, and their values
+                     ;; MUST be identical.
+
+                     ;; TODO: Better if we could construct this string
+                     ;; with the help of some utility function.
+                     :body (format "grant_type=%s&code=%s&client_id=%s&client_secret=%s"
+                                   "authorization_code"
+                                   code
                                    (:client-id this)
-                                   (:client-secret this)
-                                   code)}
+                                   (:client-secret this))}
                     #(if (:error %)
                        %
                        (update-in % [:body] (comp decode-stream io/reader))))]
