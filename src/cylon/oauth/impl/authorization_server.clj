@@ -40,7 +40,7 @@
 
   WebService
   (request-handlers [this]
-    {::authorize
+    {::authorization-endpoint
      (-> (fn [req]
            ;; TODO Establish whether the user-agent is already authenticated.
            ;; If not, create a session with client-id, scope and state and redirect to the login form
@@ -131,6 +131,8 @@
          wrap-params
          wrap-schema-validation)
 
+     ;; TODO Implement RFC 6749 4.1.2.1 Error Response
+
      ::permit
      (->
       ;; TODO I'm worred about the fact we must ensure that the session
@@ -164,17 +166,20 @@
                           callback-uri code (:state session))}}))))
       wrap-params)
 
-     ::exchange-code-for-access-token
+     ;; RFC 6749 4.1 (D) - and this is the Token endpoint as described
+     ;; in section 3 (Protocol Endpoints)
+     ::token-endpoint
      ;; This is initiated by the client
      (-> (fn [req]
            (let [params (:form-params req)
                  code (get params "code")
                  client-id (get params "client_id")
-                 client-secret (get params "client_secret")
                  client (lookup-client+ (:client-registry this) client-id)]
 
-             (if (not= (:client-secret client) client-secret)
-               {:status 400 :body "Invalid request - bad secret"}
+             ;; "When making the request, the client authenticates with
+             ;; the authorization server."
+             (if (not= (get params "client_secret") (:client-secret client))
+               {:status 403 :body "Client could not be authenticated"}
 
                (if-let [{identity :cylon/identity
                          granted-scopes :granted-scopes}
@@ -212,18 +217,21 @@
          wrap-params )})
 
   (routes [this]
-    ["/" {"authorize" {:get ::authorize}
+    ["/" {"authorize" {:get ::authorization-endpoint}
           "permit-client" {:post ::permit}
           ;; TODO: Can we use a hyphen instead here?
-          "access_token" {:post ::exchange-code-for-access-token}}])
+          "access_token" {:post ::token-endpoint}}])
 
   (uri-context [this] "/login/oauth")
 
   AccessTokenAuthorizer
-  (authorized? [this access-token scope]
+  (authorized? [component access-token scope]
     (if-not (contains? (set (keys scopes)) scope)
-      (throw (ex-info "Invalid scope" {:scope scope}))
-      (contains? (:scopes (get-session (:access-token-store this) access-token))
+      (throw (ex-info "Scope is not a known scope to this authorization server"
+                      {:component component
+                       :scope scope
+                       :scopes scopes}))
+      (contains? (:scopes (get-session (:access-token-store component) access-token))
                  scope)))
 
   RequestAuthorizer
