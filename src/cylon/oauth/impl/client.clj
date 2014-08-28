@@ -87,17 +87,25 @@
                      ;; don't think we should use client_id -
                      ;; that looks to be a github thing.
 
+                     ;; 2.3.1: "Including the client credentials in the
+                     ;; request-body using the two parameters is NOT
+                     ;; RECOMMENDED and SHOULD be limited to clients
+                     ;; unable to directly utilize the HTTP Basic
+                     ;; authentication scheme (or other password-based
+                     ;; HTTP authentication schemes)."
+
                      :body (format "client_id=%s&client_secret=%s&code=%s"
-                                   (:client-id this) (:client-secret this) code)}
+                                   (:client-id this)
+                                   (:client-secret this)
+                                   code)}
                     #(if (:error %)
                        %
                        (update-in % [:body] (comp decode-stream io/reader))))]
 
               (if-let [error (:error at-resp)]
                 {:status 403
-                 :body (format "Something went wrong: status of underlying request, error was %s"
-                               error)
-                 }
+                 :body (format "Something went wrong: status of underlying request, error was %s" error)}
+
                 (if (not= (:status at-resp) 200)
                   {:status 403
                    :body (format "Something went wrong: status of underlying request %s" (:status at-resp))}
@@ -138,6 +146,7 @@
   (solicit-access-token [this req]
     (solicit-access-token this req []))
 
+  ;; RFC 6749 4.1. Authorization Code Grant (A)
   (solicit-access-token [this req scopes]
     (let [original-uri (absolute-uri req)
           ;; We need a session to store the original uri
@@ -148,6 +157,12 @@
 
       (expect-state this state)
       (cookies-response-with-session
+       ;; TODO: (A): "and a redirection URI to which the authorization server
+       ;; will send the user-agent back once access is granted (or
+       ;; denied)." -- it looks like we should pass this in the query
+       ;; params, not store in the session. But I think this is a
+       ;; misunderstanding. The redirection URI is the callback-uri, not
+       ;; the original client URI.
        (let [loc (format "%s?client_id=%s&state=%s&scope=%s"
                          (:authorize-uri this)
                          (:client-id this)
