@@ -16,7 +16,7 @@
                   :application-name s/Str
                   :homepage-uri s/Str
                   (s/optional-key :description) s/Str
-                  :callback-uri s/Str
+                  :redirection-uri s/Str
                   :required-scopes #{s/Keyword}
                   :requires-user-acceptance? s/Bool}]
   (register-client p properties))
@@ -24,7 +24,7 @@
 (s/defn lookup-client+ :- {:application-name s/Str
                            :homepage-uri s/Str
                            (s/optional-key :description) s/Str
-                           :callback-uri s/Str
+                           :redirection-uri s/Str
                            :client-id s/Str
                            :client-secret s/Str
                            :required-scopes #{s/Keyword}

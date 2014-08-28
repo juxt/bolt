@@ -48,7 +48,7 @@
                                   :application-name
                                   :homepage-uri
                                   :description
-                                  :callback-uri
+                                  :redirection-uri
                                   :required-scopes
                                   :requires-user-acceptance?
                                   ])))]
@@ -63,7 +63,10 @@
 
   WebService
   (request-handlers [this]
-    {::redirection-endpoint
+    {::redirection-endpoint ; used by the authorization server to return
+                            ; responses containing authorization
+                            ; credentials to the client via the resource
+                            ; owner user-agent.
      (->
       (fn [req]
         (let [params (:query-params req)
@@ -82,11 +85,6 @@
                      :url access-token-uri
                      :headers {"content-type" "application/x-www-form-urlencoded"}
                      ;; Exchange the code for an access token - application/x-www-form-urlencoded format
-
-                     ;; TODO: From reading OAuth2 4.1.2 I
-                     ;; don't think we should use client_id -
-                     ;; that looks to be a github thing.
-
                      ;; 2.3.1: "Including the client credentials in the
                      ;; request-body using the two parameters is NOT
                      ;; RECOMMENDED and SHOULD be limited to clients
@@ -157,12 +155,6 @@
 
       (expect-state this state)
       (cookies-response-with-session
-       ;; TODO: (A): "and a redirection URI to which the authorization server
-       ;; will send the user-agent back once access is granted (or
-       ;; denied)." -- it looks like we should pass this in the query
-       ;; params, not store in the session. But I think this is a
-       ;; misunderstanding. The redirection URI is the callback-uri, not
-       ;; the original client URI.
        (let [loc (format "%s?client_id=%s&state=%s&scope=%s"
                          (:authorize-uri this)
                          (:client-id this)
@@ -210,7 +202,7 @@
                      (s/optional-key :client-secret) s/Str
                      :application-name s/Str
                      :homepage-uri s/Str
-                     :callback-uri s/Str
+                     :redirection-uri s/Str
 
                      :required-scopes #{s/Keyword}
                      :store s/Any

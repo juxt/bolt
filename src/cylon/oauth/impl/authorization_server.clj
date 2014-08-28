@@ -57,7 +57,7 @@
                          code (str (java.util.UUID/randomUUID))
                          ;; TODO replace with :keys destructuring
                          [client-id requested-scopes] ((juxt :client-id :requested-scopes) session)
-                         {:keys [callback-uri
+                         {:keys [redirection-uri
                                  application-name
                                  description
                                  requires-user-acceptance
@@ -100,17 +100,22 @@
                                      ])}
 
                        (do
-                         (println (format "App doesn't require user acceptance, Granting scopes as required: [%s]" required-scopes))
+                         (debugf (format "App doesn't require user acceptance, granting scopes as required: [%s]" required-scopes))
                          (swap! store update-in
                                 [{:client-id client-id
                                   :code code}]
                                 assoc :granted-scopes required-scopes)
+                         ;; 4.1.2: "If the resource owner grants the
+                         ;; access request, the authorization server
+                         ;; issues an authorization code and delivers it
+                         ;; to the client by adding the following
+                         ;; parameters to the query component of the
+                         ;; redirection URI"
                          {:status 302
                           :headers {"Location"
                                     (format
-                                     ;; TODO: Replace this with the callback uri
                                      "%s?code=%s&state=%s"
-                                     callback-uri code (:state session))}})))
+                                     redirection-uri code (:state session))}})))
 
 
                    ;; you have auth-session although you are NOT authenticated but ,,, we carry on with this session"
@@ -150,7 +155,7 @@
                   granted-scopes (set/intersection permitted-scopes requested-scopes)
                   code (:code session)
                   client-id (:client-id session)
-                  {:keys [callback-uri] :as client} (lookup-client+ (:client-registry this) client-id)
+                  {:keys [redirection-uri] :as client} (lookup-client+ (:client-registry this) client-id)
                   ]
 
               (println "Granting scopes: " granted-scopes)
@@ -163,7 +168,7 @@
                :headers {"Location"
                          (format
                           "%s?code=%s&state=%s"
-                          callback-uri code (:state session))}}))))
+                          redirection-uri code (:state session))}}))))
       wrap-params)
 
      ;; RFC 6749 4.1 (D) - and this is the Token endpoint as described
