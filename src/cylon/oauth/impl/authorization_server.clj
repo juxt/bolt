@@ -22,7 +22,8 @@
    [ring.middleware.cookies :refer (cookies-request)]
    [cylon.session :refer (create-session! assoc-session! ->cookie get-session-value get-session-id get-session cookies-response-with-session get-session-from-cookie)]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]
-   [ring.util.codec :refer (url-decode)]))
+   [ring.util.codec :refer (url-decode)]
+   [ring.util.response :refer (redirect)]))
 
 (def SESSION-ID "auth-session-id")
 
@@ -111,12 +112,9 @@
                          ;; to the client by adding the following
                          ;; parameters to the query component of the
                          ;; redirection URI"
-                         {:status 302
-                          :headers {"Location"
-                                    (format
-                                     "%s?code=%s&state=%s"
-                                     redirection-uri code (:state session))}})))
-
+                         (redirect
+                          (format "%s?code=%s&state=%s"
+                                  redirection-uri code (:state session))))))
 
                    ;; you have auth-session although you are NOT authenticated but ,,, we carry on with this session"
                    (do
@@ -164,11 +162,10 @@
                        :code code}]
                      assoc :granted-scopes granted-scopes)
 
-              {:status 302
-               :headers {"Location"
-                         (format
-                          "%s?code=%s&state=%s"
-                          redirection-uri code (:state session))}}))))
+              (redirect
+               (format "%s?code=%s&state=%s"
+                       redirection-uri code (:state session)))))))
+
       wrap-params)
 
      ;; RFC 6749 4.1 (D) - and this is the Token endpoint as described
