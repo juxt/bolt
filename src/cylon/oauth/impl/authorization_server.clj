@@ -31,6 +31,11 @@
        (map (fn [x] (apply keyword (str/split x #":"))))
        set))
 
+(defn wrap-schema-validation [h]
+  (fn [req]
+    (s/with-fn-validation
+      (h req))))
+
 (defrecord AuthorizationServer [store scopes iss]
 
   WebService
@@ -50,10 +55,14 @@
 
                    (let [_ (clean-resources! (:authenticator this) req)
                          code (str (java.util.UUID/randomUUID))
+                         ;; TODO replace with :keys destructuring
                          [client-id requested-scopes] ((juxt :client-id :requested-scopes) session)
                          {:keys [callback-uri
                                  application-name
-                                 description] :as client} (lookup-client+ (:client-registry this) client-id)]
+                                 description
+                                 requires-user-acceptance
+                                 required-scopes
+                                 ] :as client} (lookup-client+ (:client-registry this) client-id)]
 
                      (assoc-session! (:session-store this) (get-session-id req SESSION-ID) :cylon/authenticated? true)
                      (assoc-session! (:session-store this) (get-session-id req SESSION-ID) :code code)
@@ -70,7 +79,12 @@
                      ;; because next time, we don't have to ask the user for their permission everytime they login
                      ;; ok, i understand
                      ;; however
-                     (if true
+
+                     (debugf (if requires-user-acceptance
+                               "App requires user acceptance"
+                               "App does not require user acceptance"))
+                     ;; Lookup the application - do we have at-least the client id?
+                     (if requires-user-acceptance
                        {:status 200
                         :body (html [:body
                                      [:form {:method :post :action (path-for (:modular.bidi/routes req) ::permit)}
@@ -85,12 +99,18 @@
                                       [:input {:type "submit"}]]
                                      ])}
 
-                       {:status 302
-                        :headers {"Location"
-                                  (format
-                                   ;; TODO: Replace this with the callback uri
-                                   "%s?code=%s&state=%s"
-                                   callback-uri code (:state session))}}))
+                       (do
+                         (println (format "App doesn't require user acceptance, Granting scopes as required: [%s]" required-scopes))
+                         (swap! store update-in
+                                [{:client-id client-id
+                                  :code code}]
+                                assoc :granted-scopes required-scopes)
+                         {:status 302
+                          :headers {"Location"
+                                    (format
+                                     ;; TODO: Replace this with the callback uri
+                                     "%s?code=%s&state=%s"
+                                     callback-uri code (:state session))}})))
 
 
                    ;; you have auth-session although you are NOT authenticated but ,,, we carry on with this session"
@@ -108,7 +128,8 @@
                    (cookies-response-with-session
                     (initiate-authentication-interaction (:authenticator this) req {})
                     SESSION-ID auth-session))))))
-         wrap-params)
+         wrap-params
+         wrap-schema-validation)
 
      ::permit
      (->

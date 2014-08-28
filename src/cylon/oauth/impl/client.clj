@@ -48,7 +48,10 @@
                                   :application-name
                                   :homepage-uri
                                   :description
-                                  :callback-uri])))]
+                                  :callback-uri
+                                  :required-scopes
+                                  :requires-user-acceptance?
+                                  ])))]
         ;; In case these are generated
         (assoc this :client-id client-id :client-secret client-secret))
 
@@ -186,7 +189,8 @@
   [& {:as opts}]
   (component/using
    (->> opts
-        (merge {:store (atom {:expected-states #{}})})
+        (merge {:store (atom {:expected-states #{}})
+                :requires-user-acceptance? true})
         (s/validate {(s/optional-key :client-id) s/Str
                      (s/optional-key :client-secret) s/Str
                      :application-name s/Str
@@ -198,6 +202,8 @@
 
                      :authorize-uri s/Str
                      :access-token-uri s/Str
+
+                     :requires-user-acceptance? s/Bool
                      })
         map->WebClient)
    [:session-store :client-registry]))
