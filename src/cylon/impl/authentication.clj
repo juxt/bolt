@@ -87,7 +87,7 @@
           session (create-session!
                    (:session-store this)
                    (merge initial-session-state
-                          {:cylon/original-uri (:uri req)}))
+                          {:cylon/original-uri (str (:uri req) (when-let [qs (:query-string req)] (when (not-empty qs) (str "?" qs ))))}))
           loc (get-location (first steps) req)]
 
       (debugf "Initiating multi-factor authentication, redirecting to first step %s" loc)
@@ -121,6 +121,7 @@
                              res
                              ;; if not GET then change the response
                              (case (:status res)
+                               ;; step-required? may be expensive, let's unchunk so as to not call it unnecessarily
                                200 (if-let [next-step (first (filter #(step-required? % req) (unchunk next-steps)))]
                                      {:status 302
                                       :headers {"Location" (get-location next-step req)}
@@ -129,6 +130,8 @@
                                      ;; No more steps, we're done. Redirect to the initiator.
                                      (do
                                        (assoc-session! (:session-store this) session-id :cylon/authenticated? true)
+                                       ;; TODO What's this original uri? Can it also include the query string?
+                                       (debugf "Successful authentication, redirecting to original uri of %s" (:cylon/original-uri session))
                                        (redirect-after-post (:cylon/original-uri session))
                                        ))
                                ;; It is the default policy of this

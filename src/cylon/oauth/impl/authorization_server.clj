@@ -32,7 +32,7 @@
     (s/with-fn-validation
       (h req))))
 
-;;{response-type "response_type" client-id "client_id"} (:query-params req)
+;;
 
 (defrecord AuthorizationServer [store scopes iss]
 
@@ -48,101 +48,109 @@
            ;; The trouble is, we lose all the query string information
            ;; if we initiate the auth interaction session.
 
-           ;; Can we do this in a go block however?
+           ;; (Can we do this in a go block however?)
 
-           (debugf "Authorizing request")
+           (debugf "OAuth2 authorization server: Authorizing request")
 
-           (let [session (get-session-from-cookie req SESSION-ID (:session-store this))]
+           (let [{response-type "response_type" client-id "client_id"} (:query-params req)]
+             (case response-type
+               "code" (let [session (get-session-from-cookie req SESSION-ID (:session-store this))]
 
-             (if-let [auth-interaction-session-result (get-result (:authenticator this) req)]
-               ;; the session can be authenticated or maybe we are
-               ;; coming from the authenticator workflow
-               (do
-                 (debugf "auth session result is %s" auth-interaction-session-result)
-                 (if (:cylon/authenticated? auth-interaction-session-result)
-                   ;; "you are authenticated now!"
+                        (if-let [auth-interaction-session-result (get-result (:authenticator this) req)]
+                          ;; the session can be authenticated or maybe we are
+                          ;; coming from the authenticator workflow
+                          (do
+                            (debugf "auth session result is %s" auth-interaction-session-result)
+                            (if (:cylon/authenticated? auth-interaction-session-result)
+                              ;; "you are authenticated now!"
 
-                   (let [_ (clean-resources! (:authenticator this) req)
-                         code (str (java.util.UUID/randomUUID))
-                         {:keys [client-id requested-scopes]}
-                         session
-                         {:keys [redirection-uri
-                                 application-name
-                                 description
-                                 requires-user-acceptance
-                                 required-scopes] :as client}
-                         (lookup-client+ (:client-registry this) client-id)]
+                              (let [_ (clean-resources! (:authenticator this) req)
+                                    code (str (java.util.UUID/randomUUID))
+                                    {:keys [client-id requested-scopes]}
+                                    session
+                                    {:keys [redirection-uri
+                                            application-name
+                                            description
+                                            requires-user-acceptance
+                                            required-scopes] :as client}
+                                    (lookup-client+ (:client-registry this) client-id)]
 
-                     (assoc-session! (:session-store this) (get-session-id req SESSION-ID) :cylon/authenticated? true)
-                     (assoc-session! (:session-store this) (get-session-id req SESSION-ID) :code code)
+                                (assoc-session! (:session-store this) (get-session-id req SESSION-ID) :cylon/authenticated? true)
+                                (assoc-session! (:session-store this) (get-session-id req SESSION-ID) :code code)
 
-                     ;; Remember the code for the possible exchange - TODO expire these
-                     (swap! store assoc
-                            {:client-id client-id
-                             :code code}
-                            {:created (java.util.Date.)
-                             :cylon/identity (:cylon/identity auth-interaction-session-result)})
+                                ;; Remember the code for the possible exchange - TODO expire these
+                                (swap! store assoc
+                                       {:client-id client-id
+                                        :code code}
+                                       {:created (java.util.Date.)
+                                        :cylon/identity (:cylon/identity auth-interaction-session-result)})
 
-                     ;; When a user permits a client, the client's scopes that they have accepted, are stored in the user preferences database
-                     ;; why?
-                     ;; because next time, we don't have to ask the user for their permission everytime they login
-                     ;; ok, i understand
-                     ;; however
+                                ;; When a user permits a client, the client's scopes that they have accepted, are stored in the user preferences database
+                                ;; why?
+                                ;; because next time, we don't have to ask the user for their permission everytime they login
+                                ;; ok, i understand
+                                ;; however
 
-                     (debugf (if requires-user-acceptance
-                               "App requires user acceptance"
-                               "App does not require user acceptance"))
-                     ;; Lookup the application - do we have at-least the client id?
-                     (if requires-user-acceptance
-                       {:status 200
-                        :body (html [:body
-                                     [:form {:method :post :action (path-for (:modular.bidi/routes req) ::permit)}
-                                      [:h1 "Authorize application?"]
-                                      [:p (format "An application (%s) is requesting to use your credentials" application-name)]
-                                      [:h2 "Application description"]
-                                      [:p description]
-                                      [:h2 "Scope"]
-                                      (for [s requested-scopes]
-                                        (let [s (apply str (interpose "/" (remove nil? ((juxt namespace name) s))))]
-                                          [:p [:label {:for s} s] [:input {:type "checkbox" :id s :name s :value s :checked true}]]))
-                                      [:input {:type "submit"}]]
-                                     ])}
+                                (debugf (if requires-user-acceptance
+                                          "App requires user acceptance"
+                                          "App does not require user acceptance"))
+                                ;; Lookup the application - do we have at-least the client id?
+                                (if requires-user-acceptance
+                                  {:status 200
+                                   :body (html [:body
+                                                [:form {:method :post :action (path-for (:modular.bidi/routes req) ::permit)}
+                                                 [:h1 "Authorize application?"]
+                                                 [:p (format "An application (%s) is requesting to use your credentials" application-name)]
+                                                 [:h2 "Application description"]
+                                                 [:p description]
+                                                 [:h2 "Scope"]
+                                                 (for [s requested-scopes]
+                                                   (let [s (apply str (interpose "/" (remove nil? ((juxt namespace name) s))))]
+                                                     [:p [:label {:for s} s] [:input {:type "checkbox" :id s :name s :value s :checked true}]]))
+                                                 [:input {:type "submit"}]]
+                                                ])}
 
-                       (do
-                         (debugf (format "App doesn't require user acceptance, granting scopes as required: [%s]" required-scopes))
-                         (swap! store update-in
-                                [{:client-id client-id
-                                  :code code}]
-                                assoc :granted-scopes required-scopes)
-                         ;; 4.1.2: "If the resource owner grants the
-                         ;; access request, the authorization server
-                         ;; issues an authorization code and delivers it
-                         ;; to the client by adding the following
-                         ;; parameters to the query component of the
-                         ;; redirection URI"
-                         (redirect
-                          (str redirection-uri
-                               (as-query-string
-                                {"code" code
-                                 "state"  (:state session)}))))))
+                                  (do
+                                    (debugf (format "App doesn't require user acceptance, granting scopes as required: [%s]" required-scopes))
+                                    (swap! store update-in
+                                           [{:client-id client-id
+                                             :code code}]
+                                           assoc :granted-scopes required-scopes)
+                                    ;; 4.1.2: "If the resource owner grants the
+                                    ;; access request, the authorization server
+                                    ;; issues an authorization code and delivers it
+                                    ;; to the client by adding the following
+                                    ;; parameters to the query component of the
+                                    ;; redirection URI"
+                                    (redirect
+                                     (str redirection-uri
+                                          (as-query-string
+                                           {"code" code
+                                            "state"  (:state session)}))))))
 
-                   ;; you have auth-session although you are NOT authenticated but ,,, we carry on with this session"
-                   (do
-                     (debugf "Session exists, but no evidence in it of authentication. Initiating authentication interaction using %s" (:authenticator this))
-                     (initiate-authentication-interaction (:authenticator this) req {}))))
+                              ;; you have auth-session although you are NOT authenticated but ,,, we carry on with this session"
+                              (do
+                                (debugf "Session exists, but no evidence in it of authentication. Initiating authentication interaction using %s" (:authenticator this))
+                                (initiate-authentication-interaction (:authenticator this) req {}))))
 
-               ;; You are not authenticated, so let's authenticate first.
-               (do
-                 (debugf "Not authenticated, must authenticate first with %s" (:authenticator this))
-                 (let [auth-session
-                       (create-session!
-                        (:session-store this)
-                        {:client-id (-> req :query-params (get "client_id"))
-                         :requested-scopes (decode-scope (-> req :query-params (get "scope")))
-                         :state (-> req :query-params (get "state"))})]
-                   (cookies-response-with-session
-                    (initiate-authentication-interaction (:authenticator this) req {})
-                    SESSION-ID auth-session))))))
+                          ;; You are not authenticated, so let's authenticate first.
+                          (do
+                            (debugf "Not authenticated, must authenticate first with %s" (:authenticator this))
+                            (let [auth-session
+                                  (create-session!
+                                   (:session-store this)
+                                   {:client-id (-> req :query-params (get "client_id"))
+                                    :requested-scopes (decode-scope (-> req :query-params (get "scope")))
+                                    :state (-> req :query-params (get "state"))})]
+                              (cookies-response-with-session
+                               (initiate-authentication-interaction (:authenticator this) req {})
+                               SESSION-ID auth-session)))))
+
+               ;; Unknown response_type
+               {:status 400
+                :body (format "Bad response_type parameter: '%s'" response-type)}
+               )
+             ))
          wrap-params
          wrap-schema-validation)
 
