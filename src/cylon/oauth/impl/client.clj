@@ -10,7 +10,7 @@
    [cylon.authorization :refer (RequestAuthorizer)]
    [cylon.session :refer (->cookie get-session assoc-session! create-session! cookies-response-with-session get-session-value get-session-id purge-session!)]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]
-   [ring.util.codec :refer (url-encode)]
+   [ring.util.response :refer (redirect)]
    [ring.middleware.params :refer (wrap-params)]
    [org.httpkit.client :refer (request) :rename {request http-request}]
    [cheshire.core :refer (encode decode-stream)]
@@ -18,6 +18,7 @@
    [clojure.java.io :as io]
    [clj-jwt.core :refer (to-str jwt sign str->jwt verify encoded-claims)]
    [cylon.util :refer (as-set absolute-uri)]
+   [cylon.oauth.encoding :refer (encode-scope as-query-string decode-scope)]
    ))
 
 ;; -------- Convenience - TODO promote somewhere
@@ -65,10 +66,10 @@
 
   WebService
   (request-handlers [this]
-    {::redirection-endpoint ; used by the authorization server to return
-                                        ; responses containing authorization
-                                        ; credentials to the client via the resource
-                                        ; owner user-agent.
+    {::redirection-endpoint
+     ;; Used by the authorization server to return responses containing
+     ;; authorization credentials to the client via the resource owner
+     ;; user-agent.
      (->
       (fn [req]
         (let [params (:query-params req)
@@ -77,10 +78,12 @@
           (if (not (expecting-state? this state))
             {:status 400 :body "Unexpected user state"}
 
-            ;; otherwise
             (let [code (get params "code")
 
                   ;; Exchange the code for an access token
+                  ;; This is a blocking operation. We elect to wait for
+                  ;; the response. In a future version we might go fully
+                  ;; async.
                   at-resp
                   @(http-request
                     {:method :post
@@ -126,18 +129,24 @@
                   (let [app-session-id (get-session-id req APP-SESSION-ID)
                         original-uri (get-session-value req APP-SESSION-ID (:session-store this) :original-uri)
                         access-token (get (:body at-resp) "access_token")
+
+                        ;; TODO If scope not there it is the same as
+                        ;; requested (see 5.1)
+                        scope (decode-scope (get (:body at-resp) "scope"))
+
                         id-token (-> (get (:body at-resp) "id_token") str->jwt)]
                     (if (verify id-token "secret")
                       (do
                         (infof "Verified id_token: %s" id-token)
                         (assert original-uri (str "Failed to get original-uri from session " app-session-id))
                         (assoc-session! (:session-store this) app-session-id :access-token access-token)
+
+                        (infof "Scope is %s" scope)
+                        (assoc-session! (:session-store this) app-session-id :scope scope)
+
                         (infof "Claims are %s" (:claims id-token))
                         (assoc-session! (:session-store this) app-session-id :open-id (-> id-token :claims))
-                        {:status 302
-                         :headers {"Location" original-uri}})
-
-                      ))))))))
+                        (redirect original-uri))))))))))
       wrap-params)
 
      ::logout (fn [req]
@@ -169,21 +178,16 @@
 
       (expect-state this state)
       (cookies-response-with-session
-       (let [loc (format "%s?client_id=%s&state=%s&scope=%s"
-                         (:authorize-uri this)
-                         (:client-id this)
-                         state
-                         (url-encode
-                          (apply str
-                                 (interpose " "
-                                            (map
-                                             #(apply str
-                                                     (interpose ":" (remove nil? ((juxt namespace name) %))))
-                                             ;; Although, perhaps it should be up to the caller to add :openid if :profile and :email are required.
-                                             (union (as-set scopes) #{:openid :profile :email}))))))]
+       (let [loc (str
+                  (:authorize-uri this)
+                  (as-query-string {"client_id" (:client-id this)
+                                    "state" state
+                                    "scope" (encode-scope
+                                             (union (as-set scopes)
+                                                    #{:openid :profile :email}))}))]
          (debugf "Redirecting to %s" loc)
-         {:status 302
-          :headers {"Location" loc}})
+         (redirect loc))
+
        APP-SESSION-ID
        session)))
 

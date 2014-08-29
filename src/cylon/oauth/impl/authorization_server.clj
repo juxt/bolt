@@ -22,15 +22,10 @@
    [ring.middleware.cookies :refer (cookies-request)]
    [cylon.session :refer (create-session! assoc-session! ->cookie get-session-value get-session-id get-session cookies-response-with-session get-session-from-cookie)]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]
-   [ring.util.codec :refer (url-decode)]
-   [ring.util.response :refer (redirect)]))
+   [ring.util.response :refer (redirect)]
+   [cylon.oauth.encoding :refer (decode-scope encode-scope)]))
 
 (def SESSION-ID "auth-session-id")
-
-(defn decode-scopes [s]
-  (->> (str/split (url-decode s) #"\s")
-       (map (fn [x] (apply keyword (str/split x #":"))))
-       set))
 
 (defn wrap-schema-validation [h]
   (fn [req]
@@ -56,14 +51,14 @@
 
                    (let [_ (clean-resources! (:authenticator this) req)
                          code (str (java.util.UUID/randomUUID))
-                         ;; TODO replace with :keys destructuring
-                         [client-id requested-scopes] ((juxt :client-id :requested-scopes) session)
+                         {:keys [client-id requested-scopes]}
+                         session
                          {:keys [redirection-uri
                                  application-name
                                  description
                                  requires-user-acceptance
-                                 required-scopes
-                                 ] :as client} (lookup-client+ (:client-registry this) client-id)]
+                                 required-scopes] :as client}
+                         (lookup-client+ (:client-registry this) client-id)]
 
                      (assoc-session! (:session-store this) (get-session-id req SESSION-ID) :cylon/authenticated? true)
                      (assoc-session! (:session-store this) (get-session-id req SESSION-ID) :code code)
@@ -124,10 +119,12 @@
                ;; You are not authenticated, so let's authenticate first.
                (do
                  (debugf "Not authenticated, must authenticate first with %s" (:authenticator this))
-                 (let [auth-session (create-session! (:session-store this)
-                                                     {:client-id (-> req :query-params (get "client_id"))
-                                                      :requested-scopes (decode-scopes (-> req :query-params (get "scope")))
-                                                      :state (-> req :query-params (get "state"))})]
+                 (let [auth-session
+                       (create-session!
+                        (:session-store this)
+                        {:client-id (-> req :query-params (get "client_id"))
+                         :requested-scopes (decode-scope (-> req :query-params (get "scope")))
+                         :state (-> req :query-params (get "state"))})]
                    (cookies-response-with-session
                     (initiate-authentication-interaction (:authenticator this) req {})
                     SESSION-ID auth-session))))))
@@ -146,9 +143,9 @@
             (let [permitted-scopes (set (map
                                          (fn [x] (apply keyword (str/split x #"/")))
                                          (keys (:form-params req))))
-                  _ (println "permitted-scopes is" permitted-scopes)
+                  _ (debugf "permitted-scopes is %s" permitted-scopes)
                   requested-scopes (:requested-scopes session)
-                  _ (println "requested-scopes is" requested-scopes)
+                  _ (debugf "requested-scopes is %s" requested-scopes)
 
                   granted-scopes (set/intersection permitted-scopes requested-scopes)
                   code (:code session)
@@ -156,7 +153,7 @@
                   {:keys [redirection-uri] :as client} (lookup-client+ (:client-registry this) client-id)
                   ]
 
-              (println "Granting scopes: " granted-scopes)
+              (debugf "Granting scopes: %s" granted-scopes)
               (swap! store update-in
                      [{:client-id client-id
                        :code code}]
@@ -202,17 +199,34 @@
 
                    (infof "Claim is %s" claim)
 
+                   ;; 5.1 Successful Response
+
+                   ;; " The authorization server issues an access token
+                   ;; and optional refresh token, and constructs the
+                   ;; response by adding the following parameters to the
+                   ;; entity-body of the HTTP response with a 200 (OK)
+                   ;; status code:"
+
+                   (debugf "About to OK, granted scopes is %s (type is %s)" granted-scopes (type granted-scopes))
+
                    {:status 200
                     :body (encode {"access_token" access-token
-                                   "scope" granted-scopes
                                    "token_type" "Bearer"
                                    "expires_in" 3600
                                    ;; TODO Refresh token (optional)
-                                   ;; ...
+
+                                   ;; 5.1 scope OPTIONAL only if
+                                   ;; identical to scope requested by
+                                   ;; client, otherwise required. In
+                                   ;; this way, we pass back the scope
+                                   ;; to the client.
+                                   "scope" (encode-scope granted-scopes)
+
                                    ;; OpenID Connect ID Token
                                    "id_token" (-> claim
                                                   jwt
                                                   (sign :HS256 "secret") to-str)
+
                                    })})
                  {:status 400
                   :body "Invalid request - unknown code"}))))
