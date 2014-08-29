@@ -162,7 +162,7 @@
   AccessTokenGrantee
   (get-access-token [this req]
     (when-let [app-session-id (-> req cookies-request :cookies (get APP-SESSION-ID) :value)]
-      (-> (get-session (:session-store this) app-session-id) :access-token)))
+      (-> (get-session (:session-store this) app-session-id))))
 
   (solicit-access-token [this req]
     (solicit-access-token this req []))
@@ -190,6 +190,8 @@
 
        APP-SESSION-ID
        session)))
+
+  (expired? [_ req access-token] false)
 
   UserIdentity
   (get-claims [this req]
