@@ -1,6 +1,6 @@
 (ns cylon.oauth.client
-  (:require [clojure.tools.logging :refer :all])
-)
+  (:require
+   [clojure.tools.logging :refer :all]))
 
 ;; I don't think this is a wonderful name but until we can think of
 ;; something better :)
