@@ -1,6 +1,7 @@
 (ns cylon.oauth.client
   (:require
-   [clojure.tools.logging :refer :all]))
+   [clojure.tools.logging :refer :all]
+   [schema.core :as s]))
 
 ;; I don't think this is a wonderful name but until we can think of
 ;; something better :)
@@ -22,6 +23,14 @@
     in a new request being made with an access token, if possible."
     ))
 
+(s/defn get-access-token+ :- (s/maybe {:access-token s/Str
+                                       :scope #{s/Keyword}
+                                       (s/optional-key :original-uri) s/Str
+                                       s/Keyword s/Any})
+  [p :- (s/protocol AccessTokenGrantee)
+   req :- s/Any]
+  (get-access-token p req))
+
 (defprotocol UserIdentity
   (get-claims [_ req]
     "Get the claims contained in the id-token returned as part of an
@@ -38,19 +47,19 @@
   identity and access-token are still retrieved."
   [h client & [role]]
   (fn [req]
-    (let [{:keys [access-token scope]} (get-access-token client req)
+    (let [{:keys [access-token scope] :as at} (s/with-fn-validation (get-access-token+ client req))
           identity (-> (get-claims client req) :sub)]
       (cond
        (nil? access-token)
        (do
          (debugf "No access token, so soliciting one from client %s" client)
          (solicit-access-token client req))
-       ;; The thinking here is that any refresh token that was returned
-       ;; to the client will still be held by the client and can be
-       ;; used to refresh the access-token
        (expired? client req access-token)
        (do
          (debugf "access token has expired, seeking to refresh it")
+         ;; The thinking here is that any refresh token that was returned
+         ;; to the client will still be held by the client and can be
+         ;; used to refresh the access-token
          (refresh-access-token client req))
 
        (and role (not (contains? scope role)))
