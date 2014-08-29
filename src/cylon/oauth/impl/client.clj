@@ -177,14 +177,18 @@
           state (str (java.util.UUID/randomUUID))]
 
       (expect-state this state)
+      ;; 4.1.1.  Authorization Request
       (cookies-response-with-session
        (let [loc (str
                   (:authorize-uri this)
-                  (as-query-string {"client_id" (:client-id this)
-                                    "state" state
+                  (as-query-string {"response_type" "code" ; REQUIRED
+                                    "client_id" (:client-id this) ; REQUIRED
+                                    ; "redirect_uri" nil ; OPTIONAL (TODO)
                                     "scope" (encode-scope
-                                             (union (as-set scopes)
-                                                    #{:openid :profile :email}))}))]
+                                             (union (as-set scopes) ; OPTIONAL
+                                                    #{:openid :profile :email}))
+                                    "state" state ; RECOMMENDED to prevent CSRF
+                                    }))]
          (debugf "Redirecting to %s" loc)
          (redirect loc))
 
