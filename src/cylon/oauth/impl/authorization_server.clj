@@ -23,7 +23,7 @@
    [cylon.session :refer (create-session! assoc-session! ->cookie get-session-value get-session-id get-session cookies-response-with-session get-session-from-cookie)]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]
    [ring.util.response :refer (redirect)]
-   [cylon.oauth.encoding :refer (decode-scope encode-scope)]))
+   [cylon.oauth.encoding :refer (decode-scope encode-scope as-query-string)]))
 
 (def SESSION-ID "auth-session-id")
 
@@ -32,18 +32,31 @@
     (s/with-fn-validation
       (h req))))
 
+;;{response-type "response_type" client-id "client_id"} (:query-params req)
+
 (defrecord AuthorizationServer [store scopes iss]
 
   WebService
   (request-handlers [this]
     {::authorization-endpoint
      (-> (fn [req]
-           ;; TODO Establish whether the user-agent is already authenticated.
-           ;; If not, create a session with client-id, scope and state and redirect to the login form
+           ;; Establish whether the user-agent is already authenticated.
+           ;; If not, create a session with client-id, scope and state
+           ;; and redirect to the login form
+
+           ;; TODO We should validate the incoming response_type
+           ;; The trouble is, we lose all the query string information
+           ;; if we initiate the auth interaction session.
+
+           ;; Can we do this in a go block however?
+
            (debugf "Authorizing request")
+
            (let [session (get-session-from-cookie req SESSION-ID (:session-store this))]
+
              (if-let [auth-interaction-session-result (get-result (:authenticator this) req)]
-               ;; the session can be authenticated or maybe we are coming from the authenticator workflow
+               ;; the session can be authenticated or maybe we are
+               ;; coming from the authenticator workflow
                (do
                  (debugf "auth session result is %s" auth-interaction-session-result)
                  (if (:cylon/authenticated? auth-interaction-session-result)
@@ -108,8 +121,10 @@
                          ;; parameters to the query component of the
                          ;; redirection URI"
                          (redirect
-                          (format "%s?code=%s&state=%s"
-                                  redirection-uri code (:state session))))))
+                          (str redirection-uri
+                               (as-query-string
+                                {"code" code
+                                 "state"  (:state session)}))))))
 
                    ;; you have auth-session although you are NOT authenticated but ,,, we carry on with this session"
                    (do
