@@ -23,32 +23,35 @@
     in a new request being made with an access token, if possible."
     ))
 
-(s/defn get-access-token+ :- (s/maybe {:access-token s/Str
-                                       :scope #{s/Keyword}
-                                       (s/optional-key :original-uri) s/Str
-                                       s/Keyword s/Any})
+(s/defn ^{:doc "May returns nil if no access token"}
+  get-access-token+ :- {(s/optional-key :access-token) s/Str
+                        (s/optional-key :scope) #{s/Keyword}
+                        (s/optional-key :original-uri) s/Str
+                        s/Keyword s/Any}
   [p :- (s/protocol AccessTokenGrantee)
    req :- s/Any]
-  (get-access-token p req))
+  (or (get-access-token p req) {}))
 
 (defprotocol UserIdentity
   (get-claims [_ req]
     "Get the claims contained in the id-token returned as part of an
     OpenID/Connect exchange."))
 
+(defn get-identity [client req]
+  (-> (get-claims client req) :sub))
 
 ;; Ring middleware to restrict a handler to a given role.
 ;; The algo in here should fit many usages. However, other functions
 ;; could be provided to implement different policies.
-(defn wrap-restricted
+(defn wrap-require-authorization
   "Restrict a handler to a role. :identity and :access-token are added
   to the request. If a role is specified, also check that the role
   exists in the scope of the client. If role isn't specified, the
   identity and access-token are still retrieved."
   [h client & [role]]
   (fn [req]
-    (let [{:keys [access-token scope] :as at} (s/with-fn-validation (get-access-token+ client req))
-          identity (-> (get-claims client req) :sub)]
+    (let [{:keys [access-token scope]}
+          (s/with-fn-validation (get-access-token+ client req))]
       (cond
        (nil? access-token)
        (do
@@ -67,4 +70,6 @@
        {:status 401 :body "Sorry, you just don't have enough privileges to access this page"}
 
        :otherwise
-       (h (assoc req :identity identity :access-token access-token))))))
+       (h (assoc req
+            :identity (get-identity client req)
+            :access-token access-token))))))
