@@ -34,7 +34,7 @@
 
 (def APP-SESSION-ID "app-session-id")
 
-(defrecord WebClient [store access-token-uri]
+(defrecord WebClient [store access-token-uri location-after-logout]
   component/Lifecycle
   (start [this]
     ;; If there's an :client-registry dependency, use it to
@@ -151,9 +151,10 @@
 
      ::logout (fn [req]
                 (purge-session! (:session-store this) (get-session-id req APP-SESSION-ID))
-                {:status 200
-                 :body "You have logged out"
-                 })})
+                (if location-after-logout
+                  (redirect location-after-logout)
+                  {:status 200
+                   :body "You have logged out"}))})
 
   (routes [this] ["/" {"oauth/grant" {:get ::redirection-endpoint}
                        "logout" {:get ::logout}}])
@@ -235,6 +236,7 @@
                      :access-token-uri s/Str
 
                      :requires-user-acceptance? s/Bool
+                     (s/optional-key :location-after-logout) s/Str
                      })
         map->WebClient)
    [:session-store :client-registry]))
