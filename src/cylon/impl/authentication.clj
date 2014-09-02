@@ -180,8 +180,8 @@
                 (:renderer this) req
                 {:form {:method :post
                         :action (path-for req ::POST-login-form)
-                        :fields [{:name "user" :label "User"}
-                                 {:name "password" :label "Password" :password? true}]}})}
+                        :fields [{:name "user" :label "User" :placeholder "userid"}
+                                 {:name "password" :label "Password" :password? true :placeholder "password"}]}})}
         ;; Conditional response post-processing
         (cond->
          ;; In the absence of a session...
