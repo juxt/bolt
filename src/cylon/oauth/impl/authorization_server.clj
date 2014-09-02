@@ -278,7 +278,8 @@
   RequestAuthorizer
   (request-authorized? [component request scope]
     (when-let [auth-header (get (:headers request) "authorization")]
-      (let [access-token (second (re-matches #"\Qtoken\E\s+(.*)" auth-header))]
+      ;; Only match 'Bearer' tokens for now
+      (let [access-token (second (re-matches #"\QBearer\E\s+(.*)" auth-header))]
         (authorized? component access-token scope)))))
 
 (defn new-authorization-server [& {:as opts}]
