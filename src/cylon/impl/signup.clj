@@ -6,6 +6,7 @@
    [hiccup.core :refer (html)]
    [ring.middleware.params :refer (wrap-params)]
    [ring.middleware.cookies :refer (cookies-response wrap-cookies)]
+   [cylon.session :refer (create-session!)]
    [cylon.user :refer (add-user!)]
    [cylon.totp :as totp]
    [cylon.totp :refer (OneTimePasswordStore set-totp-secret)]
@@ -43,7 +44,14 @@
 ;; One simple component that does signup, reset password, login form. etc.
 ;; Mostly you want something simple that works which you can tweak later - you can provide your own implementation based on the reference implementation
 
-(defrecord SignupWithTotp [appname renderer fields session-store user-domain]
+(defprotocol Emailer
+  (send-email [_ email body]))
+
+(defn make-verification-link [code]
+  (throw (ex-info "TODO" {:code code}))
+  )
+
+(defrecord SignupWithTotp [appname renderer fields session-store user-domain emailer verification-code-store]
   WebService
   (request-handlers [this]
     {::signup-form
@@ -61,43 +69,40 @@
         (debugf "Processing signup")
         (let [identity (get (:form-params req) "user")
               password (get (:form-params req) "password")
+              email (get (:form-params req) "email")
               totp-secret (when (satisfies? OneTimePasswordStore user-domain)
-                            (totp/secret-key))]
+                            (totp/secret-key))
+              verification-session (create-session! verification-code-store {:email email})
+              ;; TODO Possibly we should encrypt and decrypt the verification-code (symmetric)
+              verification-code (:cylon.session/key verification-session)]
 
           ;; Add the user
           (add-user! user-domain identity password
                      {:name (get (:form-params req) "name")
-                      :email (get (:form-params req) "email")})
+                      :email email})
 
           ;; Add on the totp-secret
           (when (satisfies? OneTimePasswordStore user-domain)
             (set-totp-secret user-domain identity totp-secret))
+
+          ;; TODO: Send the email to the user now!
+          (when emailer
+            (assert (satisfies? Emailer emailer))
+            (send-email emailer email
+                        (format "Thanks for signing up with %s. Please click on this link to verify your account: %s"
+                                appname (make-verification-link verification-code))))
 
           ;; Create a session that contains the secret-key
           (let [session (create-session! session-store
                                          {:name (get (:form-params req) "name") ; duplicate code!
                                           :totp-secret totp-secret})
                 loc (path-for req ::welcome-new-user)]
-            (debugf "Redirecting to %s" loc)
+            (debugf "Redirecting to welcome page at %s" loc)
             (cookies-response-with-session
              {:status 302
               :headers {"Location" loc}}
              MFA-AUTH-COOKIE
-             session)
-            )
-
-          ;; We redirect to a page that shows the QR code
-
-          ;; but GETs should be idempotent - they shouldn't DO anything
-          ;; so I thinjk we should use the POST
-
-          ;; one sec....
-
-
-          ;; Redirect to a welcome page
-
-          ))
-
+             session))))
       wrap-params)
 
      ::welcome-new-user
@@ -129,12 +134,26 @@
             ;; the user can continue, just can't do certain things such
             ;; as create topics (or anything we might need to know the
             ;; user's email address for).
-            ])}))})
+
+            ;; I think the TOTP functionality could be made optional,
+            ;; but yes, we probably could do a similar component without
+            ;; it. Strike the balance between unreasonable conditional logic and
+            ;; code duplication.
+            ])}))
+
+     ::verify-user-email
+     ;; TODO
+     (fn [req]
+       {:status 200
+        :body "Thanks"}
+       )
+     })
 
   (routes [this]
     ["/" {"signup" {:get ::signup-form
                     :post ::process-signup}
-          "welcome" {:get ::welcome-new-user}}])
+          "welcome" {:get ::welcome-new-user}
+          "verify-email" {:get ::verify-user-email}}])
 
   (uri-context [this] ""))
 
@@ -153,4 +172,4 @@
                                (s/optional-key :placeholder) s/Str
                                (s/optional-key :password?) s/Bool}]})
         map->SignupWithTotp)
-   [:user-domain :session-store :renderer]))
+   [:user-domain :session-store :renderer :verification-code-store]))
