@@ -84,6 +84,10 @@
   AuthenticationInteraction
   (initiate-authentication-interaction [this req initial-session-state]
     (let [steps ((apply juxt steps) this)
+          ;; (Note: It's possible that the user has already got a
+          ;; session, because they might have just signed up, etc. In
+          ;; which case, we should retrieve the session and treat it has
+          ;; the initial-session-state)
           session (create-session!
                    (:session-store this)
                    (merge initial-session-state
@@ -97,7 +101,7 @@
        MFA-AUTH-COOKIE
        session)))
   (get-result [this req]
-    (get-session-from-cookie req "mfa-auth-session-id" (:session-store this)))
+    (get-session-from-cookie req MFA-AUTH-COOKIE (:session-store this)))
   (clean-resources! [this req]
     (purge-session! (:session-store this) (get-session-id req "mfa-auth-session-id")))
 
@@ -160,6 +164,7 @@
 (defprotocol LoginFormRenderer
   (render-login-form [_ req model]))
 
+
 ;; This is a simple login form that is meant to be part of a
 ;; AuthenticationInteraction which indicates policies, such as allowing
 ;; the user to retry credentials, how many times, etc.
@@ -168,7 +173,7 @@
 ;; 200 (OK) or 403 (Login failure).
 ;;
 ;; TODO Obviously we should also deal with errors, such as 500
-(defrecord LoginForm [cookie-id]
+(defrecord LoginForm [cookie-id fields]
   WebService
   (request-handlers [this]
     {::GET-login-form
@@ -180,8 +185,7 @@
                 (:renderer this) req
                 {:form {:method :post
                         :action (path-for req ::POST-login-form)
-                        :fields [{:name "user" :label "User" :placeholder "userid"}
-                                 {:name "password" :label "Password" :password? true :placeholder "password"}]}})}
+                        :fields fields}})}
         ;; Conditional response post-processing
         (cond->
          ;; In the absence of a session...
@@ -224,8 +228,14 @@
 
 (defn new-authentication-login-form [& {:as opts}]
   (->> opts
-       (merge {:cookie-id MFA-AUTH-COOKIE})
-       (s/validate {(s/required-key :cookie-id) s/Str})
+       (merge {:cookie-id MFA-AUTH-COOKIE
+               :fields [{:name "user" :label "User" :placeholder "userid"}
+                        {:name "password" :label "Password" :password? true :placeholder "password"}]})
+       (s/validate {:cookie-id s/Str
+                    :fields [{:name s/Str
+                              :label s/Str
+                              (s/optional-key :placeholder) s/Str
+                              (s/optional-key :password?) s/Bool}]})
        map->LoginForm
        (<- (component/using [:user-domain :session-store :renderer]))))
 

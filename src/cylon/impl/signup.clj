@@ -1,16 +1,24 @@
 (ns cylon.impl.signup
   (:require
+   [clojure.tools.logging :refer :all]
    [com.stuartsierra.component :as component]
    [modular.bidi :refer (WebService path-for)]
    [hiccup.core :refer (html)]
    [ring.middleware.params :refer (wrap-params)]
+   [ring.middleware.cookies :refer (cookies-response wrap-cookies)]
    [cylon.user :refer (add-user!)]
    [cylon.totp :as totp]
    [cylon.totp :refer (OneTimePasswordStore set-totp-secret)]
+   [cylon.impl.authentication :refer (MFA-AUTH-COOKIE)]
+   [cylon.session :refer (get-session-from-cookie create-session! cookies-response-with-session)]
+   [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)]
    [schema.core :as s ]))
 
 (defprotocol SignupFormRenderer
   (render-signup-form [_ req model]))
+
+(defprotocol WelcomeRenderer
+  (render-welcome [_ req model]))
 
 #_(html
  [:div
@@ -32,7 +40,10 @@
 
    ]])
 
-(defrecord Signup [appname renderer]
+;; One simple component that does signup, reset password, login form. etc.
+;; Mostly you want something simple that works which you can tweak later - you can provide your own implementation based on the reference implementation
+
+(defrecord SignupWithTotp [appname renderer fields session-store user-domain]
   WebService
   (request-handlers [this]
     {::signup-form
@@ -42,52 +53,104 @@
                renderer req
                {:form {:method :post
                        :action (path-for req ::process-signup)
-                       :fields [{:name "user" :label "User" :placeholder "userid"}
-                                {:name "password" :label "Password" :password? true :placeholder "password"}
-                                {:name "name" :label "Name" :placeholder "name"}
-                                {:name "email" :label "Email" :placeholder "email"}]}})})
+                       :fields fields}})})
 
      ::process-signup
      (->
       (fn [req]
+        (debugf "Processing signup")
         (let [identity (get (:form-params req) "user")
               password (get (:form-params req) "password")
-              totp-secret (when (satisfies? OneTimePasswordStore (:user-domain this))
+              totp-secret (when (satisfies? OneTimePasswordStore user-domain)
                             (totp/secret-key))]
-          (add-user! (:user-domain this) identity password
+
+          ;; Add the user
+          (add-user! user-domain identity password
                      {:name (get (:form-params req) "name")
                       :email (get (:form-params req) "email")})
 
-          (when (satisfies? OneTimePasswordStore (:user-domain this))
-            (set-totp-secret (:user-domain this) identity totp-secret)
+          ;; Add on the totp-secret
+          (when (satisfies? OneTimePasswordStore user-domain)
+            (set-totp-secret user-domain identity totp-secret))
+
+          ;; Create a session that contains the secret-key
+          (let [session (create-session! session-store
+                                         {:name (get (:form-params req) "name") ; duplicate code!
+                                          :totp-secret totp-secret})
+                loc (path-for req ::welcome-new-user)]
+            (debugf "Redirecting to %s" loc)
+            (cookies-response-with-session
+             {:status 302
+              :headers {"Location" loc}}
+             MFA-AUTH-COOKIE
+             session)
             )
 
-          {:status 200 :body
-           (html
-            [:div
-             [:p (format "Thank you for signing up %s!"  (get (:form-params req) "name"))]
-             (when (satisfies? OneTimePasswordStore (:user-domain this))
-               [:div
-                [:p "Please scan this image into your 2-factor authentication application"]
-                [:img {:src (totp/qr-code (format "%s@%s" identity appname) totp-secret) }]
-                [:p "Alternatively, type in this secret into your authenticator application: " [:code totp-secret]]
-                ])
-             ]
-            )}))
+          ;; We redirect to a page that shows the QR code
 
-      wrap-params)})
+          ;; but GETs should be idempotent - they shouldn't DO anything
+          ;; so I thinjk we should use the POST
+
+          ;; one sec....
+
+
+          ;; Redirect to a welcome page
+
+          ))
+
+      wrap-params)
+
+     ::welcome-new-user
+     (fn [req]
+       ;; TODO remember our (optional) email validation step
+       (let [session (get-session-from-cookie req MFA-AUTH-COOKIE session-store)]
+         {:status 200
+          :body
+          (html
+           [:div
+            [:p (format "Thank you for signing up %s!"  (:name session))]
+            (when (satisfies? OneTimePasswordStore user-domain)
+              (let [totp-secret (:totp-secret session)]
+                [:div
+                 [:p "Please scan this image into your 2-factor authentication application"]
+                 [:img {:src (totp/qr-code (format "%s@%s" identity appname) totp-secret) }]
+                 [:p "Alternatively, type in this secret into your authenticator application: " [:code totp-secret]]
+
+                 ]))
+            [:p "Please check your email and click on the verification link"]
+            ;; We can keep this person 'logged in' now, as soon as their
+            ;; email is verified, we can request an access code for
+            ;; them. A user can be already authenticated with the
+            ;; authorization service when the client application
+            ;; requests an access code to use on that user's behalf.
+
+            ;; One of the conditions for granting scopes to a client app
+            ;; could be that the user's email has been verified. If not,
+            ;; the user can continue, just can't do certain things such
+            ;; as create topics (or anything we might need to know the
+            ;; user's email address for).
+            ])}))})
 
   (routes [this]
-    ["/signup" {:get ::signup-form
-                :post ::process-signup}])
+    ["/" {"signup" {:get ::signup-form
+                    :post ::process-signup}
+          "welcome" {:get ::welcome-new-user}}])
 
   (uri-context [this] ""))
 
-
-(defn new-signup [& {:as opts}]
+(defn new-signup-with-totp [& {:as opts}]
   (component/using
    (->> opts
-        (merge {:appname "cylon"})
-        (s/validate {:appname s/Str})
-        map->Signup)
-   [:user-domain :renderer]))
+        (merge {:appname "cylon"
+                :fields [{:name "user" :label "User" :placeholder "userid"}
+                         {:name "password" :label "Password" :password? true :placeholder "password"}
+                         {:name "name" :label "Name" :placeholder "name"}
+                         {:name "email" :label "Email" :placeholder "email"}]
+                })
+        (s/validate {:appname s/Str
+                     :fields [{:name s/Str
+                               :label s/Str
+                               (s/optional-key :placeholder) s/Str
+                               (s/optional-key :password?) s/Bool}]})
+        map->SignupWithTotp)
+   [:user-domain :session-store :renderer]))
