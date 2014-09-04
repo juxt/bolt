@@ -1,5 +1,7 @@
 ;; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
+;; DEPRECATED - replaced with cylon.impl.authentication.clj
+
 (ns cylon.impl.login-form
   (:require
    [clojure.tools.logging :refer :all]

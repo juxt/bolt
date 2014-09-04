@@ -1,7 +1,7 @@
 (ns cylon.impl.signup
   (:require
    [com.stuartsierra.component :as component]
-   [modular.bidi :refer (WebService)]
+   [modular.bidi :refer (WebService path-for)]
    [hiccup.core :refer (html)]
    [ring.middleware.params :refer (wrap-params)]
    [cylon.user :refer (add-user!)]
@@ -9,31 +9,43 @@
    [cylon.totp :refer (OneTimePasswordStore set-totp-secret)]
    [schema.core :as s ]))
 
-(defrecord Signup [appname]
+(defprotocol SignupFormRenderer
+  (render-signup-form [_ req model]))
+
+#_(html
+ [:div
+  [:h1 "Signup"]
+  [:form {:method :post}
+   [:p
+    [:label {:for "user"} "User"]
+    [:input {:name "user" :id "user" :type "text"}]]
+   [:p
+    [:label {:for "name"} "Name"]
+    [:input {:name "name" :id "name" :type "text"}]]
+   [:p
+    [:label {:for "email"} "Email"]
+    [:input {:name "email" :id "email" :type "text"}]]
+   [:p
+    [:label {:for "password"} "Password"]
+    [:input {:name "password" :id "password" :type "password"}]]
+   [:p [:input {:type "submit"}]]
+
+   ]])
+
+(defrecord Signup [appname renderer]
   WebService
   (request-handlers [this]
     {::signup-form
      (fn [req]
        {:status 200
-        :body (html
-               [:div
-                [:h1 "Signup"]
-                [:form {:method :post}
-                 [:p
-                  [:label {:for "user"} "User"]
-                  [:input {:name "user" :id "user" :type "text"}]]
-                 [:p
-                  [:label {:for "name"} "Name"]
-                  [:input {:name "name" :id "name" :type "text"}]]
-                 [:p
-                  [:label {:for "email"} "Email"]
-                  [:input {:name "email" :id "email" :type "text"}]]
-                 [:p
-                  [:label {:for "password"} "Password"]
-                  [:input {:name "password" :id "password" :type "password"}]]
-                 [:p [:input {:type "submit"}]]
-
-                 ]])})
+        :body (render-signup-form
+               renderer req
+               {:form {:method :post
+                       :action (path-for req ::process-signup)
+                       :fields [{:name "user" :label "User" :placeholder "userid"}
+                                {:name "password" :label "Password" :password? true :placeholder "password"}
+                                {:name "name" :label "Name" :placeholder "name"}
+                                {:name "email" :label "Email" :placeholder "email"}]}})})
 
      ::process-signup
      (->
@@ -78,4 +90,4 @@
         (merge {:appname "cylon"})
         (s/validate {:appname s/Str})
         map->Signup)
-   [:user-domain]))
+   [:user-domain :renderer]))
