@@ -147,6 +147,9 @@
        {:status 200
         :body "Thanks"}
        )
+
+     ::reset-password
+     (fn [req] {:status 200 :body "Thanks"})
      })
 
   (routes [this]
