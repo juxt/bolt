@@ -6,8 +6,8 @@
    [hiccup.core :refer (html)]
    [ring.middleware.params :refer (wrap-params)]
    [ring.middleware.cookies :refer (cookies-response wrap-cookies)]
-   [cylon.session :refer (create-session!)]
-   [cylon.user :refer (add-user!)]
+   [cylon.session :refer (create-session! get-session)]
+   [cylon.user :refer (add-user! user-email-verified!)]
    [cylon.totp :as totp]
    [cylon.totp :refer (OneTimePasswordStore set-totp-secret)]
    [cylon.impl.authentication :refer (MFA-AUTH-COOKIE)]
@@ -21,25 +21,6 @@
 (defprotocol WelcomeRenderer
   (render-welcome [_ req model]))
 
-#_(html
- [:div
-  [:h1 "Signup"]
-  [:form {:method :post}
-   [:p
-    [:label {:for "user"} "User"]
-    [:input {:name "user" :id "user" :type "text"}]]
-   [:p
-    [:label {:for "name"} "Name"]
-    [:input {:name "name" :id "name" :type "text"}]]
-   [:p
-    [:label {:for "email"} "Email"]
-    [:input {:name "email" :id "email" :type "text"}]]
-   [:p
-    [:label {:for "password"} "Password"]
-    [:input {:name "password" :id "password" :type "password"}]]
-   [:p [:input {:type "submit"}]]
-
-   ]])
 
 ;; One simple component that does signup, reset password, login form. etc.
 ;; Mostly you want something simple that works which you can tweak later - you can provide your own implementation based on the reference implementation
@@ -47,11 +28,12 @@
 (defprotocol Emailer
   (send-email [_ email body]))
 
-(defn make-verification-link [code]
-  (throw (ex-info "TODO" {:code code}))
-  )
+(defn make-verification-link [req code email]
+  (let [values  ((juxt (comp name :scheme) :server-name :server-port) req)
+        verify-user-email-path (path-for req ::verify-user-email)]
+    (apply format "%s://%s:%d%s?code=%s&email=%s" (conj values verify-user-email-path code email))))
 
-(defrecord SignupWithTotp [appname renderer fields session-store user-domain emailer verification-code-store]
+(defrecord SignupWithTotp [appname renderer fields session-store user-domain  verification-code-store emailer]
   WebService
   (request-handlers [this]
     {::signup-form
@@ -70,15 +52,16 @@
         (let [identity (get (:form-params req) "user")
               password (get (:form-params req) "password")
               email (get (:form-params req) "email")
+              name (get (:form-params req) "name")
               totp-secret (when (satisfies? OneTimePasswordStore user-domain)
                             (totp/secret-key))
-              verification-session (create-session! verification-code-store {:email email})
+              verification-session (create-session! verification-code-store {:email email :name name})
               ;; TODO Possibly we should encrypt and decrypt the verification-code (symmetric)
               verification-code (:cylon.session/key verification-session)]
 
           ;; Add the user
           (add-user! user-domain identity password
-                     {:name (get (:form-params req) "name")
+                     {:name name
                       :email email})
 
           ;; Add on the totp-secret
@@ -87,14 +70,13 @@
 
           ;; TODO: Send the email to the user now!
           (when emailer
-            (assert (satisfies? Emailer emailer))
             (send-email emailer email
                         (format "Thanks for signing up with %s. Please click on this link to verify your account: %s"
-                                appname (make-verification-link verification-code))))
+                                appname (make-verification-link req verification-code email))))
 
           ;; Create a session that contains the secret-key
           (let [session (create-session! session-store
-                                         {:name (get (:form-params req) "name") ; duplicate code!
+                                         {:name name ; duplicate code!
                                           :totp-secret totp-secret})
                 loc (path-for req ::welcome-new-user)]
             (debugf "Redirecting to welcome page at %s" loc)
@@ -142,11 +124,21 @@
             ])}))
 
      ::verify-user-email
-     ;; TODO
-     (fn [req]
-       {:status 200
-        :body "Thanks"}
-       )
+     (-> (fn [req]
+           (let [body (if-let [[email code] [ (get (:params req) "email") (get (:params req) "code")]]
+                        (if-let [session (get-session (:verification-code-store this) code)]
+                          (if (= email (:email session))
+                            (do (user-email-verified! (:user-domain this) (:name session))
+                                (format "Thanks, Your email '%s'  has been verified correctly " email ))
+                          (format "Sorry but your session associated with this email '%s' seems to not be logic" email))
+                          (format "Sorry but your session associated with this email '%s' seems to not be valid" email))
+
+                        (format "Sorry but there were problems trying to retrieve your data related with your mail '%s' " (get (:params req) "email"))
+                        )]
+             {:status 200
+              :body body}
+             ))
+         wrap-params)
 
      ::reset-password
      (fn [req] {:status 200 :body "Thanks"})
@@ -173,6 +165,7 @@
                      :fields [{:name s/Str
                                :label s/Str
                                (s/optional-key :placeholder) s/Str
-                               (s/optional-key :password?) s/Bool}]})
+                               (s/optional-key :password?) s/Bool}]
+                     (s/optional-key :emailer) (s/protocol Emailer)})
         map->SignupWithTotp)
-   [:user-domain :session-store :renderer :verification-code-store]))
+   [:user-domain :session-store :renderer :verification-code-store ]))
