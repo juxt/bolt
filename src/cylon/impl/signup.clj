@@ -21,6 +21,12 @@
 (defprotocol WelcomeRenderer
   (render-welcome [_ req model]))
 
+(defprotocol EmailVerifiedRenderer
+  (render-email-verified [_ req model]))
+
+(defprotocol ResetPasswordRenderer
+  (render-reset-password [_ req model]))
+
 
 ;; One simple component that does signup, reset password, login form. etc.
 ;; Mostly you want something simple that works which you can tweak later - you can provide your own implementation based on the reference implementation
@@ -33,7 +39,7 @@
         verify-user-email-path (path-for req ::verify-user-email)]
     (apply format "%s://%s:%d%s?code=%s&email=%s" (conj values verify-user-email-path code email))))
 
-(defrecord SignupWithTotp [appname renderer fields session-store user-domain  verification-code-store emailer]
+(defrecord SignupWithTotp [appname renderer fields session-store user-domain  verification-code-store emailer fields-reset]
   WebService
   (request-handlers [this]
     {::signup-form
@@ -136,19 +142,35 @@
                         (format "Sorry but there were problems trying to retrieve your data related with your mail '%s' " (get (:params req) "email"))
                         )]
              {:status 200
-              :body body}
-             ))
+              :body (render-email-verified
+                renderer req
+                {:message body})}))
          wrap-params)
 
-     ::reset-password
-     (fn [req] {:status 200 :body "Thanks"})
+     ::reset-password-form
+     (fn [req]
+       {:status 200
+        :body (render-reset-password
+               renderer req
+               {:form {:method :post
+                       :action (path-for req ::process-reset-password)
+                       :fields fields-reset}})})
+
+     ::process-reset-password
+     (-> (fn [req] {:status 200 :body (format "Thanks for reseting pw. Old pw: %s. New pw: %s"
+                                             (get (:form-params req) "old_pw")
+                                             (get (:form-params req) "new_pw"))})
+         wrap-params)
      })
 
   (routes [this]
     ["/" {"signup" {:get ::signup-form
                     :post ::process-signup}
           "welcome" {:get ::welcome-new-user}
-          "verify-email" {:get ::verify-user-email}}])
+          "verify-email" {:get ::verify-user-email}
+          "reset-password" {:get ::reset-password-form
+                            :post ::process-reset-password}
+          }])
 
   (uri-context [this] ""))
 
@@ -160,12 +182,20 @@
                          {:name "password" :label "Password" :password? true :placeholder "password"}
                          {:name "name" :label "Name" :placeholder "name"}
                          {:name "email" :label "Email" :placeholder "email"}]
+                :fields-reset [
+                               {:name "old_pw" :label "Old Password" :password? true :placeholder "old password"}
+                               {:name "new_pw" :label "New Password" :password? true :placeholder "new password"}
+                               {:name "new_pw_bis" :label "Repeat New Password" :password? true :placeholder "repeat new password"}]
                 })
         (s/validate {:appname s/Str
                      :fields [{:name s/Str
                                :label s/Str
                                (s/optional-key :placeholder) s/Str
                                (s/optional-key :password?) s/Bool}]
+                     :fields-reset [{:name s/Str
+                                     :label s/Str
+                                     (s/optional-key :placeholder) s/Str
+                                     (s/optional-key :password?) s/Bool}]
                      (s/optional-key :emailer) (s/protocol Emailer)})
         map->SignupWithTotp)
    [:user-domain :session-store :renderer :verification-code-store ]))
