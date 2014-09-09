@@ -301,7 +301,8 @@
     (path-for req ::GET-totp-form)
     )
   (step-required? [this req]
-    (let [identity (get-session-value req cookie-id (:session-store this) :cylon/identity)]
+    false
+    #_(let [identity (get-session-value req cookie-id (:session-store this) :cylon/identity)]
       (not (nil? (get-totp-secret (:user-domain this) identity))))))
 
 (defn new-authentication-totp-form [& {:as opts}]
