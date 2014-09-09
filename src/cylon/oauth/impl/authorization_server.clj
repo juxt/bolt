@@ -32,98 +32,101 @@
     (s/with-fn-validation
       (h req))))
 
-(defn authorize-client [component req store]
-  (let [session (get-session-from-cookie req SESSION-ID (:session-store component))]
 
-    (if-let [auth-interaction-session-result (get-result (:authenticator component) req)]
-      ;; the session can be authenticated or maybe we are
-      ;; coming from the authenticator workflow
-      (do
-        (debugf "auth session result is %s" auth-interaction-session-result)
-        (if (:cylon/authenticated? auth-interaction-session-result)
-          ;; "you are authenticated now!"
 
-          (let [_ (clean-resources! (:authenticator component) req)
-                code (str (java.util.UUID/randomUUID))
-                {:keys [client-id requested-scopes]}
-                session
-                {:keys [redirection-uri
-                        application-name
-                        description
-                        requires-user-acceptance
-                        required-scopes] :as client}
-                (lookup-client+ (:client-registry component) client-id)]
+(defn authorize-client [session component req store]
 
-            (assoc-session! (:session-store component) (get-session-id req SESSION-ID) :cylon/authenticated? true)
-            (assoc-session! (:session-store component) (get-session-id req SESSION-ID) :code code)
 
-            ;; Remember the code for the possible exchange - TODO expire these
-            (swap! store assoc
-                   {:client-id client-id
-                    :code code}
-                   {:created (java.util.Date.)
-                    :cylon/identity (:cylon/identity auth-interaction-session-result)})
+  (if-let [auth-interaction-session-result (get-result (:authenticator component) req)]
+    ;; the session can be authenticated or maybe we are
+    ;; coming from the authenticator workflow
+    (do
+      (debugf "auth session result is %s" auth-interaction-session-result)
+      (if (:cylon/authenticated? auth-interaction-session-result)
+        ;; "you are authenticated now!"
 
-            ;; When a user permits a client, the client's scopes that they have accepted, are stored in the user preferences database
-            ;; why?
-            ;; because next time, we don't have to ask the user for their permission everytime they login
-            ;; ok, i understand
-            ;; however
+        (let [_ (clean-resources! (:authenticator component) req)
+              code (str (java.util.UUID/randomUUID))
+              {:keys [client-id requested-scopes]}
+              session
+              {:keys [redirection-uri
+                      application-name
+                      description
+                      requires-user-acceptance
+                      required-scopes] :as client}
+              (lookup-client+ (:client-registry component) client-id)]
 
-            (debugf (if requires-user-acceptance
-                      "App requires user acceptance"
-                      "App does not require user acceptance"))
-            ;; Lookup the application - do we have at-least the client id?
-            (if requires-user-acceptance
-              {:status 200
-               :body (html [:body
-                            [:form {:method :post :action (path-for (:modular.bidi/routes req) ::permit)}
-                             [:h1 "Authorize application?"]
-                             [:p (format "An application (%s) is requesting to use your credentials" application-name)]
-                             [:h2 "Application description"]
-                             [:p description]
-                             [:h2 "Scope"]
-                             (for [s requested-scopes]
-                               (let [s (apply str (interpose "/" (remove nil? ((juxt namespace name) s))))]
-                                 [:p [:label {:for s} s] [:input {:type "checkbox" :id s :name s :value s :checked true}]]))
-                             [:input {:type "submit"}]]
-                            ])}
+          (assoc-session! (:session-store component) (get-session-id req SESSION-ID) :cylon/authenticated? true)
+          (assoc-session! (:session-store component) (get-session-id req SESSION-ID) :code code)
 
-              (do
-                (debugf (format "App doesn't require user acceptance, granting scopes as required: [%s]" required-scopes))
-                (swap! store update-in
-                       [{:client-id client-id
-                         :code code}]
-                       assoc :granted-scopes required-scopes)
-                ;; 4.1.2: "If the resource owner grants the
-                ;; access request, the authorization server
-                ;; issues an authorization code and delivers it
-                ;; to the client by adding the following
-                ;; parameters to the query component of the
-                ;; redirection URI"
-                (redirect
-                 (str redirection-uri
-                      (as-query-string
-                       {"code" code
-                        "state"  (:state session)}))))))
+          ;; Remember the code for the possible exchange - TODO expire these
+          (swap! store assoc
+                 {:client-id client-id
+                  :code code}
+                 {:created (java.util.Date.)
+                  :cylon/identity (:cylon/identity auth-interaction-session-result)})
 
-          ;; you have auth-session although you are NOT authenticated but ,,, we carry on with this session"
-          (do
-            (debugf "Session exists, but no evidence in it of authentication. Initiating authentication interaction using %s" (:authenticator component))
-            (initiate-authentication-interaction (:authenticator component) req {}))))
+          ;; When a user permits a client, the client's scopes that they have accepted, are stored in the user preferences database
+          ;; why?
+          ;; because next time, we don't have to ask the user for their permission everytime they login
+          ;; ok, i understand
+          ;; however
 
-      ;; You are not authenticated, so let's authenticate first.
-      (do
-        (debugf "Not authenticated, must authenticate first with %s" (:authenticator component))
-        (let [auth-session
-              (create-session!
-               (:session-store component)
-               {:client-id (-> req :query-params (get "client_id"))
-                :requested-scopes (decode-scope (-> req :query-params (get "scope")))
-                :state (-> req :query-params (get "state"))})]
-          (cookies-response-with-session
-           (initiate-authentication-interaction (:authenticator component) req {})
-           SESSION-ID auth-session))))))
+          (debugf (if requires-user-acceptance
+                    "App requires user acceptance"
+                    "App does not require user acceptance"))
+          ;; Lookup the application - do we have at-least the client id?
+          (if requires-user-acceptance
+            {:status 200
+             :body (html [:body
+                          [:form {:method :post :action (path-for (:modular.bidi/routes req) ::permit)}
+                           [:h1 "Authorize application?"]
+                           [:p (format "An application (%s) is requesting to use your credentials" application-name)]
+                           [:h2 "Application description"]
+                           [:p description]
+                           [:h2 "Scope"]
+                           (for [s requested-scopes]
+                             (let [s (apply str (interpose "/" (remove nil? ((juxt namespace name) s))))]
+                               [:p [:label {:for s} s] [:input {:type "checkbox" :id s :name s :value s :checked true}]]))
+                           [:input {:type "submit"}]]
+                          ])}
+
+            (do
+              (debugf (format "App doesn't require user acceptance, granting scopes as required: [%s]" required-scopes))
+              (swap! store update-in
+                     [{:client-id client-id
+                       :code code}]
+                     assoc :granted-scopes required-scopes)
+              ;; 4.1.2: "If the resource owner grants the
+              ;; access request, the authorization server
+              ;; issues an authorization code and delivers it
+              ;; to the client by adding the following
+              ;; parameters to the query component of the
+              ;; redirection URI"
+              (redirect
+               (str redirection-uri
+                    (as-query-string
+                     {"code" code
+                      "state"  (:state session)}))))))
+
+        ;; you have auth-session although you are NOT authenticated but ,,, we carry on with this session"
+        (do
+          (debugf "Session exists, but no evidence in it of authentication. Initiating authentication interaction using %s" (:authenticator component))
+          (initiate-authentication-interaction (:authenticator component) req {}))))
+
+    ;; You are not authenticated, so let's authenticate first.
+    (do
+      (debugf "Not authenticated, must authenticate first with %s" (:authenticator component))
+      (let [auth-session
+            (create-session!
+             (:session-store component)
+             {:client-id (-> req :query-params (get "client_id"))
+              :requested-scopes (decode-scope (-> req :query-params (get "scope")))
+              :state (-> req :query-params (get "state"))
+              :response-type  "code"})]
+        (cookies-response-with-session
+         (initiate-authentication-interaction (:authenticator component) req {})
+         SESSION-ID auth-session)))))
 
 
 (defrecord AuthorizationServer [store scopes iss]
@@ -143,9 +146,14 @@
 
            (debugf "OAuth2 authorization server: Authorizing request")
 
-           (let [{response-type "response_type" client-id "client_id"} (:query-params req)]
-             (case response-type
-               "code" (authorize-client component req store)
+           (let [session (get-session-from-cookie req SESSION-ID (:session-store component))
+                 {response-type "response_type" client-id "client_id"} (:query-params req)
+                 r-t (or response-type (:response-type session))
+                 ]
+             (case r-t
+               "code" (authorize-client
+                       session
+                       component req store)
 
                ;; Unknown response_type
                {:status 400

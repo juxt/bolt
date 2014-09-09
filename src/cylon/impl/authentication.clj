@@ -84,22 +84,27 @@
   AuthenticationInteraction
   (initiate-authentication-interaction [this req initial-session-state]
     (let [steps ((apply juxt steps) this)
+          loc (get-location (first steps) req)
+          ;; I think it's DONE
           ;; (Note: It's possible that the user has already got a
           ;; session, because they might have just signed up, etc. In
           ;; which case, we should retrieve the session and treat it has
           ;; the initial-session-state)
-          session (create-session!
-                   (:session-store this)
-                   (merge initial-session-state
-                          {:cylon/original-uri (str (:uri req) (when-let [qs (:query-string req)] (when (not-empty qs) (str "?" qs ))))}))
-          loc (get-location (first steps) req)]
+          session (or (get-session-from-cookie req MFA-AUTH-COOKIE (:session-store this))
+                      (create-session!
+                       (:session-store this)
+                       (merge initial-session-state
+                              {:cylon/original-uri (str (:uri req)
+                                                        (when-let [qs (:query-string req)] (when (not-empty qs) (str "?" qs ))))})))]
 
       (debugf "Initiating multi-factor authentication, redirecting to first step %s" loc)
       (cookies-response-with-session
        {:status 302
         :headers {"Location" loc}}
        MFA-AUTH-COOKIE
-       session)))
+       session)
+      )
+    )
   (get-result [this req]
     (get-session-from-cookie req MFA-AUTH-COOKIE (:session-store this)))
   (clean-resources! [this req]
