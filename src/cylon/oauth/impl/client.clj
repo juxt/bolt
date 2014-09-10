@@ -187,7 +187,7 @@
                                     ; "redirect_uri" nil ; OPTIONAL (TODO)
                                     "scope" (encode-scope
                                              (union (as-set scopes) ; OPTIONAL
-                                                    #{:openid :profile :email}))
+                                                    (:required-scopes this)))
                                     "state" state ; RECOMMENDED to prevent CSRF
                                     }))]
          (debugf "Redirecting to %s" loc)

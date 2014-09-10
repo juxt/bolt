@@ -35,8 +35,6 @@
 
 
 (defn authorize-client [session component req store]
-
-
   (if-let [auth-interaction-session-result (get-result (:authenticator component) req)]
     ;; the session can be authenticated or maybe we are
     ;; coming from the authenticator workflow
@@ -52,7 +50,7 @@
               {:keys [redirection-uri
                       application-name
                       description
-                      requires-user-acceptance
+                      requires-user-acceptance?
                       required-scopes] :as client}
               (lookup-client+ (:client-registry component) client-id)]
 
@@ -72,11 +70,11 @@
           ;; ok, i understand
           ;; however
 
-          (debugf (if requires-user-acceptance
+          (debugf (if requires-user-acceptance?
                     "App requires user acceptance"
                     "App does not require user acceptance"))
           ;; Lookup the application - do we have at-least the client id?
-          (if requires-user-acceptance
+          (if requires-user-acceptance?
             {:status 200
              :body (html [:body
                           [:form {:method :post :action (path-for (:modular.bidi/routes req) ::permit)}
