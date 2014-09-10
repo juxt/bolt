@@ -162,7 +162,7 @@
 
   AccessTokenGrantee
   (get-access-token [this req]
-    (when-let [app-session-id (-> req cookies-request :cookies (get APP-SESSION-ID) :value)]
+    (when-let [app-session-id (get-session-id req APP-SESSION-ID)]
       (-> (get-session (:session-store this) app-session-id))))
 
   (solicit-access-token [this req]
@@ -200,7 +200,7 @@
 
   UserIdentity
   (get-claims [this req]
-    (let [app-session-id (-> req cookies-request :cookies (get APP-SESSION-ID) :value)]
+    (let [app-session-id (get-session-id req APP-SESSION-ID)]
       (-> (get-session (:session-store this) app-session-id) :open-id)))
 
   ;; TODO Deprecate this!
