@@ -20,7 +20,7 @@
    [clj-jwt.core :refer (to-str sign jwt)]
    [ring.middleware.params :refer (wrap-params)]
    [ring.middleware.cookies :refer (cookies-request)]
-   [cylon.session :refer (create-session! assoc-session! ->cookie get-session-value get-session-id get-session cookies-response-with-session get-session-from-cookie)]
+   [cylon.session :refer (create-session! assoc-session! ->cookie get-session-value get-session-id get-session cookies-response-with-session get-session-from-cookie assoc-data! create-and-attach! get-data exists?)]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]
    [ring.util.response :refer (redirect)]
    [cylon.oauth.encoding :refer (decode-scope encode-scope as-query-string)]))
@@ -32,8 +32,17 @@
     (s/with-fn-validation
       (h req))))
 
+(defn init-authentication [component req]
+  (do
+      (debugf "Not authenticated, must authenticate first with %s" (:authenticator component))
+      (create-and-attach! (:browser-session component) req
+                          (initiate-authentication-interaction (:authenticator component) req {})
+                          {:client-id (-> req :query-params (get "client_id"))
+                           :requested-scopes (decode-scope (-> req :query-params (get "scope")))
+                           :state (-> req :query-params (get "state"))
+                           :response-type  "code"})))
 
-
+;; TODO: review why we need to call "init-authentication" twice in this code (this fn and ::authorization-endpoint handler)
 (defn authorize-client [session component req store]
   (if-let [auth-interaction-session-result (get-result (:authenticator component) req)]
     ;; the session can be authenticated or maybe we are
@@ -53,9 +62,8 @@
                       requires-user-acceptance?
                       required-scopes] :as client}
               (lookup-client+ (:client-registry component) client-id)]
+          (assoc-data!  (:browser-session component) req {:cylon/authenticated? true :code code})
 
-          (assoc-session! (:session-store component) (get-session-id req SESSION-ID) :cylon/authenticated? true)
-          (assoc-session! (:session-store component) (get-session-id req SESSION-ID) :code code)
 
           ;; Remember the code for the possible exchange - TODO expire these
           (swap! store assoc
@@ -113,18 +121,9 @@
           (initiate-authentication-interaction (:authenticator component) req {}))))
 
     ;; You are not authenticated, so let's authenticate first.
-    (do
-      (debugf "Not authenticated, must authenticate first with %s" (:authenticator component))
-      (let [auth-session
-            (create-session!
-             (:session-store component)
-             {:client-id (-> req :query-params (get "client_id"))
-              :requested-scopes (decode-scope (-> req :query-params (get "scope")))
-              :state (-> req :query-params (get "state"))
-              :response-type  "code"})]
-        (cookies-response-with-session
-         (initiate-authentication-interaction (:authenticator component) req {})
-         SESSION-ID auth-session)))))
+    (init-authentication component req)
+    ))
+
 
 
 (defrecord AuthorizationServer [store scopes iss]
@@ -143,21 +142,21 @@
            ;; (Can we do this in a go block however?)
 
            (debugf "OAuth2 authorization server: Authorizing request")
+           (if-not (exists? (:browser-session component) req)
+            (init-authentication component req)
+            (let [{response-type "response_type" client-id "client_id"} (:query-params req)
+                  r-t (or response-type (get-data (:browser-session component) req :response-type))
+                  ]
+              (case r-t
+                "code" (authorize-client
+                        (get-data (:browser-session component) req)
+                        component req store)
 
-           (let [session (get-session-from-cookie req SESSION-ID (:session-store component))
-                 {response-type "response_type" client-id "client_id"} (:query-params req)
-                 r-t (or response-type (:response-type session))
-                 ]
-             (case r-t
-               "code" (authorize-client
-                       session
-                       component req store)
-
-               ;; Unknown response_type
-               {:status 400
-                :body (format "Bad response_type parameter: '%s'" response-type)}
-               )
-             ))
+                ;; Unknown response_type
+                {:status 400
+                 :body (format "Bad response_type parameter: '%s'" response-type)}
+                )
+              )))
          wrap-params
          wrap-schema-validation)
 
@@ -168,7 +167,7 @@
       ;; TODO I'm worred about the fact we must ensure that the session
       ;; represents a true authenticated user
       (fn [req]
-        (let [session (get-session-from-cookie req SESSION-ID (:session-store component))]
+        (let [session (get-data (:browser-session component) req)]
           (if (:cylon/authenticated? session)
             (let [permitted-scopes (set (map
                                          (fn [x] (apply keyword (str/split x #"/")))
@@ -299,7 +298,7 @@
        map->AuthorizationServer
        (<- (component/using
             [:access-token-store
-             :session-store
+             :browser-session
              :user-domain
              :client-registry
              :authenticator]))))
