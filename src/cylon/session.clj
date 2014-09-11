@@ -2,9 +2,22 @@
 
 (ns cylon.session
   (:require
-   [com.stuartsierra.component :as component]
    [ring.middleware.cookies :refer (cookies-request cookies-response)]
    [schema.core :as s]))
+
+
+(defprotocol BrowserSession
+  (exists? [_ req])
+  (create-and-attach!
+    [_ req resp]
+    [_ req resp data])
+  (remove! [_ req])
+  (get-data
+    [_ req]
+    [_ req key])
+  (assoc-data! [_ req data])
+  (dissoc-data! [_ req key]))
+
 
 (defprotocol SessionStore
   (create-session! [_ m])

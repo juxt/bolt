@@ -4,13 +4,14 @@
   (:require
    [clojure.tools.logging :refer :all]
    [com.stuartsierra.component :as component]
-   [cylon.session :refer (SessionStore get-session)]
+   [cylon.session :refer (SessionStore get-session BrowserSession get-data exists? create-and-attach! create-session! cookies-response-with-session purge-session! assoc-session!)]
    [cylon.impl.session-atom-state :as state]
    [cylon.authentication :refer (Authenticator authenticate)]
-   [cylon.session :refer (renew-session! purge-session!)]
+   [cylon.session :refer (renew-session! purge-session! get-session-id)]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request)]
    [modular.ring :refer (WebRequestMiddleware WebRequestBinding)]
-   [schema.core :as s]))
+   [schema.core :as s]
+   [plumbing.core :refer (<-)]))
 
 (defrecord CookieAuthenticator []
   Authenticator
@@ -92,3 +93,46 @@
        (s/validate {:expiry-seconds s/Int
                     :id s/Keyword})
        map->AtomBackedSessionStore))
+
+
+
+
+(defrecord UserBrowserSession [cookie-id]
+  BrowserSession
+  (exists? [_ req]
+    ((complement nil?) (get-session-id req cookie-id)))
+  (create-and-attach! [this req resp]
+    (create-and-attach! this req resp {})
+    )
+  (create-and-attach! [this req response data]
+    (->>
+     (create-session! (:session-store this) data)
+     (cookies-response-with-session response cookie-id)))
+
+  (remove! [this req]
+
+    (purge-session! (:session-store this) (get-session-id req cookie-id))
+    )
+  (get-data [this req]
+    (assert (exists? this req) (format "No session available for: %s" cookie-id))
+    (->> (get-session-id req cookie-id)
+         (get-session (:session-store this))))
+  (get-data [this req key]
+    (get (get-data this req) key))
+
+  (assoc-data! [this req data]
+    (let [session-id (get-session-id req cookie-id)]
+      (doseq [[k v] data]
+        (assoc-session! (:session-store this) session-id k v))
+      ))
+  (dissoc-data! [this req key]))
+
+(defn new-browser-session [& {:as opts}]
+  (->> opts
+       (merge {:expiry-seconds (* 4 60 60)})
+       (s/validate
+        {:cookie-id s/Str
+         :expiry-seconds s/Int})
+       map->UserBrowserSession
+       (<- (component/using
+            [:session-store]))))
