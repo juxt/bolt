@@ -4,7 +4,7 @@
   (:require
    [clojure.tools.logging :refer :all]
    [com.stuartsierra.component :as component]
-   [cylon.session :refer (SessionStore get-session BrowserSession get-data exists? create-and-attach! create-session! cookies-response-with-session purge-session! assoc-session!)]
+   [cylon.session :refer (SessionStore get-session BrowserSession get-data exists? create-and-attach! create-session! cookies-response-with-session purge-session! assoc-session! Store)]
    [cylon.impl.session-atom-state :as state]
    [cylon.authentication :refer (Authenticator authenticate)]
    [cylon.session :refer (renew-session! purge-session! get-session-id)]
@@ -94,6 +94,43 @@
                     :id s/Keyword})
        map->AtomBackedSessionStore))
 
+
+
+(defrecord AtomBackedStore [expiry-seconds]
+  component/Lifecycle
+  (start [this] (assoc this :rows (atom {})))
+  (stop [this] (dissoc this :rows))
+
+  Store
+  (create-store! [this m]
+    (let [key (str (java.util.UUID/randomUUID))]
+      (let [res (merge m {:cylon.session/key key})]
+        (swap! (:rows this) assoc key res)
+        res)))
+
+  (get-store [this id]
+    (get @(:rows this) id))
+
+
+  (purge-store! [this id]
+    (swap! (:rows this) dissoc id)
+    nil)
+
+  (assoc-store! [this id k v]
+    (assert id)
+    (swap! (:rows this)
+           (fn [rows] (update-in rows [id]
+                                (fn [row]
+                                  (assert row)
+                                  (assoc row k v))))))
+
+  (dissoc-store! [this id k]
+    (swap! (:rows this) update-in [id] dissoc k)))
+
+(defn new-atom-backed-store [& {:as opts}]
+  (->> opts
+       (s/validate {:id s/Keyword})
+       map->AtomBackedStore))
 
 
 

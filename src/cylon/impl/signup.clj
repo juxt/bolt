@@ -10,11 +10,9 @@
    [cylon.user :refer (add-user! user-email-verified!)]
    [cylon.totp :as totp]
    [cylon.totp :refer (OneTimePasswordStore set-totp-secret)]
-   [cylon.session :refer (get-session-from-cookie create-session! cookies-response-with-session)]
+   [cylon.session :refer (get-session-from-cookie create-session! cookies-response-with-session create-store! get-store purge-store! assoc-store! dissoc-store! create-and-attach! get-data)]
    [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)]
    [schema.core :as s ]))
-
-(def MFA-AUTH-COOKIE  "mfa-auth-session-id")
 
 (defprotocol SignupFormRenderer
   (render-signup-form [_ req model]))
@@ -40,7 +38,7 @@
         verify-user-email-path (path-for req ::verify-user-email)]
     (apply format "%s://%s:%d%s?code=%s&email=%s" (conj values verify-user-email-path code email))))
 
-(defrecord SignupWithTotp [appname renderer fields session-store user-domain  verification-code-store emailer fields-reset]
+(defrecord SignupWithTotp [appname renderer fields  user-domain  verification-code-store emailer fields-reset]
   WebService
   (request-handlers [this]
     {::signup-form
@@ -62,7 +60,7 @@
               name (get (:form-params req) "name")
               totp-secret (when (satisfies? OneTimePasswordStore user-domain)
                             (totp/secret-key))
-              verification-session (create-session! verification-code-store {:email email :name name})
+              verification-session (create-store! verification-code-store {:email email :name name})
               ;; TODO Possibly we should encrypt and decrypt the verification-code (symmetric)
               verification-code (:cylon.session/key verification-session)]
 
@@ -82,22 +80,19 @@
                                 appname (make-verification-link req verification-code email))))
 
           ;; Create a session that contains the secret-key
-          (let [session (create-session! session-store
-                                         {:name name ; duplicate code!
-                                          :totp-secret totp-secret})
-                loc (path-for req ::welcome-new-user)]
+          (let [loc (path-for req ::welcome-new-user)]
             (debugf "Redirecting to welcome page at %s" loc)
-            (cookies-response-with-session
+            (create-and-attach! (:browser-session this) req
              {:status 302
               :headers {"Location" loc}}
-             MFA-AUTH-COOKIE
-             session))))
+             {:name name ; duplicate code!
+              :totp-secret totp-secret}))))
       wrap-params)
 
      ::welcome-new-user
      (fn [req]
        ;; TODO remember our (optional) email validation step
-       (let [session (get-session-from-cookie req MFA-AUTH-COOKIE session-store)]
+       (let [session (get-data (:browser-session this) req)]
          {:status 200
           :body
           (html
@@ -133,9 +128,9 @@
      ::verify-user-email
      (-> (fn [req]
            (let [body (if-let [[email code] [ (get (:params req) "email") (get (:params req) "code")]]
-                        (if-let [session (get-session (:verification-code-store this) code)]
-                          (if (= email (:email session))
-                            (do (user-email-verified! (:user-domain this) (:name session))
+                        (if-let [store (get-store (:verification-code-store this) code)]
+                          (if (= email (:email store))
+                            (do (user-email-verified! (:user-domain this) (:name store))
                                 (format "Thanks, Your email '%s'  has been verified correctly " email ))
                           (format "Sorry but your session associated with this email '%s' seems to not be logic" email))
                           (format "Sorry but your session associated with this email '%s' seems to not be valid" email))
@@ -199,4 +194,4 @@
                                      (s/optional-key :password?) s/Bool}]
                      (s/optional-key :emailer) (s/protocol Emailer)})
         map->SignupWithTotp)
-   [:user-domain :session-store :renderer :verification-code-store ]))
+   [:user-domain :browser-session :renderer :verification-code-store ]))

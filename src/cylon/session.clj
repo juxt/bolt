@@ -19,6 +19,14 @@
   (dissoc-data! [_ req key]))
 
 
+(defprotocol Store
+  (create-store! [_ m])
+  (get-store [_ id])
+  (purge-store! [_ id])
+  (assoc-store! [_ id k v])
+  (dissoc-store! [_ id k]))
+
+
 (defprotocol SessionStore
   (create-session! [_ m])
   (get-session [_ id])
