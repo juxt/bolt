@@ -8,7 +8,7 @@
    [modular.bidi :refer (WebService)]
    [cylon.oauth.client :refer (AccessTokenGrantee UserIdentity solicit-access-token)]
    [cylon.authorization :refer (RequestAuthorizer)]
-   [cylon.session :refer (->cookie get-session assoc-session! create-session! cookies-response-with-session get-session-value get-session-id purge-session!)]
+   [cylon.session :refer (create-and-attach! get-data exists? ->cookie get-session assoc-session! create-session! cookies-response-with-session get-session-value get-session-id purge-session! remove! assoc-data!)]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]
    [ring.util.response :refer (redirect)]
    [ring.middleware.params :refer (wrap-params)]
@@ -126,8 +126,7 @@
                    :body (format "Something went wrong: status of underlying request %s" (:status at-resp))}
 
 
-                  (let [app-session-id (get-session-id req APP-SESSION-ID)
-                        original-uri (get-session-value req APP-SESSION-ID (:session-store this) :original-uri)
+                  (let [original-uri (get-data (:browser-session this) req :original-uri)
                         access-token (get (:body at-resp) "access_token")
 
                         ;; TODO If scope not there it is the same as
@@ -137,20 +136,23 @@
                         id-token (-> (get (:body at-resp) "id_token") str->jwt)]
                     (if (verify id-token "secret")
                       (do
+                        (assert original-uri (str "Failed to get original-uri from session " (-> this :browser-session :cookie-id)))
+
                         (infof "Verified id_token: %s" id-token)
-                        (assert original-uri (str "Failed to get original-uri from session " app-session-id))
-                        (assoc-session! (:session-store this) app-session-id :access-token access-token)
-
                         (infof "Scope is %s" scope)
-                        (assoc-session! (:session-store this) app-session-id :scope scope)
-
                         (infof "Claims are %s" (:claims id-token))
-                        (assoc-session! (:session-store this) app-session-id :open-id (-> id-token :claims))
+
+
+
+                        (assoc-data! (:browser-session this) req {:access-token access-token :scope scope :open-id (-> id-token :claims) })
+
+
+
                         (redirect original-uri))))))))))
       wrap-params)
 
      ::logout (fn [req]
-                (purge-session! (:session-store this) (get-session-id req APP-SESSION-ID))
+                (remove! (:browser-session this) req)
                 (if location-after-logout
                   (redirect location-after-logout)
                   {:status 200
@@ -162,8 +164,8 @@
 
   AccessTokenGrantee
   (get-access-token [this req]
-    (when-let [app-session-id (get-session-id req APP-SESSION-ID)]
-      (-> (get-session (:session-store this) app-session-id))))
+    (when (exists? (:browser-session this) req)
+      (get-data (:browser-session this) req)))
 
   (solicit-access-token [this req]
     (solicit-access-token this req []))
@@ -171,37 +173,37 @@
   ;; RFC 6749 4.1. Authorization Code Grant (A)
   (solicit-access-token [this req scopes]
     (let [original-uri (absolute-uri req)
-          ;; We need a session to store the original uri
-          session (create-session!
-                   (:session-store this)
-                   {:original-uri original-uri})
-          state (str (java.util.UUID/randomUUID))]
+          state (str (java.util.UUID/randomUUID))
+
+          ;; 4.1.1.  Authorization Request
+          response (let [loc (str
+                        (:authorize-uri this)
+                        (as-query-string {"response_type" "code" ; REQUIRED
+                                          "client_id" (:client-id this) ; REQUIRED
+                                        ; "redirect_uri" nil ; OPTIONAL (TODO)
+                                          "scope" (encode-scope
+                                                   (union (as-set scopes) ; OPTIONAL
+                                                          (:required-scopes this)))
+                                          "state" state ; RECOMMENDED to prevent CSRF
+                                          }))]
+               (debugf "Redirecting to %s" loc)
+               (redirect loc))
+
+         ]
+      ;; We need a session to store the original uri
 
       (expect-state this state)
-      ;; 4.1.1.  Authorization Request
-      (cookies-response-with-session
-       (let [loc (str
-                  (:authorize-uri this)
-                  (as-query-string {"response_type" "code" ; REQUIRED
-                                    "client_id" (:client-id this) ; REQUIRED
-                                    ; "redirect_uri" nil ; OPTIONAL (TODO)
-                                    "scope" (encode-scope
-                                             (union (as-set scopes) ; OPTIONAL
-                                                    (:required-scopes this)))
-                                    "state" state ; RECOMMENDED to prevent CSRF
-                                    }))]
-         (debugf "Redirecting to %s" loc)
-         (redirect loc))
+      (create-and-attach! (:browser-session this) req response {:original-uri original-uri})
 
-       APP-SESSION-ID
-       session)))
+
+      ))
 
   (expired? [_ req access-token] false)
 
   UserIdentity
   (get-claims [this req]
-    (let [app-session-id (get-session-id req APP-SESSION-ID)]
-      (-> (get-session (:session-store this) app-session-id) :open-id)))
+    (when (exists? (:browser-session this) req)
+      (get-data (:browser-session this) req :open-id)))
 
   ;; TODO Deprecate this!
   TempState
@@ -239,7 +241,7 @@
                      (s/optional-key :location-after-logout) s/Str
                      })
         map->WebClient)
-   [:session-store :client-registry]))
+   [ :client-registry :browser-session]))
 
 ;; But this isn't authorization - this is authentication
 ;; can you write?
