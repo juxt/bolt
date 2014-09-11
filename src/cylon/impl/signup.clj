@@ -10,10 +10,11 @@
    [cylon.user :refer (add-user! user-email-verified!)]
    [cylon.totp :as totp]
    [cylon.totp :refer (OneTimePasswordStore set-totp-secret)]
-   [cylon.impl.authentication :refer (MFA-AUTH-COOKIE)]
    [cylon.session :refer (get-session-from-cookie create-session! cookies-response-with-session)]
    [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)]
    [schema.core :as s ]))
+
+(def MFA-AUTH-COOKIE  "mfa-auth-session-id")
 
 (defprotocol SignupFormRenderer
   (render-signup-form [_ req model]))

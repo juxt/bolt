@@ -99,8 +99,9 @@
 
 (defrecord UserBrowserSession [cookie-id]
   BrowserSession
-  (exists? [_ req]
-    ((complement nil?) (get-session-id req cookie-id)))
+  (exists? [this req]
+    (when-let  [session-id (get-session-id req cookie-id)]
+      ((complement nil?) (get-session (:session-store this) session-id))) )
   (create-and-attach! [this req resp]
     (create-and-attach! this req resp {})
     )

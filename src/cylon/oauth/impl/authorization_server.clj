@@ -299,6 +299,5 @@
        (<- (component/using
             [:access-token-store
              :browser-session
-             :user-domain
              :client-registry
              :authenticator]))))
