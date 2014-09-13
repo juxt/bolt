@@ -1,6 +1,7 @@
 (ns cylon.impl.signup
   (:require
    [clojure.tools.logging :refer :all]
+   [cylon.authentication :refer (InteractionStep get-location step-required?)]
    [com.stuartsierra.component :as component]
    [modular.bidi :refer (WebService path-for)]
    [hiccup.core :refer (html)]
@@ -10,7 +11,7 @@
    [cylon.user :refer (add-user! user-email-verified!)]
    [cylon.totp :as totp]
    [cylon.totp :refer (OneTimePasswordStore set-totp-secret)]
-   [cylon.session :refer (get-session-from-cookie create-session! cookies-response-with-session create-store! get-store purge-store! assoc-store! dissoc-store! create-and-attach! get-data)]
+   [cylon.session :refer (get-session-from-cookie create-session! cookies-response-with-session create-store! get-store purge-store! assoc-store! dissoc-store! create-and-attach! get-data exists? assoc-data!)]
    [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)]
    [schema.core :as s ]))
 
@@ -41,16 +42,27 @@
 (defrecord SignupWithTotp [appname renderer fields  user-domain  verification-code-store emailer fields-reset]
   WebService
   (request-handlers [this]
-    {::signup-form
+    {::GET-signup-form
      (fn [req]
-       {:status 200
-        :body (render-signup-form
-               renderer req
-               {:form {:method :post
-                       :action (path-for req ::process-signup)
-                       :fields fields}})})
+       (println "PPPPPPPPPPPPPPPPPPPPPPPPPPP")
+       (let [response {:status 200
+                       :body (render-signup-form
+                              renderer req
+                              {:form {:method :post
+                                      :action (path-for req ::POST-signup-form)
+                                      :fields fields}})}]
+         (println response)
+         (if
+             ;; In the absence of a session...
+             (not (exists? (:browser-session this) req))
+           ;; We create an empty one. This is because the POST handler
+           ;; requires that a session exists within which it can store the
+           ;; identity on a successful login
+           (create-and-attach! (:browser-session this) req response {})
+           response)
+         ))
 
-     ::process-signup
+     ::POST-signup-form
      (->
       (fn [req]
         (debugf "Processing signup")
@@ -82,12 +94,19 @@
           ;; Create a session that contains the secret-key
           (let [loc (path-for req ::welcome-new-user)]
             (debugf "Redirecting to welcome page at %s" loc)
-            (create-and-attach! (:browser-session this) req
+
+            (do
+              (assoc-data! (:browser-session this) req {:cylon/identity identity :name name ; duplicate code!
+                                                        :totp-secret totp-secret} )
+              {:status 200
+               :body "Thank you! - you gave the correct information!"})
+
+
+            #_(create-and-attach! (:browser-session this) req
              {:status 302
               :headers {"Location" loc}}
-             {:name name ; duplicate code!
-              :totp-secret totp-secret}))))
-      wrap-params)
+             ))))
+      wrap-params wrap-cookies)
 
      ::welcome-new-user
      (fn [req]
@@ -160,15 +179,24 @@
      })
 
   (routes [this]
-    ["/" {"signup" {:get ::signup-form
-                    :post ::process-signup}
+    ["/" {"signup" {:get ::GET-signup-form
+                    :post ::POST-signup-form}
           "welcome" {:get ::welcome-new-user}
           "verify-email" {:get ::verify-user-email}
           "reset-password" {:get ::reset-password-form
                             :post ::process-reset-password}
           }])
 
-  (uri-context [this] ""))
+  (uri-context [this] "/basic")
+
+
+
+  InteractionStep
+  (get-location [this req]
+    (path-for req ::GET-signup-form))
+  (step-required? [this req] true)
+
+)
 
 (defn new-signup-with-totp [& {:as opts}]
   (component/using
@@ -194,4 +222,84 @@
                                      (s/optional-key :password?) s/Bool}]
                      (s/optional-key :emailer) (s/protocol Emailer)})
         map->SignupWithTotp)
+   [:user-domain :browser-session :renderer :verification-code-store ]))
+
+
+
+
+
+
+
+(defrecord SignupWithTotpBis [appname renderer fields  user-domain  verification-code-store emailer fields-reset]
+  WebService
+  (request-handlers [this]
+    {::GET-signup-form
+     (fn [req]
+       (println "PPPPPPPPPPPPPPPPPPPPPPPPPPP")
+       (let [response {:status 200
+                       :body (render-signup-form
+                              renderer req
+                              {:form {:method :post
+                                      :action (path-for req ::POST-signup-form-bis)
+                                      :fields fields}})}]
+
+         response
+         ))
+
+     ::POST-signup-form-bis
+     (->
+      (fn [req]
+        (debugf "Processing signup bis")
+        {:status 200
+             :body "Thank you! - you gave the correct information!"}
+)
+      wrap-params wrap-cookies)
+
+
+
+
+
+
+     })
+
+  (routes [this]
+    ["/" {"signup-bis" {:get ::GET-signup-form-bis
+                    :post ::POST-signup-form-bis}
+          }])
+
+  (uri-context [this] "/basic")
+
+
+
+  InteractionStep
+  (get-location [this req]
+    (path-for req ::GET-signup-form-bis))
+  (step-required? [this req] false)
+
+)
+
+(defn new-signup-with-totp-bis [& {:as opts}]
+  (component/using
+   (->> opts
+        (merge {:appname "cylon"
+                :fields [{:name "user" :label "User" :placeholder "userid"}
+                         {:name "password" :label "Password" :password? true :placeholder "password"}
+                         {:name "name" :label "Name" :placeholder "name"}
+                         {:name "email" :label "Email" :placeholder "email"}]
+                :fields-reset [
+                               {:name "old_pw" :label "Old Password" :password? true :placeholder "old password"}
+                               {:name "new_pw" :label "New Password" :password? true :placeholder "new password"}
+                               {:name "new_pw_bis" :label "Repeat New Password" :password? true :placeholder "repeat new password"}]
+                })
+        (s/validate {:appname s/Str
+                     :fields [{:name s/Str
+                               :label s/Str
+                               (s/optional-key :placeholder) s/Str
+                               (s/optional-key :password?) s/Bool}]
+                     :fields-reset [{:name s/Str
+                                     :label s/Str
+                                     (s/optional-key :placeholder) s/Str
+                                     (s/optional-key :password?) s/Bool}]
+                     (s/optional-key :emailer) (s/protocol Emailer)})
+        map->SignupWithTotpBis)
    [:user-domain :browser-session :renderer :verification-code-store ]))

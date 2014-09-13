@@ -223,7 +223,8 @@
   InteractionStep
   (get-location [this req]
     (path-for req ::GET-login-form))
-  (step-required? [this req] true))
+  (step-required? [this req] true)
+  )
 
 (defn new-authentication-login-form [& {:as opts}]
   (->> opts

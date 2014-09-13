@@ -32,19 +32,19 @@
     (s/with-fn-validation
       (h req))))
 
-(defn init-authentication [component req]
+(defn init-authentication [component authenticator req]
   (do
-      (debugf "Not authenticated, must authenticate first with %s" (:authenticator component))
+    (debugf "Not authenticated, must authenticate first with %s" authenticator )
       (create-and-attach! (:browser-session component) req
-                          (initiate-authentication-interaction (:authenticator component) req {})
+                          (initiate-authentication-interaction authenticator  req {})
                           {:client-id (-> req :query-params (get "client_id"))
                            :requested-scopes (decode-scope (-> req :query-params (get "scope")))
                            :state (-> req :query-params (get "state"))
                            :response-type  "code"})))
 
 ;; TODO: review why we need to call "init-authentication" twice in this code (this fn and ::authorization-endpoint handler)
-(defn authorize-client [session component req store]
-  (if-let [auth-interaction-session-result (get-result (:authenticator component) req)]
+(defn authorize-client [session component authenticator req store]
+  (if-let [auth-interaction-session-result (get-result authenticator  req)]
     ;; the session can be authenticated or maybe we are
     ;; coming from the authenticator workflow
     (do
@@ -52,7 +52,7 @@
       (if (:cylon/authenticated? auth-interaction-session-result)
         ;; "you are authenticated now!"
 
-        (let [_ (clean-resources! (:authenticator component) req)
+        (let [_ (clean-resources! authenticator  req)
               code (str (java.util.UUID/randomUUID))
               {:keys [client-id requested-scopes]}
               session
@@ -118,10 +118,10 @@
         ;; you have auth-session although you are NOT authenticated but ,,, we carry on with this session"
         (do
           (debugf "Session exists, but no evidence in it of authentication. Initiating authentication interaction using %s" (:authenticator component))
-          (initiate-authentication-interaction (:authenticator component) req {}))))
+          (initiate-authentication-interaction authenticator  req {}))))
 
     ;; You are not authenticated, so let's authenticate first.
-    (init-authentication component req)
+    (init-authentication component authenticator req)
     ))
 
 
@@ -129,7 +129,8 @@
 (defrecord AuthorizationServer [store scopes iss]
   WebService
   (request-handlers [component]
-    {::authorization-endpoint
+    {
+     ::auth-signup-endpoint
      (-> (fn [req]
            ;; Establish whether the user-agent is already authenticated.
            ;; If not, create a session with client-id, scope and state
@@ -143,14 +144,44 @@
 
            (debugf "OAuth2 authorization server: Authorizing request")
            (if-not (exists? (:browser-session component) req)
-            (init-authentication component req)
+            (init-authentication component (:authenticator-signup component) req)
             (let [{response-type "response_type" client-id "client_id"} (:query-params req)
                   r-t (or response-type (get-data (:browser-session component) req :response-type))
                   ]
               (case r-t
                 "code" (authorize-client
                         (get-data (:browser-session component) req)
-                        component req store)
+                        component (:authenticator component)  req store)
+
+                ;; Unknown response_type
+                {:status 400
+                 :body (format "Bad response_type parameter: '%s'" response-type)}
+                )
+              )))
+         wrap-params
+         wrap-schema-validation)
+     ::authorization-endpoint
+     (-> (fn [req]
+           ;; Establish whether the user-agent is already authenticated.
+           ;; If not, create a session with client-id, scope and state
+           ;; and redirect to the login form
+
+           ;; TODO We should validate the incoming response_type
+           ;; The trouble is, we lose all the query string information
+           ;; if we initiate the auth interaction session.
+
+           ;; (Can we do this in a go block however?)
+
+           (debugf "OAuth2 authorization server: Authorizing request")
+           (if-not (exists? (:browser-session component) req)
+            (init-authentication component (:authenticator component) req)
+            (let [{response-type "response_type" client-id "client_id"} (:query-params req)
+                  r-t (or response-type (get-data (:browser-session component) req :response-type))
+                  ]
+              (case r-t
+                "code" (authorize-client
+                        (get-data (:browser-session component) req)
+                        component (:authenticator component) req store)
 
                 ;; Unknown response_type
                 {:status 400
@@ -264,6 +295,7 @@
 
   (routes [_]
     ["/" {"authorize" {:get ::authorization-endpoint}
+          "signup" {:get ::auth-signup-endpoint}
           "permit-client" {:post ::permit}
           ;; TODO: Can we use a hyphen instead here?
           "access_token" {:post ::token-endpoint}}])
@@ -300,4 +332,5 @@
             [:access-token-store
              :browser-session
              :client-registry
-             :authenticator]))))
+             :authenticator
+             :authenticator-signup]))))

@@ -167,17 +167,17 @@
     (when (exists? (:browser-session this) req)
       (get-data (:browser-session this) req)))
 
-  (solicit-access-token [this req]
-    (solicit-access-token this req []))
+  (solicit-access-token [this req uri]
+    (solicit-access-token this req uri []))
 
   ;; RFC 6749 4.1. Authorization Code Grant (A)
-  (solicit-access-token [this req scopes]
+  (solicit-access-token [this req uri scopes]
     (let [original-uri (absolute-uri req)
           state (str (java.util.UUID/randomUUID))
 
           ;; 4.1.1.  Authorization Request
           response (let [loc (str
-                        (:authorize-uri this)
+                        uri
                         (as-query-string {"response_type" "code" ; REQUIRED
                                           "client_id" (:client-id this) ; REQUIRED
                                         ; "redirect_uri" nil ; OPTIONAL (TODO)
@@ -235,6 +235,7 @@
                      :store s/Any
 
                      :authorize-uri s/Str
+                     :signup-uri s/Str
                      :access-token-uri s/Str
 
                      :requires-user-acceptance? s/Bool
