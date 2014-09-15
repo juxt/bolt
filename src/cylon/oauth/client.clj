@@ -48,7 +48,7 @@
   to the request. If a role is specified, also check that the role
   exists in the scope of the client. If role isn't specified, the
   identity and access-token are still retrieved."
-  [h client & [role]]
+  [h uri client & [role]]
   (fn [req]
     (let [{:keys [access-token scope]}
           (s/with-fn-validation (get-access-token+ client req))]
@@ -56,7 +56,7 @@
        (nil? access-token)
        (do
          (debugf "No access token, so soliciting one from client %s" client)
-         (solicit-access-token  client req (:signup-uri client)))
+         (solicit-access-token  client req uri))
        (expired? client req access-token)
        (do
          (debugf "access token has expired, seeking to refresh it")
@@ -76,27 +76,4 @@
 
 (defn wrap-require-authorization
   [h client  & [role]]
-  (fn [req]
-    (let [{:keys [access-token scope]}
-          (s/with-fn-validation (get-access-token+ client req))]
-      (cond
-       (nil? access-token)
-       (do
-         (debugf "No access token, so soliciting one from client %s" client)
-         (solicit-access-token  client req (:authorize-uri client)))
-       (expired? client req access-token)
-       (do
-         (debugf "access token has expired, seeking to refresh it")
-         ;; The thinking here is that any refresh token that was returned
-         ;; to the client will still be held by the client and can be
-         ;; used to refresh the access-token
-         (refresh-access-token client req))
-
-       (and role (not (contains? scope role)))
-       ;; TODO Must do something better than this
-       {:status 401 :body "Sorry, you just don't have enough privileges to access this page"}
-
-       :otherwise
-       (h (assoc req
-            :identity (get-identity client req)
-            :access-token access-token))))))
+  (wrap-require-authorization-base h (:authorize-uri client) client role))
