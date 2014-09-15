@@ -117,6 +117,7 @@
            (for [[step next-steps] (link-up ((apply juxt steps) this))]
              (reduce-kv
               (fn [acc k h]
+                (debugf (name k) h)
                 (assoc acc k
                        (fn [req]
                          (let [res (h req)]
@@ -153,12 +154,36 @@
 
   (uri-context [this] ""))
 
+(defrecord AuthBug []
+  WebService
+  (request-handlers [this]
+    {::GET-other
+     (fn [req]
+       {:status 200
+        :body "bug"})
+     }
+    )
+  (routes [_] ["/" {"bug" {:get ::GET-other}}])
+  (uri-context [_] "/other")
+
+  InteractionStep
+  (get-location [this req]
+    (path-for req ::GET-other)
+    )
+  (step-required? [this req]
+    false))
+
+(defn new-auth-bug [& {:as opts}]
+  (->>
+   opts
+   map->AuthBug))
+
 (defn new-multi-factor-authentication-interaction [& {:as opts}]
   (component/using
    (->> opts
         (s/validate {:steps [s/Keyword]})
         map->MultiFactorAuthenticationInteraction)
-   (conj (:steps opts) :browser-session)))
+   (conj  (:steps opts)  :browser-session)))
 
 (defprotocol LoginFormRenderer
   (render-login-form [_ req model]))

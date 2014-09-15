@@ -44,14 +44,12 @@
   (request-handlers [this]
     {::GET-signup-form
      (fn [req]
-       (println "PPPPPPPPPPPPPPPPPPPPPPPPPPP")
        (let [response {:status 200
                        :body (render-signup-form
                               renderer req
                               {:form {:method :post
                                       :action (path-for req ::POST-signup-form)
                                       :fields fields}})}]
-         (println response)
          (if
              ;; In the absence of a session...
              (not (exists? (:browser-session this) req))
@@ -72,9 +70,9 @@
               name (get (:form-params req) "name")
               totp-secret (when (satisfies? OneTimePasswordStore user-domain)
                             (totp/secret-key))
-              verification-session (create-store! verification-code-store {:email email :name name})
+              verification-store (create-store! verification-code-store {:email email :name name})
               ;; TODO Possibly we should encrypt and decrypt the verification-code (symmetric)
-              verification-code (:cylon.session/key verification-session)]
+              verification-code (:cylon.session/key verification-store)]
 
           ;; Add the user
           (add-user! user-domain identity password
@@ -92,57 +90,16 @@
                                 appname (make-verification-link req verification-code email))))
 
           ;; Create a session that contains the secret-key
-          (let [loc (path-for req ::welcome-new-user)]
-            (debugf "Redirecting to welcome page at %s" loc)
-
-            (do
-              (assoc-data! (:browser-session this) req {:cylon/identity identity :name name ; duplicate code!
-                                                        :totp-secret totp-secret} )
-              {:status 200
-               :body "Thank you! - you gave the correct information!"})
 
 
-            #_(create-and-attach! (:browser-session this) req
-             {:status 302
-              :headers {"Location" loc}}
-             ))))
+
+          (do
+            (assoc-data! (:browser-session this) req {:cylon/identity identity :name name ; duplicate code!
+                                                      :totp-secret totp-secret} )
+            {:status 200
+             :body "Thank you! - you gave the correct information!"})))
       wrap-params wrap-cookies)
 
-     ::welcome-new-user
-     (fn [req]
-       ;; TODO remember our (optional) email validation step
-       (let [session (get-data (:browser-session this) req)]
-         {:status 200
-          :body
-          (html
-           [:div
-            [:p (format "Thank you for signing up %s!"  (:name session))]
-            (when (satisfies? OneTimePasswordStore user-domain)
-              (let [totp-secret (:totp-secret session)]
-                [:div
-                 [:p "Please scan this image into your 2-factor authentication application"]
-                 [:img {:src (totp/qr-code (format "%s@%s" identity appname) totp-secret) }]
-                 [:p "Alternatively, type in this secret into your authenticator application: " [:code totp-secret]]
-
-                 ]))
-            [:p "Please check your email and click on the verification link"]
-            ;; We can keep this person 'logged in' now, as soon as their
-            ;; email is verified, we can request an access code for
-            ;; them. A user can be already authenticated with the
-            ;; authorization service when the client application
-            ;; requests an access code to use on that user's behalf.
-
-            ;; One of the conditions for granting scopes to a client app
-            ;; could be that the user's email has been verified. If not,
-            ;; the user can continue, just can't do certain things such
-            ;; as create topics (or anything we might need to know the
-            ;; user's email address for).
-
-            ;; I think the TOTP functionality could be made optional,
-            ;; but yes, we probably could do a similar component without
-            ;; it. Strike the balance between unreasonable conditional logic and
-            ;; code duplication.
-            ])}))
 
      ::verify-user-email
      (-> (fn [req]
@@ -181,7 +138,6 @@
   (routes [this]
     ["/" {"signup" {:get ::GET-signup-form
                     :post ::POST-signup-form}
-          "welcome" {:get ::welcome-new-user}
           "verify-email" {:get ::verify-user-email}
           "reset-password" {:get ::reset-password-form
                             :post ::process-reset-password}
@@ -194,9 +150,7 @@
   InteractionStep
   (get-location [this req]
     (path-for req ::GET-signup-form))
-  (step-required? [this req] true)
-
-)
+  (step-required? [this req] true))
 
 (defn new-signup-with-totp [& {:as opts}]
   (component/using
@@ -225,81 +179,74 @@
    [:user-domain :browser-session :renderer :verification-code-store ]))
 
 
-
-
-
-
-
-(defrecord SignupWithTotpBis [appname renderer fields  user-domain  verification-code-store emailer fields-reset]
+(defrecord WelcomeNewUser [renderer user-domain appname]
   WebService
   (request-handlers [this]
-    {::GET-signup-form
+    {::GET-welcome-new-user
      (fn [req]
-       (println "PPPPPPPPPPPPPPPPPPPPPPPPPPP")
-       (let [response {:status 200
-                       :body (render-signup-form
-                              renderer req
-                              {:form {:method :post
-                                      :action (path-for req ::POST-signup-form-bis)
-                                      :fields fields}})}]
+       ;; TODO remember our (optional) email validation step
+       (println "GET-welcome-new-user")
+       (let [session (get-data (:browser-session this) req)]
+         {:status 200
+          :body
+          (render-welcome renderer req
+                          {:message [:div
+                                     [:p (format "Thank you for signing up %s!"  (:name session))]
+                                     (when (satisfies? OneTimePasswordStore user-domain)
+                                       (let [totp-secret (:totp-secret session)]
+                                         [:div
+                                          [:p "Please scan this image into your 2-factor authentication application"]
+                                          [:img {:src (totp/qr-code (format "%s@%s" identity appname) totp-secret) }]
+                                          [:p "Alternatively, type in this secret into your authenticator application: " [:code totp-secret]]
+                                          ]))
+                                     [:p "Please check your email and click on the verification link"]
 
-         response
-         ))
+                                     ;; We can keep this person 'logged in' now, as soon as their
+                                     ;; email is verified, we can request an access code for
+                                     ;; them. A user can be already authenticated with the
+                                     ;; authorization service when the client application
+                                     ;; requests an access code to use on that user's behalf.
 
-     ::POST-signup-form-bis
-     (->
-      (fn [req]
-        (debugf "Processing signup bis")
-        {:status 200
-             :body "Thank you! - you gave the correct information!"}
-)
-      wrap-params wrap-cookies)
+                                     ;; One of the conditions for granting scopes to a client app
+                                     ;; could be that the user's email has been verified. If not,
+                                     ;; the user can continue, just can't do certain things such
+                                     ;; as create topics (or anything we might need to know the
+                                     ;; user's email address for).
 
-
-
-
-
-
-     })
+                                     ;; I think the TOTP functionality could be made optional,
+                                     ;; but yes, we probably could do a similar component without
+                                     ;; it. Strike the balance between unreasonable conditional logic and
+                                     ;; code duplication.
+                                     ]
+                           :form {:method :post
+                                  :action (path-for req ::POST-welcome-new-user)}
+                           }
+                          )}))
+     ::POST-welcome-new-user
+     (fn [req]
+       (debugf "Processing signup bis")
+       {:status 200
+        :body "Thank you! - you gave the correct information!"}
+       )})
 
   (routes [this]
-    ["/" {"signup-bis" {:get ::GET-signup-form-bis
-                    :post ::POST-signup-form-bis}
+    ["/" {"welcome_user" {:get ::GET-welcome-new-user
+                          :post ::POST-welcome-new-user}
           }])
 
   (uri-context [this] "/basic")
 
 
-
   InteractionStep
   (get-location [this req]
-    (path-for req ::GET-signup-form-bis))
-  (step-required? [this req] false)
+    (path-for req ::GET-welcome-new-user))
+  (step-required? [this req] true))
 
-)
-
-(defn new-signup-with-totp-bis [& {:as opts}]
+(defn new-welcome-new-user [& {:as opts}]
   (component/using
    (->> opts
         (merge {:appname "cylon"
-                :fields [{:name "user" :label "User" :placeholder "userid"}
-                         {:name "password" :label "Password" :password? true :placeholder "password"}
-                         {:name "name" :label "Name" :placeholder "name"}
-                         {:name "email" :label "Email" :placeholder "email"}]
-                :fields-reset [
-                               {:name "old_pw" :label "Old Password" :password? true :placeholder "old password"}
-                               {:name "new_pw" :label "New Password" :password? true :placeholder "new password"}
-                               {:name "new_pw_bis" :label "Repeat New Password" :password? true :placeholder "repeat new password"}]
                 })
-        (s/validate {:appname s/Str
-                     :fields [{:name s/Str
-                               :label s/Str
-                               (s/optional-key :placeholder) s/Str
-                               (s/optional-key :password?) s/Bool}]
-                     :fields-reset [{:name s/Str
-                                     :label s/Str
-                                     (s/optional-key :placeholder) s/Str
-                                     (s/optional-key :password?) s/Bool}]
-                     (s/optional-key :emailer) (s/protocol Emailer)})
-        map->SignupWithTotpBis)
-   [:user-domain :browser-session :renderer :verification-code-store ]))
+        (s/validate {:appname s/Str})
+        map->WelcomeNewUser)
+   [:browser-session :renderer :user-domain]))
