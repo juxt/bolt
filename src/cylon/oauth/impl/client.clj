@@ -8,7 +8,7 @@
    [modular.bidi :refer (WebService)]
    [cylon.oauth.client :refer (AccessTokenGrantee UserIdentity solicit-access-token)]
    [cylon.authorization :refer (RequestAuthorizer)]
-   [cylon.session :refer (create-and-attach! get-data exists? ->cookie get-session assoc-session! create-session! cookies-response-with-session get-session-value get-session-id purge-session! remove! assoc-data!)]
+   [cylon.session :refer (session respond-with-new-session! assoc-session-data! respond-close-session!)]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]
    [ring.util.response :refer (redirect)]
    [ring.middleware.params :refer (wrap-params)]
@@ -32,14 +32,12 @@
 ;; What I was saying was, in summary, that OpenID/Connect layers on top of OAuth2 - but in doing so complects the two processes: the first process (OAuth2) is responsible for authenticating the client application (let's call this Astro, a web ui for managing iot devices)
 ;; Alice is a user. She is using Astro to manage her azondi devices. The Oauth2 process is authenticating that Astro is a valid application.
 
-(def APP-SESSION-ID "app-session-id")
-
-(defrecord WebClient [store access-token-uri location-after-logout]
+(defrecord WebClient [store access-token-uri location-after-logout session-store client-registry]
   component/Lifecycle
   (start [this]
     ;; If there's an :client-registry dependency, use it to
     ;; register this app.
-    (if-let [reg (:client-registry this)]
+    (if-let [reg client-registry]
       (let [{:keys [client-id client-secret]}
             (s/with-fn-validation
               (register-client+
@@ -126,7 +124,7 @@
                    :body (format "Something went wrong: status of underlying request %s" (:status at-resp))}
 
 
-                  (let [original-uri (get-data (:browser-session this) req :original-uri)
+                  (let [original-uri (:original-uri (session session-store req))
                         access-token (get (:body at-resp) "access_token")
 
                         ;; TODO If scope not there it is the same as
@@ -136,15 +134,14 @@
                         id-token (-> (get (:body at-resp) "id_token") str->jwt)]
                     (if (verify id-token "secret")
                       (do
-                        (assert original-uri (str "Failed to get original-uri from session " (-> this :browser-session :cookie-id)))
+                        (assert original-uri (str "Failed to get original-uri from session " (session session-store req)))
 
                         (infof "Verified id_token: %s" id-token)
                         (infof "Scope is %s" scope)
                         (infof "Claims are %s" (:claims id-token))
 
 
-
-                        (assoc-data! (:browser-session this) req {:access-token access-token :scope scope :open-id (-> id-token :claims) })
+                        (assoc-session-data! session-store req {:access-token access-token :scope scope :open-id (-> id-token :claims) })
 
 
 
@@ -152,11 +149,12 @@
       wrap-params)
 
      ::logout (fn [req]
-                (remove! (:browser-session this) req)
-                (if location-after-logout
-                  (redirect location-after-logout)
-                  {:status 200
-                   :body "You have logged out"}))})
+                (->> (if location-after-logout
+                       (redirect location-after-logout)
+                       {:status 200
+                        :body "You have logged out"})
+                     (respond-close-session! session-store req)))})
+
 
   (routes [this] ["/" {"oauth/grant" {:get ::redirection-endpoint}
                        "logout" {:get ::logout}}])
@@ -164,8 +162,7 @@
 
   AccessTokenGrantee
   (get-access-token [this req]
-    (when (exists? (:browser-session this) req)
-      (get-data (:browser-session this) req)))
+    (session session-store req))
 
   (solicit-access-token [this req uri]
     (solicit-access-token this req uri []))
@@ -177,33 +174,30 @@
 
           ;; 4.1.1.  Authorization Request
           response (let [loc (str
-                        uri
-                        (as-query-string {"response_type" "code" ; REQUIRED
-                                          "client_id" (:client-id this) ; REQUIRED
+                              uri
+                              (as-query-string {"response_type" "code" ; REQUIRED
+                                                "client_id" (:client-id this) ; REQUIRED
                                         ; "redirect_uri" nil ; OPTIONAL (TODO)
-                                          "scope" (encode-scope
-                                                   (union (as-set scopes) ; OPTIONAL
-                                                          (:required-scopes this)))
-                                          "state" state ; RECOMMENDED to prevent CSRF
-                                          }))]
-               (debugf "Redirecting to %s" loc)
-               (redirect loc))
+                                                "scope" (encode-scope
+                                                         (union (as-set scopes) ; OPTIONAL
+                                                                (:required-scopes this)))
+                                                "state" state ; RECOMMENDED to prevent CSRF
+                                                }))]
+                     (debugf "Redirecting to %s" loc)
+                     (redirect loc))
 
-         ]
+          ]
       ;; We need a session to store the original uri
 
       (expect-state this state)
-      (create-and-attach! (:browser-session this) req response {:original-uri original-uri})
-
-
-      ))
+      (respond-with-new-session! session-store req {:original-uri original-uri} response)))
 
   (expired? [_ req access-token] false)
 
   UserIdentity
   (get-claims [this req]
-    (when (exists? (:browser-session this) req)
-      (get-data (:browser-session this) req :open-id)))
+    (when-let [session (session session-store req)]
+      (:open-id session)))
 
   ;; TODO Deprecate this!
   TempState
@@ -232,6 +226,7 @@
                      :redirection-uri s/Str
 
                      :required-scopes #{s/Keyword}
+                     ;; TODO What's this? Can we document it?
                      :store s/Any
 
                      :authorize-uri s/Str
@@ -242,7 +237,7 @@
                      (s/optional-key :location-after-logout) s/Str
                      })
         map->WebClient)
-   [ :client-registry :browser-session]))
+   [:client-registry :session-store]))
 
 ;; But this isn't authorization - this is authentication
 ;; can you write?

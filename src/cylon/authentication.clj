@@ -24,8 +24,8 @@
 ;; but in future, when we've removed the original protocol above, let's rename this to Authenticator
 (defprotocol AuthenticationInteraction
   (initiate-authentication-interaction [_ request initial-session-state])
-  (get-result [_ request])
-  (clean-resources! [_ request])
+  (get-outcome [_ request])
+  #_(clean-resources! [_ request])
 )
 
 (defprotocol InteractionStep

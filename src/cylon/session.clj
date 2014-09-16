@@ -3,56 +3,50 @@
 (ns cylon.session
   (:require
    [ring.middleware.cookies :refer (cookies-request cookies-response)]
+   [cylon.session.protocols :as p]
    [schema.core :as s]))
 
+;; Old functions here
 
-(defprotocol BrowserSession
-  (exists? [_ req])
-  (create-and-attach!
-    [_ req resp]
-    [_ req resp data])
-  (remove! [_ req])
-  (get-data
-    [_ req]
-    [_ req key])
-  (assoc-data! [_ req data])
-  (dissoc-data! [_ req key]))
+(s/defschema Request "A Ring-style request"
+  {:headers {s/Str s/Str}
+   s/Keyword s/Any})
 
+(s/defschema Response "A Ring-style response"
+  {(s/optional-key :status) s/Num
+   (s/optional-key :headers) {s/Str s/Str}
+   (s/optional-key :body) s/Str})
 
-(defprotocol Store
-  (create-store! [_ m])
-  (get-store [_ id])
-  (purge-store! [_ id])
-  (assoc-store! [_ id k v])
-  (dissoc-store! [_ id k]))
+(s/defn session :- {s/Keyword s/Any}
+  [component :- (s/protocol p/SessionStore)
+   request :- Request]
+  (p/session component request))
 
+;;(s/defn new-session-response :- )
 
-(defprotocol SessionStore
-  (create-session! [_ m])
-  (get-session [_ id])
-  (renew-session! [_ id])
-  (purge-session! [_ id])
-  (assoc-session! [_ id k v])
-  (dissoc-session! [_ id k]))
+(s/defn assoc-session-data! :- nil
+  [component :- (s/protocol p/SessionStore)
+   request :- Request
+   m :- {s/Keyword s/Any}]
+  (p/assoc-session-data! component request m))
 
-(defn ->cookie [session]
-  {:value (::key session)
-   :expires (.toGMTString
-             (doto (new java.util.Date)
-               (.setTime (::expiry session))))
-   :path "/"})
+(s/defn respond-with-new-session! :- Response
+  [component :- (s/protocol p/SessionStore)
+   request :- Request
+   data :- {s/Keyword s/Any}
+   response :- Response]
+  (p/respond-with-new-session! component request data response))
 
-(defn cookies-response-with-session [response id-cookie session]
-  ;; Use of cookies-response mean it is non-destructive - existing
-  ;; cookies are preserved (but existing :cookies entries are not)
-  (cookies-response
-   (merge-with merge response
-    {:cookies {id-cookie (->cookie session)}})))
+(s/defn respond-close-session! :- Response
+  [component :- (s/protocol p/SessionStore)
+   request :- Request
+   response :- Response]
+  (p/respond-close-session! component request response))
 
-(defn get-session-id [request cookie-name]
+#_(defn get-session-id [request cookie-name]
   (-> request cookies-request :cookies (get cookie-name) :value))
 
-(s/defn get-session-from-cookie :- (s/maybe {:cylon.session/key s/Str
+#_(s/defn get-session-from-cookie :- (s/maybe {:cylon.session/key s/Str
                                              :cylon.session/expiry s/Num
                                              s/Keyword s/Any})
   [request
@@ -60,5 +54,5 @@
    session-store :- (s/protocol SessionStore)]
   (get-session session-store (get-session-id request cookie-name)))
 
-(defn get-session-value [request cookie-name session-store k]
+#_(defn get-session-value [request cookie-name session-store k]
     (get (get-session-from-cookie request cookie-name session-store) k))

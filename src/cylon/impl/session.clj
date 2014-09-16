@@ -4,16 +4,13 @@
   (:require
    [clojure.tools.logging :refer :all]
    [com.stuartsierra.component :as component]
-   [cylon.session :refer (SessionStore get-session BrowserSession get-data exists? create-and-attach! create-session! cookies-response-with-session purge-session! assoc-session! Store)]
-   [cylon.impl.session-atom-state :as state]
    [cylon.authentication :refer (Authenticator authenticate)]
-   [cylon.session :refer (renew-session! purge-session! get-session-id)]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request)]
    [modular.ring :refer (WebRequestMiddleware WebRequestBinding)]
    [schema.core :as s]
    [plumbing.core :refer (<-)]))
 
-(defrecord CookieAuthenticator []
+#_(defrecord CookieAuthenticator []
   Authenticator
   (authenticate [this request]
     (tracef "Authenticating with cookie: %s" (:uri request))
@@ -41,62 +38,13 @@
                #_(merge {:cookies (renew-session! (:session-store this) (:cylon/session-id facts))}))
            (h req)))))))
 
-(defn new-cookie-authenticator [& {:as opts}]
+#_(defn new-cookie-authenticator [& {:as opts}]
   (component/using
    (->> opts
         map->CookieAuthenticator)
    [:session-store]))
 
-(defrecord AtomBackedSessionStore [expiry-seconds]
-  component/Lifecycle
-  (start [this] (assoc this :sessions (atom {})))
-  (stop [this] (dissoc this :sessions))
-
-  SessionStore
-  (create-session! [this m]
-    (let [key (str (java.util.UUID/randomUUID))
-          expiry-in-ms (+ (.getTime (java.util.Date.)) (* expiry-seconds 1000))]
-      (let [res (merge m {:cylon.session/key key
-                          :cylon.session/expiry expiry-in-ms})]
-        (swap! (:sessions this) assoc key res)
-        res)))
-
-  (get-session [this id]
-    (when-let [{expiry :cylon.session/expiry :as session} (get @(:sessions this) id)]
-      (if (< (.getTime (java.util.Date.)) expiry)
-        session
-        (purge-session! this id))))
-
-  (renew-session! [this id]
-    (let [expiry-in-ms (+ (.getTime (java.util.Date.)) (* expiry-seconds 1000))]
-      (swap! (:sessions this) update-in [id] assoc :cylon.session/expiry expiry-in-ms)
-      (get @(:sessions this) id)))
-
-  (purge-session! [this id]
-    (swap! (:sessions this) dissoc id)
-    nil)
-
-  (assoc-session! [this id k v]
-    (assert id)
-    (swap! (:sessions this)
-           (fn [sessions] (update-in sessions [id]
-                                     (fn [session]
-                                       (assert session)
-                                       (assoc session k v))))))
-
-  (dissoc-session! [this id k]
-    (swap! (:sessions this) update-in [id] dissoc k)))
-
-(defn new-atom-backed-session-store [& {:as opts}]
-  (->> opts
-       (merge {:expiry-seconds (* 4 60 60)})
-       (s/validate {:expiry-seconds s/Int
-                    :id s/Keyword})
-       map->AtomBackedSessionStore))
-
-
-
-(defrecord AtomBackedStore [expiry-seconds]
+#_(defrecord AtomBackedStore [expiry-seconds]
   component/Lifecycle
   (start [this] (assoc this :rows (atom {})))
   (stop [this] (dissoc this :rows))
@@ -127,14 +75,12 @@
   (dissoc-store! [this id k]
     (swap! (:rows this) update-in [id] dissoc k)))
 
-(defn new-atom-backed-store [& {:as opts}]
+#_(defn new-atom-backed-store [& {:as opts}]
   (->> opts
        (s/validate {:id s/Keyword})
        map->AtomBackedStore))
 
-
-
-(defrecord UserBrowserSession [cookie-id]
+#_(defrecord UserBrowserSession [cookie-id]
   BrowserSession
   (exists? [this req]
     (when-let  [session-id (get-session-id req cookie-id)]
@@ -165,7 +111,7 @@
       ))
   (dissoc-data! [this req key]))
 
-(defn new-browser-session [& {:as opts}]
+#_(defn new-browser-session [& {:as opts}]
   (->> opts
        (merge {:expiry-seconds (* 4 60 60)})
        (s/validate

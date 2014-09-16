@@ -2,16 +2,16 @@
   (:require
    [clojure.tools.logging :refer :all]
    [cylon.authentication :refer (InteractionStep get-location step-required?)]
+   [cylon.session :refer (session respond-with-new-session! assoc-session-data!)]
+   [cylon.token-store :refer (create-token! get-token-by-id)]
    [com.stuartsierra.component :as component]
    [modular.bidi :refer (WebService path-for)]
    [hiccup.core :refer (html)]
    [ring.middleware.params :refer (wrap-params)]
    [ring.middleware.cookies :refer (cookies-response wrap-cookies)]
-   [cylon.session :refer (create-session! get-session)]
    [cylon.user :refer (add-user! user-email-verified!)]
    [cylon.totp :as totp]
    [cylon.totp :refer (OneTimePasswordStore set-totp-secret)]
-   [cylon.session :refer (get-session-from-cookie create-session! cookies-response-with-session create-store! get-store purge-store! assoc-store! dissoc-store! create-and-attach! get-data exists? assoc-data!)]
    [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)]
    [schema.core :as s ]))
 
@@ -39,7 +39,7 @@
         verify-user-email-path (path-for req ::verify-user-email)]
     (apply format "%s://%s:%d%s?code=%s&email=%s" (conj values verify-user-email-path code email))))
 
-(defrecord SignupWithTotp [appname renderer fields  user-domain  verification-code-store emailer fields-reset]
+(defrecord SignupWithTotp [appname renderer session-store fields user-domain verification-code-store emailer fields-reset]
   WebService
   (request-handlers [this]
     {::GET-signup-form
@@ -52,11 +52,11 @@
                                       :fields fields}})}]
          (if
              ;; In the absence of a session...
-             (not (exists? (:browser-session this) req))
+             (not (session session-store req))
            ;; We create an empty one. This is because the POST handler
            ;; requires that a session exists within which it can store the
            ;; identity on a successful login
-           (create-and-attach! (:browser-session this) req response {})
+           (respond-with-new-session! session-store req {} response)
            response)
          ))
 
@@ -70,9 +70,10 @@
               name (get (:form-params req) "name")
               totp-secret (when (satisfies? OneTimePasswordStore user-domain)
                             (totp/secret-key))
-              verification-store (create-store! verification-code-store {:email email :name name})
+
               ;; TODO Possibly we should encrypt and decrypt the verification-code (symmetric)
-              verification-code (:cylon.session/key verification-store)]
+              verification-code (str (java.util.UUID/randomUUID))
+              verification-store (create-token! verification-code-store verification-code {:email email :name name})]
 
           ;; Add the user
           (add-user! user-domain identity password
@@ -94,8 +95,8 @@
 
 
           (do
-            (assoc-data! (:browser-session this) req {:cylon/identity identity :name name ; duplicate code!
-                                                      :totp-secret totp-secret} )
+            (assoc-session-data! session-store req {:cylon/identity identity :name name ; duplicate code!
+                                                    :totp-secret totp-secret} )
             {:status 200
              :body "Thank you! - you gave the correct information!"})))
       wrap-params wrap-cookies)
@@ -104,19 +105,19 @@
      ::verify-user-email
      (-> (fn [req]
            (let [body (if-let [[email code] [ (get (:params req) "email") (get (:params req) "code")]]
-                        (if-let [store (get-store (:verification-code-store this) code)]
+                        (if-let [store (get-token-by-id (:verification-code-store this) code)]
                           (if (= email (:email store))
                             (do (user-email-verified! (:user-domain this) (:name store))
                                 (format "Thanks, Your email '%s'  has been verified correctly " email ))
-                          (format "Sorry but your session associated with this email '%s' seems to not be logic" email))
+                            (format "Sorry but your session associated with this email '%s' seems to not be logic" email))
                           (format "Sorry but your session associated with this email '%s' seems to not be valid" email))
 
                         (format "Sorry but there were problems trying to retrieve your data related with your mail '%s' " (get (:params req) "email"))
                         )]
              {:status 200
               :body (render-email-verified
-                renderer req
-                {:message body})}))
+                     renderer req
+                     {:message body})}))
          wrap-params)
 
      ::reset-password-form
@@ -130,8 +131,8 @@
 
      ::process-reset-password
      (-> (fn [req] {:status 200 :body (format "Thanks for reseting pw. Old pw: %s. New pw: %s"
-                                             (get (:form-params req) "old_pw")
-                                             (get (:form-params req) "new_pw"))})
+                                              (get (:form-params req) "old_pw")
+                                              (get (:form-params req) "new_pw"))})
          wrap-params)
      })
 
@@ -176,17 +177,17 @@
                                      (s/optional-key :password?) s/Bool}]
                      (s/optional-key :emailer) (s/protocol Emailer)})
         map->SignupWithTotp)
-   [:user-domain :browser-session :renderer :verification-code-store ]))
+   [:user-domain :session-store :renderer :verification-code-store]))
 
 
-(defrecord WelcomeNewUser [renderer user-domain appname]
+(defrecord WelcomeNewUser [renderer user-domain appname session-store]
   WebService
   (request-handlers [this]
     {::GET-welcome-new-user
      (fn [req]
        ;; TODO remember our (optional) email validation step
        (println "GET-welcome-new-user")
-       (let [session (get-data (:browser-session this) req)]
+       (let [session (session session-store req)]
          {:status 200
           :body
           (render-welcome renderer req
@@ -249,4 +250,4 @@
                 })
         (s/validate {:appname s/Str})
         map->WelcomeNewUser)
-   [:browser-session :renderer :user-domain]))
+   [:session-store :renderer :user-domain]))

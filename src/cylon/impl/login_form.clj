@@ -13,7 +13,8 @@
    [bidi.bidi :refer (path-for ->WrapMiddleware)]
    [modular.bidi :refer (WebService)]
    [cylon.user :refer (UserDomain verify-user)]
-   [cylon.session :refer (SessionStore create-session! purge-session! ->cookie)]))
+   [cylon.session :refer (respond-with-new-session!)]
+   [cylon.session.protocols :refer (SessionStore)]))
 
 (defprotocol LoginFormRenderer
   (render-login-form [_ request attrs]))
@@ -74,9 +75,9 @@
                (verify-user user-domain (.trim identity) password))
 
         (do
-          (println (->cookie (create-session! session-store {:cylon/identity identity})))
+          #_(println (->cookie (create-session! session-store {:cylon/identity identity})))
 
-          {:status 302
+          #_{:status 302
            :headers {"Location" (or (get params "requested-uri") "/")} ; "/" can be parameterized (TODO)
            :cookies {"session-id" (->cookie (create-session! session-store {:cylon/identity identity}))
                      "requested-uri" ""}})
@@ -89,7 +90,7 @@
 
 (defn new-logout-handler [session-store]
   (fn [{:keys [cookies]}]
-    (purge-session! session-store (:value (get cookies "session-id")))
+    #_(purge-session! session-store (:value (get cookies "session-id")))
     {:status 302 :headers {"Location" "/"}}))
 
 (defrecord LoginForm [uri-context renderer middleware fields identity-field]

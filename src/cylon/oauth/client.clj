@@ -56,7 +56,7 @@
        (nil? access-token)
        (do
          (debugf "No access token, so soliciting one from client %s" client)
-         (solicit-access-token  client req uri))
+         (solicit-access-token client req uri))
        (expired? client req access-token)
        (do
          (debugf "access token has expired, seeking to refresh it")

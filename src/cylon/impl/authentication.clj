@@ -2,19 +2,20 @@
 
 (ns cylon.impl.authentication
   (:require
+   [clojure.tools.logging :refer :all]
    [com.stuartsierra.component :as component]
    [cylon.authentication :refer (Authenticator authenticate AuthenticationInteraction InteractionStep get-location step-required?)]
-   [clojure.tools.logging :refer :all]
+   [cylon.session :refer (session assoc-session-data! respond-with-new-session!)]
+   [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)]
    [cylon.user :refer (UserStore verify-user)]
-   [schema.core :as s]
+   [hiccup.core :refer (html)]
+   [modular.bidi :refer (WebService request-handlers routes uri-context path-for)]
    [plumbing.core :refer (<-)]
    [ring.middleware.cookies :refer (cookies-response wrap-cookies)]
-   [ring.util.response :refer (redirect-after-post)]
    [ring.middleware.params :refer (wrap-params)]
-   [modular.bidi :refer (WebService request-handlers routes uri-context path-for)]
-   [cylon.session :refer (->cookie create-session! get-session get-session-id assoc-session! cookies-response-with-session get-session-from-cookie get-session-value purge-session! get-data exists? create-and-attach! assoc-data! remove!)]
-   [hiccup.core :refer (html)]
-   [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)])
+   [ring.util.response :refer (redirect redirect-after-post)]
+   [schema.core :as s]
+)
   (:import
    (javax.xml.bind DatatypeConverter)))
 
@@ -83,29 +84,31 @@
   (str (:uri req)
        (when-let [qs (:query-string req)] (when (not-empty qs) (str "?" qs )))))
 ;; Again, rename to MultiFactorAuthenticator as above
-(defrecord MultiFactorAuthenticationInteraction [steps]
+
+(defrecord MultiFactorAuthenticationInteraction [steps session-store]
   AuthenticationInteraction
   (initiate-authentication-interaction [this req initial-session-state]
     (let [steps ((apply juxt steps) this)
-          loc (get-location (first steps) req)
+          first-step (get-location (first steps) req)
           ;; I think it's DONE
           ;; (Note: It's possible that the user has already got a
           ;; session, because they might have just signed up, etc. In
           ;; which case, we should retrieve the session and treat it has
           ;; the initial-session-state)
-          response {:status 302
-                    :headers {"Location" loc}}]
-      (debugf "Initiating multi-factor authentication, redirecting to first step %s" loc)
-      (if (exists? (:browser-session this) req)
-                    response
-                    (create-and-attach! (:browser-session this) req
-                                        response
-                                        (merge initial-session-state {:cylon/original-uri (get-original-uri req)}))))
+          ]
+      (debugf "Initiating multi-factor authentication, redirecting to first step %s" first-step)
+      (if (session session-store req)
+        (redirect first-step)
+        ;; otherwise (not authenticated already)
+        (respond-with-new-session!
+         session-store req
+         (merge initial-session-state {:cylon/original-uri (get-original-uri req)})
+         (redirect first-step))))
     )
-  (get-result [this req]
-    (when (exists? (:browser-session this) req) (get-data (:browser-session this) req)))
-  (clean-resources! [this req]
-    (remove! (:browser-session this) req))
+  (get-outcome [this req]
+    (session session-store req))
+  #_(clean-resources! [this req]
+      (remove! session-store req))
 
   ;; We proxy onto the dependencies which satisfy WebService in order to
   ;; change their behaviour.
@@ -133,9 +136,9 @@
 
                                      ;; No more steps, we're done. Redirect to the initiator.
                                      (do
-                                       (assoc-data! (:browser-session this) req {:cylon/authenticated? true})
+                                       (assoc-session-data! (:session-store this) req {:cylon/authenticated? true})
                                        ;; TODO What's this original uri? Can it also include the query string?
-                                       (let [original-uri (get-data (:browser-session this) req  :cylon/original-uri)]
+                                       (let [original-uri (:cylon/original-uri (session session-store req))]
                                          (debugf "Successful authentication, redirecting to original uri of %s" original-uri)
                                          (redirect-after-post original-uri))))
                                ;; It is the default policy of this
@@ -183,7 +186,7 @@
    (->> opts
         (s/validate {:steps [s/Keyword]})
         map->MultiFactorAuthenticationInteraction)
-   (conj  (:steps opts)  :browser-session)))
+   (conj (:steps opts) :session-store)))
 
 (defprotocol LoginFormRenderer
   (render-login-form [_ req model]))
@@ -197,7 +200,7 @@
 ;; 200 (OK) or 403 (Login failure).
 ;;
 ;; TODO Obviously we should also deal with errors, such as 500
-(defrecord LoginForm [fields]
+(defrecord LoginForm [fields session-store user-domain renderer]
   WebService
   (request-handlers [this]
     {::GET-login-form
@@ -206,33 +209,33 @@
        (let [response
              {:status 200
               :body (render-login-form
-                     (:renderer this) req
+                     renderer req
                      {:form {:method :post
                              :action (path-for req ::POST-login-form)
                              :fields fields}})}]
         ;; Conditional response post-processing
         (if
          ;; In the absence of a session...
-         (not (exists? (:browser-session this) req))
+            (not (session session-store req))
          ;; We create an empty one. This is because the POST handler
          ;; requires that a session exists within which it can store the
          ;; identity on a successful login
-         (create-and-attach! (:browser-session this) req response {})
+         (respond-with-new-session! session-store req response {})
          response)))
 
      ::POST-login-form
      (->
       (fn [req]
-        (let [params (-> req :form-params)
+        (let [params (:form-params req)
               identity (get params "user")
               password (get params "password")
-              session (get-data (:browser-session this) req)]
+              session (session session-store req)]
 
           (if (and identity
                    (not-empty identity)
-                   (verify-user (:user-domain this) (.trim identity) password))
+                   (verify-user user-domain (.trim identity) password))
             (do
-              (assoc-data! (:browser-session this) req {:cylon/identity identity})
+              (assoc-session-data! session-store req {:cylon/identity identity})
               {:status 200
                :body "Thank you! - you gave the correct information!"})
 
@@ -260,17 +263,17 @@
                               (s/optional-key :placeholder) s/Str
                               (s/optional-key :password?) s/Bool}]})
        map->LoginForm
-       (<- (component/using [:user-domain :browser-session :renderer]))))
+       (<- (component/using [:user-domain :session-store :renderer]))))
 
-(defrecord TimeBasedOneTimePasswordForm []
+(defrecord TimeBasedOneTimePasswordForm [user-domain session-store]
   WebService
   (request-handlers [this]
     {::GET-totp-form
      (fn [req]
        ;; TODO this "let .. secret " is only for showing the helper message to the developer
        ;; TODO  remove in production
-       (let [identity (get-data (:browser-session this) req :cylon/identity)
-             secret (get-totp-secret (:user-domain this) identity)]
+       (let [identity (:cylon/identity (session session-store req))
+             secret (get-totp-secret user-domain identity)]
          (if secret
            {:status 200
             :body (html
@@ -291,11 +294,10 @@
      ::POST-totp-form
      (->
       (fn [req]
-        (let [params (-> req :form-params)
+        (let [params (:form-params req)
               totp-code (get params "totp-code")
-              identity (get-data (:browser-session this) req  :cylon/identity)
-              secret (get-totp-secret (:user-domain this) identity)
-              ]
+              identity (:cylon/identity (session session-store req))
+              secret (get-totp-secret user-domain identity)]
           (if
               (= totp-code (totp-token secret))
 
@@ -320,11 +322,12 @@
     )
   (step-required? [this req]
     false
-    #_(let [identity (get-data (:browser-session this) req  :cylon/identity)]
-      (not (nil? (get-totp-secret (:user-domain this) identity))))))
+    #_(let [identity (get-data session-store req  :cylon/identity)]
+        (not (nil? (get-totp-secret user-domain identity))))))
 
 (defn new-authentication-totp-form [& {:as opts}]
   (->>
    opts
+   (merge {})
    map->TimeBasedOneTimePasswordForm
-   (<- (component/using [:browser-session :user-domain]))))
+   (<- (component/using [:session-store :user-domain]))))
