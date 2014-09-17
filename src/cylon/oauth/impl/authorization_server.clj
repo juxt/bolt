@@ -20,7 +20,7 @@
    [clj-jwt.core :refer (to-str sign jwt)]
    [ring.middleware.params :refer (wrap-params)]
    [ring.middleware.cookies :refer (cookies-request)]
-   [cylon.session :refer (session respond-with-new-session! assoc-session-data! respond-close-session!)]
+   [cylon.session :refer (session respond-with-new-session! assoc-session-data! respond-close-session! remove-token!)]
    [cylon.token-store :refer (create-token! get-token-by-id)]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]
    [ring.util.response :refer (redirect)]
@@ -67,7 +67,9 @@
                  {:client-id client-id
                   :code code}
                  {:created (java.util.Date.)
-                  :cylon/identity (:cylon/identity auth-interaction-session-result)})
+                  :cylon/identity (:cylon/identity auth-interaction-session-result)
+                  :tokid (:cylon/token-id session)}
+                 )
 
           ;; When a user permits a client, the client's scopes that they have accepted, are stored in the user preferences database
           ;; why?
@@ -214,7 +216,8 @@
               (debugf "Granting scopes: %s" granted-scopes)
               (swap! store update-in
                      [{:client-id client-id
-                       :code code}]
+                       :code code
+                       }]
                      assoc :granted-scopes granted-scopes)
 
               (redirect
@@ -239,7 +242,8 @@
                {:status 403 :body "Client could not be authenticated"}
 
                (if-let [{identity :cylon/identity
-                         granted-scopes :granted-scopes}
+                         granted-scopes :granted-scopes
+                         tokid :tokid}
                         (get @store
                              ;; I don't think this key has to include client-id
                              ;; - it can just be 'code'.
@@ -268,8 +272,9 @@
                    ;; status code:"
 
                    (debugf "About to OK, granted scopes is %s (type is %s)" granted-scopes (type granted-scopes))
-                   (respond-close-session! session-store req {:status 200
-                                                              :body (encode {"access_token" access-token
+                   (remove-token! session-store tokid )
+                   {:status 200
+                    :body (encode {"access_token" access-token
                                    "token_type" "Bearer"
                                    "expires_in" 3600
                                    ;; TODO Refresh token (optional)
@@ -286,7 +291,7 @@
                                                   jwt
                                                   (sign :HS256 "secret") to-str)
 
-                                   })})
+                                   })}
                    )
                  {:status 400
                   :body "Invalid request - unknown code"}))))

@@ -20,4 +20,7 @@
     "Delete the session from the store, response should inform the
     browser by setting the cookie with a 1970 expiry")
 
+  (remove-token! [_ tokid]
+    "there is times that you can't access to the browser .... :| ")
+
   #_(dissoc-data! [_ req key]))

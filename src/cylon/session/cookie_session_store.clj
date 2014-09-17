@@ -8,7 +8,6 @@
    [plumbing.core :refer (<-)]))
 
 (defn ->cookie [session]
-  (println "sssss::::: " session)
   {:value (:cylon/token-id session)
    :expires (.toGMTString
              (doto (new java.util.Date)
@@ -52,19 +51,14 @@
       (cookies-response-with-session response cookie-id token)))
 
   (respond-close-session! [component request response]
-    (println "lllllllllllllllllllllllclose")
-
-    (println (-> request cookies-request :cookies (get cookie-id) :value))
-    (clojure.pprint/pprint request)
-    (println "********************** ")    (println "********************** ")    (println "********************** ")
-    (clojure.pprint/pprint (-> request cookies-request))
-
     (when-let [tokid (-> request cookies-request :cookies (get cookie-id) :value)]
-      (println "tokid" tokid)
       (purge-token! token-store tokid))
     (cookies-response
        (merge-with merge response
-                   {:cookies {cookie-id delete-cookie}}))))
+                   {:cookies {cookie-id delete-cookie}})))
+  (remove-token! [_ tokid]
+    (purge-token! token-store tokid))
+  )
 
 (def new-cookie-session-store-schema {:cookie-id s/Str})
 

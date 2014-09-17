@@ -43,6 +43,13 @@
    response :- Response]
   (p/respond-close-session! component request response))
 
+
+(s/defn remove-token! :- nil
+  [component :- (s/protocol p/SessionStore)
+   tokid :- s/Str]
+  (p/remove-token! component tokid))
+
+
 #_(defn get-session-id [request cookie-name]
   (-> request cookies-request :cookies (get cookie-name) :value))
 

@@ -144,7 +144,6 @@
                         (assoc-session-data! session-store req {:access-token access-token :scope scope :open-id (-> id-token :claims) })
 
 
-
                         (redirect original-uri))))))))))
       wrap-params)
 
