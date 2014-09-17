@@ -37,18 +37,18 @@
     "Get the claims contained in the id-token returned as part of an
     OpenID/Connect exchange."))
 
-(defn get-identity [client req]
-  (-> (get-claims client req) :sub))
+(defn get-subject-identifier [client req]
+  (->> req (get-claims client) :sub))
 
 ;; Ring middleware to restrict a handler to a given role.
 ;; The algo in here should fit many usages. However, other functions
 ;; could be provided to implement different policies.
-(defn wrap-require-authorization-base
+(defn wrap-require-authorization
   "Restrict a handler to a role. :identity and :access-token are added
   to the request. If a role is specified, also check that the role
   exists in the scope of the client. If role isn't specified, the
   identity and access-token are still retrieved."
-  [h uri client & [role]]
+  [h client & [role]]
   (fn [req]
     (let [{:keys [access-token scope]}
           (s/with-fn-validation (get-access-token+ client req))]
@@ -56,7 +56,7 @@
        (nil? access-token)
        (do
          (debugf "No access token, so soliciting one from client %s" client)
-         (solicit-access-token client req uri))
+         (solicit-access-token client req (:authorize-uri client)))
        (expired? client req access-token)
        (do
          (debugf "access token has expired, seeking to refresh it")
@@ -71,9 +71,5 @@
 
        :otherwise
        (h (assoc req
-            :identity (get-identity client req)
-            :access-token access-token))))))
-
-(defn wrap-require-authorization
-  [h client  & [role]]
-  (wrap-require-authorization-base h (:authorize-uri client) client role))
+            :cylon/subject-identifier (get-subject-identifier client req)
+            :cylon/access-token access-token))))))

@@ -45,12 +45,13 @@
 
 ;; TODO: review why we need to call "init-authentication" twice in this code (this fn and ::authorization-endpoint handler)
 (defn authorize-client [session {:keys [session-store] :as component} authenticator req store]
-  (if-let [auth-interaction-session-result (get-outcome authenticator  req)]
+  (debugf "Getting authentication outcome from authenticator %s" authenticator)
+  (if-let [authentication (get-outcome authenticator req)]
     ;; the session can be authenticated or maybe we are
     ;; coming from the authenticator workflow
     (do
-      (debugf "auth session result is %s" auth-interaction-session-result)
-      (if (:cylon/authenticated? auth-interaction-session-result)
+      (debugf "auth session result is %s" authentication)
+      (if (:cylon/authenticated? authentication)
         ;; "you are authenticated now!"
 
         (let [#__ #_(clean-resources! authenticator req)
@@ -63,15 +64,14 @@
                       requires-user-acceptance?
                       required-scopes] :as client}
               (lookup-client+ (:client-registry component) client-id)]
+
           (assoc-session-data! session-store req {:cylon/authenticated? true :code code})
-
-
           ;; Remember the code for the possible exchange - TODO expire these
           (swap! store assoc
-                 {:client-id client-id
-                  :code code}
-                 {:created (java.util.Date.)
-                  :cylon/identity (:cylon/identity auth-interaction-session-result)})
+                 {:client-id client-id :code code}
+                 (merge
+                  {:created (java.util.Date.)}
+                  (select-keys authentication [:cylon/subject-identifier])))
 
           ;; When a user permits a client, the client's scopes that they have accepted, are stored in the user preferences database
           ;; why?
@@ -118,68 +118,39 @@
 
         ;; you have auth-session although you are NOT authenticated but ,,, we carry on with this session"
         (do
-          (debugf "Session exists, but no evidence in it of authentication. Initiating authentication interaction using %s" (:authenticator component))
-          (initiate-authentication-interaction authenticator  req {}))))
+          (debugf "Session exists, but no evidence in it of authentication. Initiating authentication interaction using %s. Data in session is %s"
+                  (:authenticator component)
+                  authentication)
+          (initiate-authentication-interaction authenticator req {}))))
 
     ;; You are not authenticated, so let's authenticate first.
     (init-authentication component authenticator req)
     ))
 
-
-
-(defrecord AuthorizationServer [store scopes iss session-store access-token-store authenticator authenticator-signup]
+(defrecord AuthorizationServer [store scopes iss session-store access-token-store authenticator]
   WebService
   (request-handlers [component]
     {
-     ::auth-signup-endpoint
-     (-> (fn [req]
-           ;; Establish whether the user-agent is already authenticated.
-           ;; If not, create a session with client-id, scope and state
-           ;; and redirect to the login form
-
-           ;; TODO We should validate the incoming response_type
-           ;; The trouble is, we lose all the query string information
-           ;; if we initiate the auth interaction session.
-
-           ;; (Can we do this in a go block however?)
-
-           (debugf "OAuth2 authorization server: Authorizing request")
-           (if-not (session session-store req)
-             (init-authentication component authenticator-signup req)
-             (let [{response-type "response_type" client-id "client_id"} (:query-params req)
-                   r-t (or response-type (session session-store req :response-type))
-                   ]
-               (case r-t
-                 "code" (authorize-client
-                         (session session-store req)
-                         component authenticator req store)
-
-                 ;; Unknown response_type
-                 {:status 400
-                  :body (format "Bad response_type parameter: '%s'" response-type)}
-                 )
-               )))
-         wrap-params
-         wrap-schema-validation)
-
      ::authorization-endpoint
      (-> (fn [req]
            ;; Establish whether the user-agent is already authenticated.
            ;; If not, create a session with client-id, scope and state
-           ;; and redirect to the login form
+           ;; and redirect to the login form which may redirect here,
+           ;; based on policy. Usually it is nice for the system to
+           ;; remember what the user was trying to do.
 
            ;; TODO We should validate the incoming response_type
            ;; The trouble is, we lose all the query string information
            ;; if we initiate the auth interaction session.
 
            ;; (Can we do this in a go block however?)
+           ;; -> that might make things very hard to debug
 
            (debugf "OAuth2 authorization server: Authorizing request")
-           (if-not (session session-store req)
+           (if-not (session session-store req) ; not just that, there needs to be some identity too.
              (init-authentication component authenticator req)
              (let [{response-type "response_type" client-id "client_id"} (:query-params req)
-                   r-t (or response-type (:response-type (session session-store req)))
-                   ]
+                   r-t (or response-type (:response-type (session session-store req)))]
                (case r-t
                  "code" (authorize-client
                          (session session-store req)
@@ -242,7 +213,7 @@
              (if (not= (get params "client_secret") (:client-secret client))
                {:status 403 :body "Client could not be authenticated"}
 
-               (if-let [{identity :cylon/identity
+               (if-let [{sub :cylon/subject-identifier
                          granted-scopes :granted-scopes}
                         (get @store
                              ;; I don't think this key has to include client-id
@@ -253,12 +224,12 @@
                        _ (create-token! access-token-store
                                         access-token
                                         {:client-id client-id
-                                         :identity identity
+                                         :cylon/subject-identifier sub
                                          :scopes granted-scopes})
                        claim {:iss iss
-                              :sub identity
+                              :sub sub
                               :aud client-id
-                              :exp (plus (now) (days 1)) ; expiry
+                              :exp (plus (now) (days 1)) ; expiry ; TODO unhardcode
                               :iat (now)}]
 
                    (infof "Claim is %s" claim)
@@ -335,5 +306,4 @@
             [:access-token-store
              :session-store
              :client-registry
-             :authenticator
-             :authenticator-signup]))))
+             :authenticator]))))

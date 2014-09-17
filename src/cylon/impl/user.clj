@@ -83,9 +83,7 @@
   component/Lifecycle
   (start [component]
     (doseq [{:keys [id password]} users]
-      (do
-        (println (format "Adding user '%s' with password: %s" id password))
-        (add-user! (:cylon/user-domain component) id password {:name "Development user"})))
+      (add-user! (:cylon/user-domain component) id password {:name "Development user"}))
     component)
   (stop [component] component))
 

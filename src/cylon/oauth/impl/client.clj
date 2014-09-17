@@ -124,7 +124,7 @@
                    :body (format "Something went wrong: status of underlying request %s" (:status at-resp))}
 
 
-                  (let [original-uri (:original-uri (session session-store req))
+                  (let [original-uri (:cylon/original-uri (session session-store req))
                         access-token (get (:body at-resp) "access_token")
 
                         ;; TODO If scope not there it is the same as
@@ -140,11 +140,7 @@
                         (infof "Scope is %s" scope)
                         (infof "Claims are %s" (:claims id-token))
 
-
                         (assoc-session-data! session-store req {:access-token access-token :scope scope :open-id (-> id-token :claims) })
-
-
-
                         (redirect original-uri))))))))))
       wrap-params)
 
@@ -190,7 +186,10 @@
       ;; We need a session to store the original uri
 
       (expect-state this state)
-      (respond-with-new-session! session-store req {:original-uri original-uri} response)))
+      ;; We create a session
+      (debugf "Creating session to store original uri of %s" original-uri)
+      (respond-with-new-session!
+       session-store req {:cylon/original-uri original-uri} response)))
 
   (expired? [_ req access-token] false)
 
@@ -230,7 +229,6 @@
                      :store s/Any
 
                      :authorize-uri s/Str
-                     :signup-uri s/Str
                      :access-token-uri s/Str
 
                      :requires-user-acceptance? s/Bool

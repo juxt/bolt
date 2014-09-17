@@ -14,8 +14,7 @@
    [ring.middleware.cookies :refer (cookies-response wrap-cookies)]
    [ring.middleware.params :refer (wrap-params)]
    [ring.util.response :refer (redirect redirect-after-post)]
-   [schema.core :as s]
-)
+   [schema.core :as s])
   (:import
    (javax.xml.bind DatatypeConverter)))
 
@@ -41,7 +40,6 @@
             {:cylon/user user
              :cylon/authentication-method :http-basic}))))))
 
-
 (defn new-http-basic-authenticator [& {:as opts}]
   (component/using
    (->> opts
@@ -66,7 +64,6 @@
 
 ;; (If you're looking for CookieAuthenticator, it's in cylon.impl.session)
 
-
 ;; -----------------------------------------------------------------------
 
 (defn unchunk [s]
@@ -83,8 +80,8 @@
 (defn get-original-uri [req]
   (str (:uri req)
        (when-let [qs (:query-string req)] (when (not-empty qs) (str "?" qs )))))
-;; Again, rename to MultiFactorAuthenticator as above
 
+;; Again, rename to MultiFactorAuthenticator as above
 (defrecord MultiFactorAuthenticationInteraction [steps session-store]
   AuthenticationInteraction
   (initiate-authentication-interaction [this req initial-session-state]
@@ -118,6 +115,8 @@
     (debugf "Merging steps %s" steps)
     (apply merge
            (for [[step next-steps] (link-up ((apply juxt steps) this))]
+             ;; The point of this is to wire together the steps.
+             ;; POSTS which return 200 (OK) are 'mutated' return a 302 to the next step
              (reduce-kv
               (fn [acc k h]
                 (debugf (name k) h)
@@ -144,10 +143,7 @@
                                ;; It is the default policy of this
                                ;; authenticator to allow the user to
                                ;; retry entering her credentials
-                               403 (redirect-after-post (get-location step req))
-                               )
-                             ))))
-                )
+                               403 (redirect-after-post (get-location step req))))))))
               {}
               (request-handlers step)))))
 
@@ -188,6 +184,7 @@
         map->MultiFactorAuthenticationInteraction)
    (conj (:steps opts) :session-store)))
 
+;; TODO Move to cylon.authentication.protocols
 (defprotocol LoginFormRenderer
   (render-login-form [_ req model]))
 
@@ -212,6 +209,7 @@
                      renderer req
                      {:form {:method :post
                              :action (path-for req ::POST-login-form)
+                             :signup-uri (path-for req :cylon.signup.signup/GET-signup-form)
                              :fields fields}})}]
         ;; Conditional response post-processing
         (if
@@ -246,7 +244,7 @@
 
   (routes [_] ["/" {"login" {:get ::GET-login-form
                              :post ::POST-login-form}}])
-  (uri-context [_] "/basic")
+  (uri-context [_] "")
 
   InteractionStep
   (get-location [this req]
@@ -256,7 +254,7 @@
 
 (defn new-authentication-login-form [& {:as opts}]
   (->> opts
-       (merge {:fields [{:name "user" :label "User" :placeholder "userid"}
+       (merge {:fields [{:name "user" :label "User" :placeholder "id or email"}
                         {:name "password" :label "Password" :password? true :placeholder "password"}]})
        (s/validate {:fields [{:name s/Str
                               :label s/Str
@@ -312,9 +310,10 @@
             )))
       wrap-params wrap-cookies)})
 
-  (routes [_] ["/" {"login" {:get ::GET-totp-form
-                             :post ::POST-totp-form}}])
-  (uri-context [_] "/totp-form")
+  (routes [_] ["/" {"totp-challenge"
+                    {:get ::GET-totp-form
+                     :post ::POST-totp-form}}])
+  (uri-context [_] "")
 
   InteractionStep
   (get-location [this req]

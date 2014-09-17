@@ -32,13 +32,8 @@
           expiry (:cylon/expiry token)]
       (cond
        (nil? expiry) token
-       (< (now) (.getTime expiry)) (do
-                                     (println "Must renew token")
-                                     (renew-token! component id))
-       :otherwise (do
-                    (println "Must purge token")
-                    (purge-token! component id)
-                    ))))
+       (< (now) (.getTime expiry)) (renew-token! component id)
+       :otherwise (purge-token! component id))))
 
   (purge-token! [_ id]
     (swap! tokens dissoc id)
@@ -70,6 +65,8 @@
 
 (defn new-atom-backed-token-store [& {:as opts}]
   (->> opts
+       ;; TODO: Would prefer to rename ttl-in-secs to ttl and require a
+       ;; Joda time period.
        (merge {:ttl-in-secs (* 60 60 4)
                :tokens (atom {})})
        (s/validate new-atom-backed-token-store-schema)

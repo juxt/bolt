@@ -1,5 +1,6 @@
 (ns cylon.session.cookie-session-store
   (:require
+   [clojure.tools.logging :refer :all]
    [com.stuartsierra.component :refer (using)]
    [cylon.session.protocols :refer (SessionStore)]
    [cylon.token-store :refer (get-token-by-id merge-token! create-token! purge-token!)]
@@ -8,7 +9,6 @@
    [plumbing.core :refer (<-)]))
 
 (defn ->cookie [session]
-  (println "sssss::::: " session)
   {:value (:cylon/token-id session)
    :expires (.toGMTString
              (doto (new java.util.Date)
@@ -49,13 +49,7 @@
 
     (let [id (str (java.util.UUID/randomUUID))
           token (create-token! token-store id data)]
-
-
-      (println "______________________________******+")
-      (println token)
-      (println response)
-      (println cookie-id)
-
+      (debugf "Creating new session cookie %s tied to token %s" id token)
       (cookies-response-with-session response cookie-id token)))
 
   (respond-close-session! [component request response]
