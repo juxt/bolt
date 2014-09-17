@@ -136,7 +136,7 @@
 
                                      ;; No more steps, we're done. Redirect to the initiator.
                                      (do
-                                       (assoc-session-data! (:session-store this) req {:cylon/authenticated? true})
+                                       (assoc-session-data! session-store  req {:cylon/authenticated? true})
                                        ;; TODO What's this original uri? Can it also include the query string?
                                        (let [original-uri (:cylon/original-uri (session session-store req))]
                                          (debugf "Successful authentication, redirecting to original uri of %s" original-uri)
@@ -213,9 +213,10 @@
                      {:form {:method :post
                              :action (path-for req ::POST-login-form)
                              :fields fields}})}]
-        ;; Conditional response post-processing
-        (if
-         ;; In the absence of a session...
+         ;; Conditional response post-processing
+         (assert (session session-store req))
+                  response
+        #_(if         ;; In the absence of a session...
             (not (session session-store req))
          ;; We create an empty one. This is because the POST handler
          ;; requires that a session exists within which it can store the

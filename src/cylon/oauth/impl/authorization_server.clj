@@ -34,14 +34,10 @@
 (defn init-authentication [{:keys [session-store] :as component} authenticator req]
   (do
     (debugf "Not authenticated, must authenticate first with %s" authenticator )
-    (respond-with-new-session!
-     session-store req
-     {:client-id (-> req :query-params (get "client_id"))
-      :requested-scopes (decode-scope (-> req :query-params (get "scope")))
-      :state (-> req :query-params (get "state"))
-      :response-type  "code"}
-     (initiate-authentication-interaction authenticator req {})
-     )))
+    (initiate-authentication-interaction authenticator req {:client-id (-> req :query-params (get "client_id"))
+                                                            :requested-scopes (decode-scope (-> req :query-params (get "scope")))
+                                                            :state (-> req :query-params (get "state"))
+                                                            :response-type  "code"})))
 
 ;; TODO: review why we need to call "init-authentication" twice in this code (this fn and ::authorization-endpoint handler)
 (defn authorize-client [session {:keys [session-store] :as component} authenticator req store]
@@ -294,7 +290,7 @@
                    )
                  {:status 400
                   :body "Invalid request - unknown code"}))))
-         wrap-params )})
+         wrap-params wrap-cookies )})
 
   (routes [_]
     ["/" {"authorize" {:get ::authorization-endpoint}

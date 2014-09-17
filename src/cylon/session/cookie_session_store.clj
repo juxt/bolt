@@ -17,7 +17,7 @@
 
 ;(doto (new java.util.Date) (.setTime  (.getTime (:c {:c (new java.util.Date)}))))
 (def delete-cookie
-  {:value ""
+  {:value "token=deleted"
    :expires (.toGMTString (java.util.Date. 70 0 1))
    :path "/"})
 
@@ -49,17 +49,18 @@
 
     (let [id (str (java.util.UUID/randomUUID))
           token (create-token! token-store id data)]
-
-
-      (println "______________________________******+")
-      (println token)
-      (println response)
-      (println cookie-id)
-
       (cookies-response-with-session response cookie-id token)))
 
   (respond-close-session! [component request response]
+    (println "lllllllllllllllllllllllclose")
+
+    (println (-> request cookies-request :cookies (get cookie-id) :value))
+    (clojure.pprint/pprint request)
+    (println "********************** ")    (println "********************** ")    (println "********************** ")
+    (clojure.pprint/pprint (-> request cookies-request))
+
     (when-let [tokid (-> request cookies-request :cookies (get cookie-id) :value)]
+      (println "tokid" tokid)
       (purge-token! token-store tokid))
     (cookies-response
        (merge-with merge response
