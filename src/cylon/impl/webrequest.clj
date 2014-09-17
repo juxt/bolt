@@ -12,7 +12,7 @@
    cylon.impl.session
    cylon.impl.authentication)
   (:import
-   (cylon.impl.session CookieAuthenticator)
+;   (cylon.impl.session CookieAuthenticator)
    (cylon.impl.authentication StaticAuthenticator
                               HttpBasicAuthenticator
                               CompositeDisjunctiveAuthenticator)))
