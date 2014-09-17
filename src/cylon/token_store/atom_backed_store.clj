@@ -23,7 +23,7 @@
   (create-token! [component id m]
     (when (get-token-by-id component id)
       (throw (ex-info "Token id already used" {:id id})))
-    (let [token (merge (when ttl-in-secs {:cylon/expiry (expiry-date ttl-in-secs)}) m)]
+    (let [token (merge (when ttl-in-secs {:cylon/expiry (expiry-date ttl-in-secs)}) (merge {:cylon/token-id id}  m))]
       (swap! tokens assoc id token)
       token))
 

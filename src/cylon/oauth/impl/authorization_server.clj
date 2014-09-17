@@ -20,7 +20,7 @@
    [clj-jwt.core :refer (to-str sign jwt)]
    [ring.middleware.params :refer (wrap-params)]
    [ring.middleware.cookies :refer (cookies-request)]
-   [cylon.session :refer (session respond-with-new-session! assoc-session-data!)]
+   [cylon.session :refer (session respond-with-new-session! assoc-session-data! respond-close-session!)]
    [cylon.token-store :refer (create-token! get-token-by-id)]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]
    [ring.util.response :refer (redirect)]
@@ -272,9 +272,8 @@
                    ;; status code:"
 
                    (debugf "About to OK, granted scopes is %s (type is %s)" granted-scopes (type granted-scopes))
-
-                   {:status 200
-                    :body (encode {"access_token" access-token
+                   (respond-close-session! session-store req {:status 200
+                                                              :body (encode {"access_token" access-token
                                    "token_type" "Bearer"
                                    "expires_in" 3600
                                    ;; TODO Refresh token (optional)
@@ -292,6 +291,7 @@
                                                   (sign :HS256 "secret") to-str)
 
                                    })})
+                   )
                  {:status 400
                   :body "Invalid request - unknown code"}))))
          wrap-params )})

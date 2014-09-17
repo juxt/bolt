@@ -8,15 +8,17 @@
    [plumbing.core :refer (<-)]))
 
 (defn ->cookie [session]
-  {:value (::key session)
+  (println "sssss::::: " session)
+  {:value (:cylon/token-id session)
    :expires (.toGMTString
              (doto (new java.util.Date)
-               (.setTime (::expiry session))))
+               (.setTime (.getTime (:cylon/expiry session)))))
    :path "/"})
 
+;(doto (new java.util.Date) (.setTime  (.getTime (:c {:c (new java.util.Date)}))))
 (def delete-cookie
-  {:value nil
-   :expires (.toGMTString (java.util.Date. 1970 0 1))
+  {:value ""
+   :expires (.toGMTString (java.util.Date. 70 0 1))
    :path "/"})
 
 (defn cookies-response-with-session [response id-cookie session]
@@ -44,10 +46,17 @@
   (respond-with-new-session! [component request data response]
     ;; TODO Create a HMAC'd identifier, not just a random UUID that
     ;; could be predicted and therefore allow session forgery.
-    (let [id (str (java.util.UUID/randomUUID))]
-      (->>
-       (create-token! token-store id data)
-       (cookies-response-with-session response cookie-id))))
+
+    (let [id (str (java.util.UUID/randomUUID))
+          token (create-token! token-store id data)]
+
+
+      (println "______________________________******+")
+      (println token)
+      (println response)
+      (println cookie-id)
+
+      (cookies-response-with-session response cookie-id token)))
 
   (respond-close-session! [component request response]
     (when-let [tokid (-> request cookies-request :cookies (get cookie-id) :value)]
