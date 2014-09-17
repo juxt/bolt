@@ -31,16 +31,13 @@
     (s/with-fn-validation
       (h req))))
 
-(defn init-authentication [{:keys [session-store] :as component} authenticator req]
+(defn init-authentication [{:keys [session-store] :as component} authenticator req initial-state]
   (do
     (debugf "Not authenticated, must authenticate first with %s" authenticator )
-    (initiate-authentication-interaction authenticator req {:client-id (-> req :query-params (get "client_id"))
-                                                            :requested-scopes (decode-scope (-> req :query-params (get "scope")))
-                                                            :state (-> req :query-params (get "state"))
-                                                            :response-type  "code"})))
+    (initiate-authentication-interaction authenticator req initial-state)))
 
 ;; TODO: review why we need to call "init-authentication" twice in this code (this fn and ::authorization-endpoint handler)
-(defn authorize-client [session {:keys [session-store] :as component} authenticator req store]
+(defn authorize-client [session {:keys [session-store] :as component} authenticator req store initial-data]
   (if-let [auth-interaction-session-result (get-outcome authenticator  req)]
     ;; the session can be authenticated or maybe we are
     ;; coming from the authenticator workflow
@@ -52,7 +49,7 @@
         (let [#__ #_(clean-resources! authenticator req)
               code (str (java.util.UUID/randomUUID))
               {:keys [client-id requested-scopes]}
-              session
+              initial-data
               {:keys [redirection-uri
                       application-name
                       description
@@ -112,7 +109,7 @@
                (str redirection-uri
                     (as-query-string
                      {"code" code
-                      "state"  (:state session)}))))))
+                      "state"  (:state initial-data)}))))))
 
         ;; you have auth-session although you are NOT authenticated but ,,, we carry on with this session"
         (do
@@ -120,12 +117,12 @@
           (initiate-authentication-interaction authenticator  req {}))))
 
     ;; You are not authenticated, so let's authenticate first.
-    (init-authentication component authenticator req)
+    (init-authentication component authenticator req initial-data)
     ))
 
 
 
-(defrecord AuthorizationServer [store scopes iss session-store access-token-store authenticator authenticator-signup]
+(defrecord AuthorizationServer [store scopes iss session-store access-token-store authenticator authenticator-signup session-store-signup]
   WebService
   (request-handlers [component]
     {
@@ -141,22 +138,29 @@
 
            ;; (Can we do this in a go block however?)
 
-           (debugf "OAuth2 authorization server: Authorizing request")
-           (if-not (session session-store req)
-             (init-authentication component authenticator-signup req)
-             (let [{response-type "response_type" client-id "client_id"} (:query-params req)
-                   r-t (or response-type (session session-store req :response-type))
-                   ]
-               (case r-t
-                 "code" (authorize-client
-                         (session session-store req)
-                         component authenticator req store)
+           (debugf "OAuth2 authorization server: User wants to signup from login-form")
+           (let [session (session session-store req)]
+             (assert session "you need to come from login-form")
+             (let [initial-data (select-keys session [:client-id :requested-scopes :state :response-type])] (if-not (session session-store-signup req)
+                (do
+                  (println "?????")
+                  (println (select-keys session [:client-id :requested-scopes :state :response-type]))
+                  (println session)
+                  (init-authentication component authenticator-signup req
+                                       initial-data))
+                (let [s-k (select-keys session [:client-id :requested-scopes :state :response-type])
 
-                 ;; Unknown response_type
-                 {:status 400
-                  :body (format "Bad response_type parameter: '%s'" response-type)}
-                 )
-               )))
+                      ]
+                  (case (:response-type s-k)
+                    "code" (authorize-client
+                            (session session-store-signup req)
+                            component authenticator-signup req store initial-data)
+
+                    ;; Unknown response_type
+                    {:status 400
+                     :body (format "Bad response_type parameter: '%s'" (:response-type s-k))}
+                    )
+                  )))))
          wrap-params
          wrap-schema-validation)
 
@@ -173,21 +177,25 @@
            ;; (Can we do this in a go block however?)
 
            (debugf "OAuth2 authorization server: Authorizing request")
-           (if-not (session session-store req)
-             (init-authentication component authenticator req)
-             (let [{response-type "response_type" client-id "client_id"} (:query-params req)
-                   r-t (or response-type (:response-type (session session-store req)))
-                   ]
-               (case r-t
-                 "code" (authorize-client
-                         (session session-store req)
-                         component authenticator req store)
+           (let [initial-data {:client-id (-> req :query-params (get "client_id"))
+                                                            :requested-scopes (decode-scope (-> req :query-params (get "scope")))
+                                                            :state (-> req :query-params (get "state"))
+                               :response-type  "code"}]
+             (if-not (session session-store req)
+              (init-authentication component authenticator req initial-data)
+              (let [{response-type "response_type" client-id "client_id"} (:query-params req)
+                    r-t (or response-type (:response-type (session session-store req)))
+                    ]
+                (case r-t
+                  "code" (authorize-client
+                          (session session-store req)
+                          component authenticator req store initial-data)
 
-                 ;; Unknown response_type
-                 {:status 400
-                  :body (format "Bad response_type parameter: '%s'" response-type)}
-                 )
-               )))
+                  ;; Unknown response_type
+                  {:status 400
+                   :body (format "Bad response_type parameter: '%s'" response-type)}
+                  )
+                ))))
          wrap-params
          wrap-schema-validation)
 
@@ -337,4 +345,5 @@
              :session-store
              :client-registry
              :authenticator
-             :authenticator-signup]))))
+             :authenticator-signup
+             :session-store-signup]))))
