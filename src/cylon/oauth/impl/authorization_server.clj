@@ -113,7 +113,7 @@
 
         ;; you have auth-session although you are NOT authenticated but ,,, we carry on with this session"
         (do
-          (debugf "Session exists, but no evidence in it of authentication. Initiating authentication interaction using %s" (:authenticator component))
+          (debugf "Session exists, but no evidence in it of authentication. Initiating authentication interaction using %s" authenticator )
           (initiate-authentication-interaction authenticator  req {}))))
 
     ;; You are not authenticated, so let's authenticate first.
@@ -141,26 +141,22 @@
            (debugf "OAuth2 authorization server: User wants to signup from login-form")
            (let [session (session session-store req)]
              (assert session "you need to come from login-form")
-             (let [initial-data (select-keys session [:client-id :requested-scopes :state :response-type])] (if-not (session session-store-signup req)
+             (let [initial-data (select-keys session [:client-id :requested-scopes :state :response-type])]
+               (if-not (session session-store-signup req)
                 (do
-                  (println "?????")
-                  (println (select-keys session [:client-id :requested-scopes :state :response-type]))
-                  (println session)
                   (init-authentication component authenticator-signup req
                                        initial-data))
-                (let [s-k (select-keys session [:client-id :requested-scopes :state :response-type])
 
-                      ]
-                  (case (:response-type s-k)
-                    "code" (authorize-client
-                            (session session-store-signup req)
-                            component authenticator-signup req store initial-data)
+                (case (:response-type initial-data)
+                  "code" (authorize-client
+                          (session session-store-signup req)
+                          component authenticator-signup req store initial-data)
 
-                    ;; Unknown response_type
-                    {:status 400
-                     :body (format "Bad response_type parameter: '%s'" (:response-type s-k))}
-                    )
-                  )))))
+                  ;; Unknown response_type
+                  {:status 400
+                   :body (format "Bad response_type parameter: '%s'" (:response-type initial-data))}
+                  )
+                ))))
          wrap-params
          wrap-schema-validation)
 
@@ -224,8 +220,7 @@
               (debugf "Granting scopes: %s" granted-scopes)
               (swap! store update-in
                      [{:client-id client-id
-                       :code code
-                       }]
+                       :code code}]
                      assoc :granted-scopes granted-scopes)
 
               (redirect
