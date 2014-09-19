@@ -35,20 +35,14 @@
   client-state and server-state must be the same in each communication.
   But there are cases (as signup) that the server-session-state willn't
   the same as new client auth-endpoint request
-  That's the reason for this align client-server state function")
-  (authorize-response-type-code [_ req]))
+  That's the reason for this align client-server state function"))
 
 (defn wrap-schema-validation [h]
   (fn [req]
     (s/with-fn-validation
       (h req))))
 
-
-;; --------- fns UTILS ------------------
-;; --------- used by both auth-server and user-auth  ------------------
-
-;; auth-server client req scopes
-;; this fn is used by both AuthServer and AuthUser
+;; component client req scopes
 (defn store-scopes-and-code-to-authorized-user! [{:keys [codes-store authenticator session-store] :as component}
                                                  {:keys [client-id] :as client}  req scopes]
   (let [authentication (get-outcome authenticator req)
@@ -90,12 +84,32 @@
   (store-scopes-and-code-to-authorized-user! component client req required-scopes)
   (redirect-code-to-client-uri component client req))
 
-
+;; component req
+(defn authorize-response-type-code [{:keys [session-store  client-registry] :as component} req]
+  ;; When a user permits a client, the client's scopes that they have accepted, are stored in the user preferences database
+  ;; why?
+  ;; because next time, we don't have to ask the user for their permission everytime they login
+  ;; ok, i understand
+  ;; however
+  (let [session (session session-store req)
+        client (->> (:client-id session) (lookup-client+ client-registry))
+        {:keys [requires-user-acceptance? application-name description required-scopes]} client
+        ]
+    (debugf (if requires-user-acceptance?
+              "App requires user acceptance"
+              "App does not require user acceptance"))
+    ;; Lookup the application - do we have at-least the client id?
+    (if requires-user-acceptance?
+      (redirect (path-for (:modular.bidi/routes req) ::acceptance-step))
+      ;;client-dont-require-user-acceptance
+      (do
+        (debugf (format "App doesn't require user acceptance, granting scopes as required: [%s]" required-scopes))
+        (generate-auth-code-and-client-redirect component req client required-scopes)))))
 
 ;; -----------------------------------------------------
 ;; --------- records and constructors ------------------
 
-(defrecord AuthorizationServer [codes-store scopes iss session-store access-token-store authenticator user-authorizer]
+(defrecord AuthorizationServer [codes-store scopes iss session-store access-token-store authenticator ]
   WebService
   (request-handlers [component]
     {
@@ -103,22 +117,22 @@
      (-> (fn [req]
            (debugf "OAuth2 authorization server: Authorizing request")
 
-           (if (authenticated-user? user-authorizer req)
+           (if (authenticated-user? component req)
              (do
                ;; Authorizing by response-type
 
                ;; ** here seems to be the better place for this fn-call align-client-server-state-value
-               (align-client-server-state-value user-authorizer req)
+               (align-client-server-state-value component req)
 
                (let [response-type  (:response-type (session session-store req))]
                  (debugf (format "authorizing by response-type: %s " response-type))
                  (case response-type
-                   "code" (authorize-response-type-code user-authorizer req)
+                   "code" (authorize-response-type-code component req)
                    ;; Unknown response_type
                    {:status 400
                     :body (format "Bad response_type parameter: '%s'" response-type)}
                    )))
-             (init-user-authentication user-authorizer req)))
+             (init-user-authentication component req)))
          wrap-params
          wrap-schema-validation)
 
@@ -212,13 +226,39 @@
                    )
                  {:status 400
                   :body "Invalid request - unknown code"}))))
-         wrap-params )})
+         wrap-params )
+
+     ::logout (fn [req]
+                 (->> (redirect "http://localhost:8010/logout")
+
+                      (respond-close-session! session-store req)))
+
+     ::acceptance-step
+     (fn [req]
+       (let [{:keys [requested-scopes client-id]} (session session-store req)
+             {:keys [application-name description] :as client} (lookup-client+ (:client-registry component)  client-id)]
+         {:status 200
+          :body (html [:body
+                       [:form {:method :post :action (path-for (:modular.bidi/routes req) ::permit)}
+                        [:h1 "Authorize application?"]
+                        [:p (format "An application (%s) is requesting to use your credentials" application-name)]
+                        [:h2 "Application description"]
+                        [:p description]
+                        [:h2 "Scope"]
+                        (for [s requested-scopes]
+                          (let [s (apply str (interpose "/" (remove nil? ((juxt namespace name) s))))]
+                            [:p [:label {:for s} s] [:input {:type "checkbox" :id s :name s :value s :checked true}]]))
+                        [:input {:type "submit"}]]
+                       ])}))
+     })
 
   (routes [_]
     ["/" {"authorize" {:get ::authorization-endpoint}
           "permit-client" {:post ::permit}
           ;; TODO: Can we use a hyphen instead here?
-          "access_token" {:post ::token-endpoint}}])
+          "access_token" {:post ::token-endpoint}
+          "acceptance" {:get ::acceptance-step}
+          "logout" {:get ::logout}}])
 
   (uri-context [_] "/login/oauth")
 
@@ -237,26 +277,8 @@
     (when-let [auth-header (get (:headers request) "authorization")]
       ;; Only match 'Bearer' tokens for now
       (let [access-token (second (re-matches #"\QBearer\E\s+(.*)" auth-header))]
-        (authorized? component access-token scope)))))
+        (authorized? component access-token scope))))
 
-(defn new-authorization-server [& {:as opts}]
-  (->> opts
-
-       (s/validate
-        {:scopes {s/Keyword {:description s/Str}}
-
-         :iss s/Str             ; uri actually, see openid-connect ch 2.
-         })
-       map->AuthorizationServer
-       (<- (component/using
-            [:access-token-store
-             :codes-store
-             :session-store
-             :client-registry
-             :authenticator
-             :user-authorizer]))))
-
-(defrecord UserAuthorizer [session-store]
   OAuthUserAuthorizer
   (authenticated-user? [{:keys [session-store authenticator]} req]
     (and
@@ -267,18 +289,6 @@
 
      (:cylon/authenticated? (get-outcome authenticator req))
      ))
-
-  (align-client-server-state-value [{:keys [session-store]} req]
-    (debugf (format "state session %s , state request %s"
-                    (:state (session session-store req))
-                    (-> req :query-params (get "state"))))
-
-    (when-let [session-state (:state (session session-store req))]
-      (let [request-state (-> req :query-params (get "state"))]
-        (when (and request-state (not= session-state request-state))
-          (debugf "updating session state to request state")
-          (assoc-session-data! session-store req {:state request-state}))))
-    )
 
   (init-user-authentication [{:keys [session-store authenticator]} req]
     ;; auth-server  req
@@ -295,68 +305,29 @@
       response
       )))
 
-  (authorize-response-type-code [{:keys [session-store  client-registry] :as component} req]
-    ;; When a user permits a client, the client's scopes that they have accepted, are stored in the user preferences database
-    ;; why?
-    ;; because next time, we don't have to ask the user for their permission everytime they login
-    ;; ok, i understand
-    ;; however
-    (let [session (session session-store req)
-          client (->> (:client-id session) (lookup-client+ client-registry))
-          {:keys [requires-user-acceptance? application-name description required-scopes]} client
-          ]
-      (debugf (if requires-user-acceptance?
-                "App requires user acceptance"
-                "App does not require user acceptance"))
-      ;; Lookup the application - do we have at-least the client id?
-      (if requires-user-acceptance?
-        (redirect (path-for (:modular.bidi/routes req) ::acceptance-step))
-        ;;client-dont-require-user-acceptance
-        (do
-          (debugf (format "App doesn't require user acceptance, granting scopes as required: [%s]" required-scopes))
-          (generate-auth-code-and-client-redirect component req client required-scopes)))))
+  (align-client-server-state-value [{:keys [session-store]} req]
+    (debugf (format "state session %s , state request %s"
+                    (:state (session session-store req))
+                    (-> req :query-params (get "state"))))
 
-  WebService
-  (request-handlers [component]
-    {::logout (fn [req]
-                 (->> (redirect "http://localhost:8010/logout")
+    (when-let [session-state (:state (session session-store req))]
+      (let [request-state (-> req :query-params (get "state"))]
+        (when (and request-state (not= session-state request-state))
+          (debugf "updating session state to request state")
+          (assoc-session-data! session-store req {:state request-state}))))
+    ))
 
-                      (respond-close-session! session-store req)))
-
-     ::acceptance-step
-     (fn [req]
-       (let [{:keys [requested-scopes client-id]} (session session-store req)
-             {:keys [application-name description] :as client} (lookup-client+ (:client-registry component)  client-id)]
-         {:status 200
-          :body (html [:body
-                       [:form {:method :post :action (path-for (:modular.bidi/routes req) :cylon.oauth.impl.authorization-server/permit)}
-                        [:h1 "Authorize application?"]
-                        [:p (format "An application (%s) is requesting to use your credentials" application-name)]
-                        [:h2 "Application description"]
-                        [:p description]
-                        [:h2 "Scope"]
-                        (for [s requested-scopes]
-                          (let [s (apply str (interpose "/" (remove nil? ((juxt namespace name) s))))]
-                            [:p [:label {:for s} s] [:input {:type "checkbox" :id s :name s :value s :checked true}]]))
-                        [:input {:type "submit"}]]
-                       ])}))
-
-     })
-  (routes [_]
-    ["/" {
-          "acceptance" {:get ::acceptance-step}
-          "logout" {:get ::logout}}])
-
-  (uri-context [_] "/login/oauth")
-
-  )
-
-(defn new-oauth-user-authorizer [& {:as opts}]
+(defn new-authorization-server [& {:as opts}]
   (->> opts
-       (merge {})
-       map->UserAuthorizer
+
+       (s/validate
+        {:scopes {s/Keyword {:description s/Str}}
+         :iss s/Str             ; uri actually, see openid-connect ch 2.
+         })
+       map->AuthorizationServer
        (<- (component/using
-            [:codes-store
+            [:access-token-store
+             :codes-store
              :session-store
              :client-registry
              :authenticator]))))
