@@ -131,9 +131,13 @@
 
                                      ;; No more steps, we're done. Redirect to the initiator.
                                      (do
-                                       (assoc-session-data! (:session-store this) req {:cylon/authenticated? true})
-                                       ;; TODO What's this original uri? Can it also include the query string?
-                                       (let [original-uri (:cylon/original-uri (session session-store req))]
+                                       (let [session (session (:session-store this) req)
+                                             original-uri (:cylon/original-uri session)
+                                             identity (:cylon/identity session)]
+                                         (assoc-session-data! (:session-store this) req {:cylon/authenticated? true
+                                                                                         :cylon/subject-identifier identity})
+                                         ;; TODO What's this original uri? Can it also include the query string?
+
                                          (debugf "Successful authentication, redirecting to original uri of %s" original-uri)
                                          (redirect-after-post original-uri))))
                                ;; It is the default policy of this

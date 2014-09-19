@@ -115,13 +115,17 @@
        :body (format "Bad response_type parameter: '%s'" response-type)}
       )))
 
-
-(defrecord AuthorizationServer [store scopes iss session-store access-token-store authenticator]
-  OAuthWorkflowUtils
-  (authenticated-user? [component req]
-    (println "*****")
-    (println (format "state session %s , state request %s"
-                     (:state (session session-store req))
+(defn- align-client-server-state-value
+  "each time the client needs to communicate with auth-endpoint,
+  client sends a state query param to check the authenticity of the response.
+  client-state and server-state must be the same in each communication.
+  But there are cases (as signup) that the server-session-state willn't
+  the same as new client auth-endpoint request
+  That's the reason for this align client-server state function"
+  [{:keys [session-store] :as component} req]
+  (println "*****")
+      (println (format "state session %s , state request %s"
+                       (:state (session session-store req))
                      (-> req :query-params (get "state"))))
 
     (when-let [session-state (:state (session session-store req))]
@@ -131,7 +135,12 @@
           (assoc-session-data! session-store req {:state request-state})
           ))
       )
+)
 
+(defrecord AuthorizationServer [store scopes iss session-store access-token-store authenticator]
+  OAuthWorkflowUtils
+  (authenticated-user? [component req]
+    (align-client-server-state-value component req)
     (and
      ;;You dont have server-session-store associated, so let's authenticate first.
      (session session-store req)
@@ -161,6 +170,11 @@
   WebService
   (request-handlers [component]
     {
+     ::logout (fn [req]
+                (->> (redirect "http://localhost:8010/logout")
+
+                     (respond-close-session! session-store req)))
+
      ::authorization-endpoint
      (-> (fn [req]
            (debugf "OAuth2 authorization server: Authorizing request")
@@ -289,6 +303,7 @@
     ["/" {"authorize" {:get ::authorization-endpoint}
           "signup" {:get ::auth-signup-endpoint}
           "acceptance" {:get ::acceptance-step}
+          "logout" {:get ::logout}
           "permit-client" {:post ::permit}
           ;; TODO: Can we use a hyphen instead here?
           "access_token" {:post ::token-endpoint}}])
