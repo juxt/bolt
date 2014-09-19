@@ -26,7 +26,7 @@
    [ring.util.response :refer (redirect)]
    [cylon.oauth.encoding :refer (decode-scope encode-scope as-query-string)]))
 
-(defprotocol OAuthServer
+(defprotocol OAuthWorkflowUtils
   (is-authenticated? [_ req])
   (init-authentication [_ req])
   (authorize-authenticated-user! [_ subject-identifier req]
@@ -119,7 +119,7 @@
 
 
 (defrecord AuthorizationServer [store scopes iss session-store access-token-store authenticator]
-  OAuthServer
+  OAuthWorkflowUtils
   (is-authenticated? [component req]
     (and
      ;;You dont have server-session-store associated, so let's authenticate first.
