@@ -29,7 +29,13 @@
 (defprotocol OAuthWorkflowUtils
   (authenticated-user? [_ req])
   (init-authentication-user [_ req])
-)
+  (align-client-server-state-value [_ req]
+    "each time the client needs to communicate with auth-endpoint,
+  client sends a state query param to check the authenticity of the response.
+  client-state and server-state must be the same in each communication.
+  But there are cases (as signup) that the server-session-state willn't
+  the same as new client auth-endpoint request
+  That's the reason for this align client-server state function"))
 
 (defn wrap-schema-validation [h]
   (fn [req]
@@ -55,58 +61,57 @@
                )]
     (swap! store update-in [{:client-id client-id :code code}] assoc :granted-scopes scopes)))
 
-;; auth-server client req
-(defn redirect-code-to-client-uri [{:keys [session-store] :as component} client req]
+;; session client
+(defn redirect-code-to-client-uri [{:keys [session-store] :as component}  client req]
+  ;; 4.1.2: "If the resource owner grants the
+  ;; access request, the authorization server
+  ;; issues an authorization code and delivers it
+  ;; to the client by adding the following
+  ;; parameters to the query component of the
+  ;; redirection URI"
+
   (let [{:keys [state code]} (session session-store req)]
     (redirect
      (str (:redirection-uri client)
           (as-query-string
            {"code" code
             "state"  state})))))
-;; component client code
-(defn client-dont-require-user-acceptance [{:keys [store session-store authenticator ] :as component} {:keys [required-scopes client-id redirection-uri] :as client}  req]
-  (let [state (:state (session session-store req))]
-      (debugf (format "App doesn't require user acceptance, granting scopes as required: [%s]" required-scopes))
-      (asign-code-scopes-to-user! component client req required-scopes)
-      ;; 4.1.2: "If the resource owner grants the
-      ;; access request, the authorization server
-      ;; issues an authorization code and delivers it
-      ;; to the client by adding the following
-      ;; parameters to the query component of the
-      ;; redirection URI"
-      (redirect-code-to-client-uri component client req)))
 
-;; auth-server client req
-(defn client-acceptance-step [{:keys [session-store store] :as component}
-                            {:keys [requires-user-acceptance? application-name description required-scopes]  :as client}
-                            req]
+;; component client code
+(defn generate-auth-code-and-client-redirect [component req client  required-scopes]
+  (asign-code-scopes-to-user! component client req required-scopes)
+  (redirect-code-to-client-uri component client req))
+
+;; auth-server  req
+(defn authorize-user-code [{:keys [session-store store client-registry] :as component} req]
   ;; When a user permits a client, the client's scopes that they have accepted, are stored in the user preferences database
   ;; why?
   ;; because next time, we don't have to ask the user for their permission everytime they login
   ;; ok, i understand
   ;; however
-  (debugf (if requires-user-acceptance?
-            "App requires user acceptance"
-            "App does not require user acceptance"))
-  ;; Lookup the application - do we have at-least the client id?
-  (if requires-user-acceptance?
-    (redirect (path-for (:modular.bidi/routes req) ::acceptance-step))
+  (let [session (session session-store req)
+        client (->> (:client-id session) (lookup-client+ client-registry))
+        {:keys [requires-user-acceptance? application-name description required-scopes]} client
+        ]
+    (debugf (if requires-user-acceptance?
+              "App requires user acceptance"
+              "App does not require user acceptance"))
+    ;; Lookup the application - do we have at-least the client id?
+    (if requires-user-acceptance?
+      (redirect (path-for (:modular.bidi/routes req) ::acceptance-step))
+      ;;client-dont-require-user-acceptance
+      (do
+        (debugf (format "App doesn't require user acceptance, granting scopes as required: [%s]" required-scopes))
+        (generate-auth-code-and-client-redirect component req client   required-scopes))))
 
 
-    (client-dont-require-user-acceptance component client  req))
   )
 
-;; auth-server client req
-(defn authorize-user-code [{:keys [session-store authenticator store] :as component}   req]
-  (debugf "Getting authentication outcome from authenticator %s" authenticator)
-  (let [session (session session-store req)
-        client (->> (:client-id session) (lookup-client+ (:client-registry component)))
-        authentication (get-outcome authenticator req)]
- ;   (debugf "auth session result is %s" authentication)
-
-    (client-acceptance-step component client req)))
-
 (defn authorize-user [{:keys [session-store store authenticator] :as component}  req]
+  ;; seems to be the better place for this fn-call align-client-server-state-value
+  (align-client-server-state-value component req)
+
+
   (let [response-type  (:response-type (session session-store req))]
     (case response-type
       "code" (authorize-user-code component req)
@@ -115,32 +120,9 @@
        :body (format "Bad response_type parameter: '%s'" response-type)}
       )))
 
-(defn- align-client-server-state-value
-  "each time the client needs to communicate with auth-endpoint,
-  client sends a state query param to check the authenticity of the response.
-  client-state and server-state must be the same in each communication.
-  But there are cases (as signup) that the server-session-state willn't
-  the same as new client auth-endpoint request
-  That's the reason for this align client-server state function"
-  [{:keys [session-store] :as component} req]
-  (println "*****")
-      (println (format "state session %s , state request %s"
-                       (:state (session session-store req))
-                     (-> req :query-params (get "state"))))
-
-    (when-let [session-state (:state (session session-store req))]
-      (let [request-state (-> req :query-params (get "state"))]
-        (when (and request-state (not= session-state request-state))
-          (println "updating session state to request state")
-          (assoc-session-data! session-store req {:state request-state})
-          ))
-      )
-)
-
 (defrecord AuthorizationServer [store scopes iss session-store access-token-store authenticator]
   OAuthWorkflowUtils
   (authenticated-user? [component req]
-    (align-client-server-state-value component req)
     (and
      ;;You dont have server-session-store associated, so let's authenticate first.
      (session session-store req)
@@ -150,14 +132,26 @@
      (:cylon/authenticated? (get-outcome authenticator req))
      ))
 
+  (align-client-server-state-value [component req]
+    (debugf (format "state session %s , state request %s"
+                    (:state (session session-store req))
+                    (-> req :query-params (get "state"))))
+
+    (when-let [session-state (:state (session session-store req))]
+      (let [request-state (-> req :query-params (get "state"))]
+        (when (and request-state (not= session-state request-state))
+          (debugf "updating session state to request state")
+          (assoc-session-data! session-store req {:state request-state}))))
+    )
+
   (init-authentication-user [component req]
     ;; auth-server  req
     (debugf "Not authenticated, must authenticate first with %s" authenticator )
 
-    (let [{:keys [response session-state]} (initiate-authentication-interaction authenticator req {})]
+    (let [{:keys [response session-state]}
+          (initiate-authentication-interaction authenticator req {})]
 
-     (respond-with-new-session!
-      session-store req
+     (respond-with-new-session! session-store req
       (merge {:client-id (-> req :query-params (get "client_id"))
         :requested-scopes (decode-scope (-> req :query-params (get "scope")))
         :state (-> req :query-params (get "state"))
@@ -178,6 +172,7 @@
      ::authorization-endpoint
      (-> (fn [req]
            (debugf "OAuth2 authorization server: Authorizing request")
+
            (if (authenticated-user? component req)
              (authorize-user component req)
              (init-authentication-user component req)))
@@ -192,7 +187,7 @@
       ;; represents a true authenticated user
       (fn [req]
         (if (authenticated-user? component req)
-          (let [{:keys [requested-scopes code client-id state]} (session session-store req)
+          (let [{:keys [requested-scopes code client-id state] :as session} (session session-store req)
                 {:keys [redirection-uri] :as client} (lookup-client+ (:client-registry component) client-id)
 
                 permitted-scopes (set (map
@@ -201,12 +196,10 @@
 
                 granted-scopes (set/intersection permitted-scopes requested-scopes)]
 
-            (debugf "permitted-scopes is %s" permitted-scopes)
-            (debugf "requested-scopes is %s" requested-scopes)
-            (debugf "Granting scopes: %s" granted-scopes)
-            (asign-code-scopes-to-user! component client code granted-scopes)
+            (debugf (format "permitted-scopes is %s, requested-scopes is %s, => Granting scopes: %s"
+                            permitted-scopes requested-scopes granted-scopes))
 
-            (redirect-code-to-client-uri component client req))))
+            (generate-auth-code-and-client-redirect component req client  granted-scopes))))
 
       wrap-params)
 
@@ -326,6 +319,8 @@
       ;; Only match 'Bearer' tokens for now
       (let [access-token (second (re-matches #"\QBearer\E\s+(.*)" auth-header))]
         (authorized? component access-token scope)))))
+
+
 
 (defn new-authorization-server [& {:as opts}]
   (->> opts
