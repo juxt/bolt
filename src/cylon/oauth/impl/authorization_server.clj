@@ -104,18 +104,20 @@
            (debugf "OAuth2 authorization server: Authorizing request")
 
            (if (authenticated-user? user-authorizer req)
-             (letfn [(authorize-response-type [{:keys [session-store  authenticator user-authorizer] :as component} req]
-                       ;; seems to be the better place for this fn-call align-client-server-state-value
-                       (align-client-server-state-value user-authorizer req)
+             (do
+               ;; Authorizing by response-type
 
-                       (let [response-type  (:response-type (session session-store req))]
-                         (case response-type
-                           "code" (authorize-response-type-code user-authorizer req)
-                           ;; Unknown response_type
-                           {:status 400
-                            :body (format "Bad response_type parameter: '%s'" response-type)}
-                           )))]
-               (authorize-response-type component req))
+               ;; ** here seems to be the better place for this fn-call align-client-server-state-value
+               (align-client-server-state-value user-authorizer req)
+
+               (let [response-type  (:response-type (session session-store req))]
+                 (debugf (format "authorizing by response-type: %s " response-type))
+                 (case response-type
+                   "code" (authorize-response-type-code user-authorizer req)
+                   ;; Unknown response_type
+                   {:status 400
+                    :body (format "Bad response_type parameter: '%s'" response-type)}
+                   )))
              (init-user-authentication user-authorizer req)))
          wrap-params
          wrap-schema-validation)
