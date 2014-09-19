@@ -43,7 +43,12 @@
     (s/with-fn-validation
       (h req))))
 
+
+;; --------- fns UTILS ------------------
+;; --------- used by both auth-server and user-auth  ------------------
+
 ;; auth-server client req scopes
+;; this fn is used by both AuthServer and AuthUser
 (defn store-scopes-and-code-to-authorized-user! [{:keys [codes-store authenticator session-store] :as component}
                                                  {:keys [client-id] :as client}  req scopes]
   (let [authentication (get-outcome authenticator req)
@@ -86,17 +91,9 @@
   (redirect-code-to-client-uri component client req))
 
 
-(defn authorize-response-type [{:keys [session-store  authenticator user-authorizer] :as component}  req]
-  ;; seems to be the better place for this fn-call align-client-server-state-value
-  (align-client-server-state-value user-authorizer req)
 
-  (let [response-type  (:response-type (session session-store req))]
-    (case response-type
-      "code" (authorize-response-type-code user-authorizer req)
-      ;; Unknown response_type
-      {:status 400
-       :body (format "Bad response_type parameter: '%s'" response-type)}
-      )))
+;; -----------------------------------------------------
+;; --------- records and constructors ------------------
 
 (defrecord AuthorizationServer [codes-store scopes iss session-store access-token-store authenticator user-authorizer]
   WebService
@@ -107,7 +104,18 @@
            (debugf "OAuth2 authorization server: Authorizing request")
 
            (if (authenticated-user? user-authorizer req)
-             (authorize-response-type component req)
+             (letfn [(authorize-response-type [{:keys [session-store  authenticator user-authorizer] :as component} req]
+                       ;; seems to be the better place for this fn-call align-client-server-state-value
+                       (align-client-server-state-value user-authorizer req)
+
+                       (let [response-type  (:response-type (session session-store req))]
+                         (case response-type
+                           "code" (authorize-response-type-code user-authorizer req)
+                           ;; Unknown response_type
+                           {:status 400
+                            :body (format "Bad response_type parameter: '%s'" response-type)}
+                           )))]
+               (authorize-response-type component req))
              (init-user-authentication user-authorizer req)))
          wrap-params
          wrap-schema-validation)
@@ -229,8 +237,6 @@
       (let [access-token (second (re-matches #"\QBearer\E\s+(.*)" auth-header))]
         (authorized? component access-token scope)))))
 
-
-
 (defn new-authorization-server [& {:as opts}]
   (->> opts
 
@@ -247,10 +253,6 @@
              :client-registry
              :authenticator
              :user-authorizer]))))
-
-
-
-
 
 (defrecord UserAuthorizer [session-store]
   OAuthUserAuthorizer
@@ -346,7 +348,6 @@
   (uri-context [_] "/login/oauth")
 
   )
-
 
 (defn new-oauth-user-authorizer [& {:as opts}]
   (->> opts
