@@ -57,11 +57,12 @@
 
 ;; auth-server client req
 (defn redirect-code-to-client-uri [{:keys [session-store] :as component} client req]
-  (let [{:keys [state code]} (session session-store req)] (redirect
-    (str (:redirection-uri client)
-         (as-query-string
-          {"code" code
-           "state"  state})))))
+  (let [{:keys [state code]} (session session-store req)]
+    (redirect
+     (str (:redirection-uri client)
+          (as-query-string
+           {"code" code
+            "state"  state})))))
 ;; component client code
 (defn client-dont-require-user-acceptance [{:keys [store session-store authenticator ] :as component} {:keys [required-scopes client-id redirection-uri] :as client}  req]
   (let [state (:state (session session-store req))]
@@ -75,7 +76,7 @@
       ;; redirection URI"
       (redirect-code-to-client-uri component client req)))
 
-;; auth-server-client req code
+;; auth-server client req
 (defn client-acceptance-step [{:keys [session-store store] :as component}
                             {:keys [requires-user-acceptance? application-name description required-scopes]  :as client}
                             req]
@@ -84,27 +85,15 @@
   ;; because next time, we don't have to ask the user for their permission everytime they login
   ;; ok, i understand
   ;; however
-  (let [{:keys [requested-scopes]} (session session-store req)]
-    (debugf (if requires-user-acceptance?
-              "App requires user acceptance"
-              "App does not require user acceptance"))
-    ;; Lookup the application - do we have at-least the client id?
-    (if requires-user-acceptance?
-      {:status 200
-       :body (html [:body
-                    [:form {:method :post :action (path-for (:modular.bidi/routes req) ::permit)}
-                     [:h1 "Authorize application?"]
-                     [:p (format "An application (%s) is requesting to use your credentials" application-name)]
-                     [:h2 "Application description"]
-                     [:p description]
-                     [:h2 "Scope"]
-                     (for [s requested-scopes]
-                       (let [s (apply str (interpose "/" (remove nil? ((juxt namespace name) s))))]
-                         [:p [:label {:for s} s] [:input {:type "checkbox" :id s :name s :value s :checked true}]]))
-                     [:input {:type "submit"}]]
-                    ])}
+  (debugf (if requires-user-acceptance?
+            "App requires user acceptance"
+            "App does not require user acceptance"))
+  ;; Lookup the application - do we have at-least the client id?
+  (if requires-user-acceptance?
+    (redirect (path-for (:modular.bidi/routes req) ::acceptance-step))
 
-      (client-dont-require-user-acceptance component client  req)))
+
+    (client-dont-require-user-acceptance component client  req))
   )
 
 ;; auth-server client req
@@ -113,7 +102,7 @@
   (let [session (session session-store req)
         client (->> (:client-id session) (lookup-client+ (:client-registry component)))
         authentication (get-outcome authenticator req)]
-    (debugf "auth session result is %s" authentication)
+ ;   (debugf "auth session result is %s" authentication)
 
     (client-acceptance-step component client req)))
 
@@ -165,6 +154,23 @@
   WebService
   (request-handlers [component]
     {
+     ::acceptance-step
+     (fn [req]
+       (let [{:keys [requested-scopes client-id]} (session session-store req)
+             {:keys [application-name description] :as client} (lookup-client+ (:client-registry component)  client-id)]
+         {:status 200
+          :body (html [:body
+                       [:form {:method :post :action (path-for (:modular.bidi/routes req) ::permit)}
+                        [:h1 "Authorize application?"]
+                        [:p (format "An application (%s) is requesting to use your credentials" application-name)]
+                        [:h2 "Application description"]
+                        [:p description]
+                        [:h2 "Scope"]
+                        (for [s requested-scopes]
+                          (let [s (apply str (interpose "/" (remove nil? ((juxt namespace name) s))))]
+                            [:p [:label {:for s} s] [:input {:type "checkbox" :id s :name s :value s :checked true}]]))
+                        [:input {:type "submit"}]]
+                       ])}))
      ::authorization-endpoint
      (-> (fn [req]
            (debugf "OAuth2 authorization server: Authorizing request")
@@ -247,23 +253,23 @@
                    (debugf "About to OK, granted scopes is %s (type is %s)" granted-scopes (type granted-scopes))
                    (respond-close-session! session-store req {:status 200
                                                               :body (encode {"access_token" access-token
-                                   "token_type" "Bearer"
-                                   "expires_in" 3600
-                                   ;; TODO Refresh token (optional)
+                                                                             "token_type" "Bearer"
+                                                                             "expires_in" 3600
+                                                                             ;; TODO Refresh token (optional)
 
-                                   ;; 5.1 scope OPTIONAL only if
-                                   ;; identical to scope requested by
-                                   ;; client, otherwise required. In
-                                   ;; this way, we pass back the scope
-                                   ;; to the client.
-                                   "scope" (encode-scope granted-scopes)
+                                                                             ;; 5.1 scope OPTIONAL only if
+                                                                             ;; identical to scope requested by
+                                                                             ;; client, otherwise required. In
+                                                                             ;; this way, we pass back the scope
+                                                                             ;; to the client.
+                                                                             "scope" (encode-scope granted-scopes)
 
-                                   ;; OpenID Connect ID Token
-                                   "id_token" (-> claim
-                                                  jwt
-                                                  (sign :HS256 "secret") to-str)
+                                                                             ;; OpenID Connect ID Token
+                                                                             "id_token" (-> claim
+                                                                                            jwt
+                                                                                            (sign :HS256 "secret") to-str)
 
-                                   })})
+                                                                             })})
                    )
                  {:status 400
                   :body "Invalid request - unknown code"}))))
@@ -272,6 +278,7 @@
   (routes [_]
     ["/" {"authorize" {:get ::authorization-endpoint}
           "signup" {:get ::auth-signup-endpoint}
+          "acceptance" {:get ::acceptance-step}
           "permit-client" {:post ::permit}
           ;; TODO: Can we use a hyphen instead here?
           "access_token" {:post ::token-endpoint}}])
