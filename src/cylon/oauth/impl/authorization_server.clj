@@ -119,6 +119,19 @@
 (defrecord AuthorizationServer [store scopes iss session-store access-token-store authenticator]
   OAuthWorkflowUtils
   (authenticated-user? [component req]
+    (println "*****")
+    (println (format "state session %s , state request %s"
+                     (:state (session session-store req))
+                     (-> req :query-params (get "state"))))
+
+    (when-let [session-state (:state (session session-store req))]
+      (let [request-state (-> req :query-params (get "state"))]
+        (when (and request-state (not= session-state request-state))
+          (println "updating session state to request state")
+          (assoc-session-data! session-store req {:state request-state})
+          ))
+      )
+
     (and
      ;;You dont have server-session-store associated, so let's authenticate first.
      (session session-store req)
@@ -126,51 +139,28 @@
      (get-outcome authenticator req)
 
      (:cylon/authenticated? (get-outcome authenticator req))
-
-     #_ " last case added"
-     #_       (do
-      ;; you have auth-session although you are NOT authenticated but ,,, we carry on with this session"
-        (debugf "Session exists, but no evidence in it of authentication. Initiating authentication interaction using %s. Data in session is %s"
-                (:authenticator component)
-                authentication)
-
-        (initiate-authentication-interaction authenticator req {}))
      ))
 
   (init-authentication-user [component req]
     ;; auth-server  req
     (debugf "Not authenticated, must authenticate first with %s" authenticator )
-    (respond-with-new-session!
-     session-store req
-     {:client-id (-> req :query-params (get "client_id"))
-      :requested-scopes (decode-scope (-> req :query-params (get "scope")))
-      :state (-> req :query-params (get "state"))
-      :response-type  "code"}
-     (initiate-authentication-interaction authenticator req {})
-     ))
+
+    (let [{:keys [response session-state]} (initiate-authentication-interaction authenticator req {})]
+
+     (respond-with-new-session!
+      session-store req
+      (merge {:client-id (-> req :query-params (get "client_id"))
+        :requested-scopes (decode-scope (-> req :query-params (get "scope")))
+        :state (-> req :query-params (get "state"))
+              :response-type  "code"} session-state)
+      response
+      )))
 
 
 
   WebService
   (request-handlers [component]
     {
-     ::acceptance-step
-     (fn [req]
-       (let [{:keys [requested-scopes client-id]} (session session-store req)
-             {:keys [application-name description] :as client} (lookup-client+ (:client-registry component)  client-id)]
-         {:status 200
-          :body (html [:body
-                       [:form {:method :post :action (path-for (:modular.bidi/routes req) ::permit)}
-                        [:h1 "Authorize application?"]
-                        [:p (format "An application (%s) is requesting to use your credentials" application-name)]
-                        [:h2 "Application description"]
-                        [:p description]
-                        [:h2 "Scope"]
-                        (for [s requested-scopes]
-                          (let [s (apply str (interpose "/" (remove nil? ((juxt namespace name) s))))]
-                            [:p [:label {:for s} s] [:input {:type "checkbox" :id s :name s :value s :checked true}]]))
-                        [:input {:type "submit"}]]
-                       ])}))
      ::authorization-endpoint
      (-> (fn [req]
            (debugf "OAuth2 authorization server: Authorizing request")
@@ -205,6 +195,26 @@
             (redirect-code-to-client-uri component client req))))
 
       wrap-params)
+
+
+     ::acceptance-step
+     (fn [req]
+       (let [{:keys [requested-scopes client-id]} (session session-store req)
+             {:keys [application-name description] :as client} (lookup-client+ (:client-registry component)  client-id)]
+         {:status 200
+          :body (html [:body
+                       [:form {:method :post :action (path-for (:modular.bidi/routes req) ::permit)}
+                        [:h1 "Authorize application?"]
+                        [:p (format "An application (%s) is requesting to use your credentials" application-name)]
+                        [:h2 "Application description"]
+                        [:p description]
+                        [:h2 "Scope"]
+                        (for [s requested-scopes]
+                          (let [s (apply str (interpose "/" (remove nil? ((juxt namespace name) s))))]
+                            [:p [:label {:for s} s] [:input {:type "checkbox" :id s :name s :value s :checked true}]]))
+                        [:input {:type "submit"}]]
+                       ])}))
+
 
      ;; RFC 6749 4.1 (D) - and this is the Token endpoint as described
      ;; in section 3 (Protocol Endpoints)

@@ -8,6 +8,7 @@
    [cylon.authentication :refer (InteractionStep get-location step-required?)]
    [cylon.session :refer (session respond-with-new-session! assoc-session-data!)]
    [cylon.token-store :refer (create-token! get-token-by-id)]
+   [cylon.oauth.client-registry :refer (lookup-client+)]
    [com.stuartsierra.component :as component]
    [modular.bidi :refer (WebService path-for)]
    [hiccup.core :refer (html)]
@@ -81,12 +82,17 @@
                            (when (satisfies? OneTimePasswordStore user-domain)
                              {:totp-secret totp-secret})
                            (when true ; authenticate on
-                             {:cylon/authenticated? true}))]
+                             {:cylon/authenticated? true}))
+               session (session session-store req)
+               ]
            (assoc-session-data! session-store req data)
            (response (render-welcome
                       renderer req
                       (merge
-                       {:session (session session-store req)}
+                       {:session session
+                        :redirection-uri "http://localhost:8010/devices" ;(:redirection-uri (->> (:client-id session) (lookup-client+ (:client-registry this))))
+                        }
+
                        form
                        data))))))
 

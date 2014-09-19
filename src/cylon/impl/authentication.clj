@@ -94,13 +94,9 @@
           ;; the initial-session-state)
           ]
       (debugf "Initiating multi-factor authentication, redirecting to first step %s" first-step)
-      (if (session session-store req)
-        (redirect first-step)
-        ;; otherwise (not authenticated already)
-        (respond-with-new-session!
-         session-store req
-         (merge initial-session-state {:cylon/original-uri (get-original-uri req)})
-         (redirect first-step))))
+
+      {:response (redirect first-step) :session-state {:cylon/original-uri (get-original-uri req)}}
+)
     )
   (get-outcome [this req]
     (session session-store req))
