@@ -27,45 +27,58 @@
    [cylon.oauth.encoding :refer (decode-scope encode-scope as-query-string)]))
 
 (defprotocol OAuthWorkflowUtils
-  (is-authenticated? [_ req])
-  (init-authentication [_ req])
-  (authorize-authenticated-user! [_ subject-identifier req]
-    "auth-server authentication-result req client <= code"))
+  (authenticated-user? [_ req])
+  (init-authentication-user [_ req])
+)
 
 (defn wrap-schema-validation [h]
   (fn [req]
     (s/with-fn-validation
       (h req))))
 
-;; auth-server client code
-(defn store-code-with-all-client-required-scopes! [{:keys [store] :as component} {:keys [client-id required-scopes] :as client}  code]
-  (swap! store update-in
-             [{:client-id client-id
-               :code code}]
-             assoc :granted-scopes required-scopes))
+;; auth-server client req scopes
+(defn asign-code-scopes-to-user! [{:keys [store authenticator session-store] :as component}
+                                 {:keys [client-id] :as client}  req scopes]
+  (let [authentication (get-outcome authenticator req)
+        code (let [subject-identifier (:cylon/subject-identifier authentication)
+                   session (session session-store req)
+                   {:keys [client-id] :as client} (lookup-client+ (:client-registry component) (:client-id session))
+                   code (str (java.util.UUID/randomUUID))]
+               (assoc-session-data! session-store req {:cylon/authenticated? true :code code})
+               ;; Remember the code for the possible exchange - TODO expire these
+               (swap! store assoc
+                      {:client-id client-id :code code}
+                      (merge
+                       {:created (java.util.Date.)}
+                       {:cylon/subject-identifier subject-identifier}))
+               code
+               )]
+    (swap! store update-in [{:client-id client-id :code code}] assoc :granted-scopes scopes)))
 
+;; auth-server client req
+(defn redirect-code-to-client-uri [{:keys [session-store] :as component} client req]
+  (let [{:keys [state code]} (session session-store req)] (redirect
+    (str (:redirection-uri client)
+         (as-query-string
+          {"code" code
+           "state"  state})))))
 ;; component client code
-(defn client-dont-require-user-acceptance [{:keys [store session-store ] :as component} {:keys [required-scopes client-id redirection-uri] :as client}  code req]
-  (do
+(defn client-dont-require-user-acceptance [{:keys [store session-store authenticator ] :as component} {:keys [required-scopes client-id redirection-uri] :as client}  req]
+  (let [state (:state (session session-store req))]
       (debugf (format "App doesn't require user acceptance, granting scopes as required: [%s]" required-scopes))
-      (store-code-with-all-client-required-scopes! component client code)
+      (asign-code-scopes-to-user! component client req required-scopes)
       ;; 4.1.2: "If the resource owner grants the
       ;; access request, the authorization server
       ;; issues an authorization code and delivers it
       ;; to the client by adding the following
       ;; parameters to the query component of the
       ;; redirection URI"
-      (redirect
-       (str redirection-uri
-            (as-query-string
-             {"code" code
-              "state"  (:state (session session-store req))})))))
+      (redirect-code-to-client-uri component client req)))
 
 ;; auth-server-client req code
 (defn client-acceptance-step [{:keys [session-store store] :as component}
                             {:keys [requires-user-acceptance? application-name description required-scopes]  :as client}
-                            req
-                            code]
+                            req]
   ;; When a user permits a client, the client's scopes that they have accepted, are stored in the user preferences database
   ;; why?
   ;; because next time, we don't have to ask the user for their permission everytime they login
@@ -91,36 +104,32 @@
                      [:input {:type "submit"}]]
                     ])}
 
-      (client-dont-require-user-acceptance component client code req)))
+      (client-dont-require-user-acceptance component client  req)))
   )
 
 ;; auth-server client req
-(defn authorize-code [{:keys [session-store authenticator store] :as component}   req]
+(defn authorize-user-code [{:keys [session-store authenticator store] :as component}   req]
   (debugf "Getting authentication outcome from authenticator %s" authenticator)
   (let [session (session session-store req)
-        client (->> (:client-id session) (lookup-client+ (:client-registry component) ))
+        client (->> (:client-id session) (lookup-client+ (:client-registry component)))
         authentication (get-outcome authenticator req)]
-    ;; the session can be authenticated or maybe we are
-    ;; coming from the authenticator workflow
     (debugf "auth session result is %s" authentication)
-    (let [code (authorize-authenticated-user! component (:cylon/subject-identifier authentication) req)]
-      (client-acceptance-step component client req code))))
 
-(defn authorize [{:keys [session-store store authenticator] :as component}  req]
-  (let [{response-type "response_type" client-id "client_id"} (:query-params req)
-        r-t (or response-type (:response-type (session session-store req)))]
-    (case r-t
-      "code" (authorize-code component req)
+    (client-acceptance-step component client req)))
+
+(defn authorize-user [{:keys [session-store store authenticator] :as component}  req]
+  (let [response-type  (:response-type (session session-store req))]
+    (case response-type
+      "code" (authorize-user-code component req)
       ;; Unknown response_type
       {:status 400
        :body (format "Bad response_type parameter: '%s'" response-type)}
-      )
-    ))
+      )))
 
 
 (defrecord AuthorizationServer [store scopes iss session-store access-token-store authenticator]
   OAuthWorkflowUtils
-  (is-authenticated? [component req]
+  (authenticated-user? [component req]
     (and
      ;;You dont have server-session-store associated, so let's authenticate first.
      (session session-store req)
@@ -128,6 +137,7 @@
      (get-outcome authenticator req)
 
      (:cylon/authenticated? (get-outcome authenticator req))
+
      #_ " last case added"
      #_       (do
       ;; you have auth-session although you are NOT authenticated but ,,, we carry on with this session"
@@ -137,7 +147,8 @@
 
         (initiate-authentication-interaction authenticator req {}))
      ))
-  (init-authentication [component req]
+
+  (init-authentication-user [component req]
     ;; auth-server  req
     (debugf "Not authenticated, must authenticate first with %s" authenticator )
     (respond-with-new-session!
@@ -148,23 +159,8 @@
       :response-type  "code"}
      (initiate-authentication-interaction authenticator req {})
      ))
-  (authorize-authenticated-user! [component
-                                  subject-identifier
-                                  req]
-  ;; "you are authenticated now!"
-  #__ #_(clean-resources! authenticator req)
 
-  (let [session (session session-store req)
-        {:keys [redirection-uri client-id] :as client} (lookup-client+ (:client-registry component) (:client-id session))
-        code (str (java.util.UUID/randomUUID))]
-    (assoc-session-data! session-store req {:cylon/authenticated? true :code code})
-    ;; Remember the code for the possible exchange - TODO expire these
-    (swap! store assoc
-           {:client-id client-id :code code}
-           (merge
-            {:created (java.util.Date.)}
-            {:cylon/subject-identifier subject-identifier}))
-    code))
+
 
   WebService
   (request-handlers [component]
@@ -172,9 +168,9 @@
      ::authorization-endpoint
      (-> (fn [req]
            (debugf "OAuth2 authorization server: Authorizing request")
-           (if (is-authenticated? component req)
-             (authorize component req)
-             (init-authentication component req)))
+           (if (authenticated-user? component req)
+             (authorize-user component req)
+             (init-authentication-user component req)))
          wrap-params
          wrap-schema-validation)
 
@@ -185,30 +181,22 @@
       ;; TODO I'm worred about the fact we must ensure that the session
       ;; represents a true authenticated user
       (fn [req]
-        (let [session (session session-store req)]
-          (if (:cylon/authenticated? session)
-            (let [permitted-scopes (set (map
-                                         (fn [x] (apply keyword (str/split x #"/")))
-                                         (keys (:form-params req))))
-                  _ (debugf "permitted-scopes is %s" permitted-scopes)
-                  requested-scopes (:requested-scopes session)
-                  _ (debugf "requested-scopes is %s" requested-scopes)
+        (if (authenticated-user? component req)
+          (let [{:keys [requested-scopes code client-id state]} (session session-store req)
+                {:keys [redirection-uri] :as client} (lookup-client+ (:client-registry component) client-id)
 
-                  granted-scopes (set/intersection permitted-scopes requested-scopes)
-                  code (:code session)
-                  client-id (:client-id session)
-                  {:keys [redirection-uri] :as client} (lookup-client+ (:client-registry component) client-id)
-                  ]
+                permitted-scopes (set (map
+                                       (fn [x] (apply keyword (str/split x #"/")))
+                                       (keys (:form-params req))))
 
-              (debugf "Granting scopes: %s" granted-scopes)
-              (swap! store update-in
-                     [{:client-id client-id
-                       :code code}]
-                     assoc :granted-scopes granted-scopes)
+                granted-scopes (set/intersection permitted-scopes requested-scopes)]
 
-              (redirect
-               (format "%s?code=%s&state=%s"
-                       redirection-uri code (:state session)))))))
+            (debugf "permitted-scopes is %s" permitted-scopes)
+            (debugf "requested-scopes is %s" requested-scopes)
+            (debugf "Granting scopes: %s" granted-scopes)
+            (asign-code-scopes-to-user! component client code granted-scopes)
+
+            (redirect-code-to-client-uri component client req))))
 
       wrap-params)
 
