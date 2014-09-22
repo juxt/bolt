@@ -15,7 +15,7 @@
    [ring.middleware.params :refer (params-request)]
    [ring.middleware.cookies :refer (cookies-response wrap-cookies)]
    [ring.util.response :refer (response redirect)]
-   [cylon.user :refer (add-user! user-email-verified!)]
+   [cylon.user :refer (add-user! user-email-verified! find-user-by-email)]
    [cylon.totp :as totp]
    [cylon.totp :refer (OneTimePasswordStore set-totp-secret)]
    [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)]
@@ -146,11 +146,16 @@
 
      ::process-reset-password
      (fn [req]
-       (let [form (-> req params-request :form-params)]
-         (response
-          (format "Thanks for reseting pw. Old pw: %s. New pw: %s"
-                  (get form "old_pw")
-                  (get form "new_pw")))))})
+       (let [form (-> req params-request :form-params)
+             email (get form "email")]
+         (if-let [user-by-mail (find-user-by-email user-domain email)]
+
+           (response
+            (format "We've found in our db, thanks for reseting for this mail: %s"
+                    email))
+           (response
+            (format "No user with this mail %s in our db. Try again" email))
+           )))})
 
   (routes [this]
     ["/" {"signup" {:get ::GET-signup-form
@@ -188,11 +193,14 @@
                  {:name "name" :label "Name" :placeholder "name"}
                  {:name "email" :label "Email" :placeholder "email"}]
                 :fields-reset
-                [
-                 {:name "old_pw" :label "Old Password" :password? true :placeholder "old password"}
-                 {:name "new_pw" :label "New Password" :password? true :placeholder "new password"}
-                 {:name "new_pw_bis" :label "Repeat New Password" :password? true :placeholder "repeat new password"}]
+                [{:name "email" :label "Email" :placeholder "email"}]
                 })
         (s/validate new-signup-with-totp-schema)
         map->SignupWithTotp)
    [:user-domain :session-store :renderer :verification-code-store]))
+
+
+;; notes
+#_[ {:name "old_pw" :label "Old Password" :password? true :placeholder "old password"}
+    {:name "new_pw" :label "New Password" :password? true :placeholder "new password"}
+    {:name "new_pw_bis" :label "Repeat New Password" :password? true :placeholder "repeat new password"}]

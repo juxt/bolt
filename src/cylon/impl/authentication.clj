@@ -210,6 +210,7 @@
                      {:form {:method :post
                              :action (path-for req ::POST-login-form)
                              :signup-uri (path-for req :cylon.signup.signup/GET-signup-form)
+                             :reset-uri (path-for req :cylon.signup.signup/reset-password-form)
                              :fields fields}})}]
         ;; Conditional response post-processing
         (if
