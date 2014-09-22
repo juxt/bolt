@@ -26,30 +26,7 @@
         verify-user-email-path (path-for req ::verify-user-email)]
     (apply format "%s://%s:%d%s?code=%s&email=%s" (conj values verify-user-email-path code email))))
 
-;; I think the TOTP functionality could be made optional,
-;; but yes, we probably could do a similar component without
-;; it. Strike the balance between unreasonable conditional logic and
-;; code duplication.
-
-(defrecord SignupWithTotp [renderer session-store user-domain verification-code-store emailer fields fields-reset]
-  WebService
-  (request-handlers [this]
-    {::GET-signup-form
-     (fn [req]
-       (let [resp (response (render-signup-form
-                             renderer req
-                             {:form {:method :post
-                                     :action (path-for req ::POST-signup-form)
-                                     :fields fields}}))]
-         (if-not (session session-store req)
-           ;; We create an empty session. This is because the POST
-           ;; handler requires that a session exists within which it can
-           ;; store the identity on a successful login
-           (respond-with-new-session! session-store req {} resp)
-           resp)))
-
-     ::POST-signup-form
-     (fn [req]
+(defn- post-signup-handler-fn  [{:keys [user-domain emailer verification-code-store session-store renderer]} req post-signup-session-update]
        (debugf "Processing signup")
        (let [form (-> req params-request :form-params)
              user-id (get form "user-id")
@@ -82,19 +59,65 @@
                            (when (satisfies? OneTimePasswordStore user-domain)
                              {:totp-secret totp-secret})
                            (when true ; authenticate on
-                             {:cylon/authenticated? true}))
-               session (session session-store req)
-               ]
-           (assoc-session-data! session-store req data)
-           (response (render-welcome
-                      renderer req
-                      (merge
-                       {:session session
-                        :redirection-uri "http://localhost:8010/devices" ;(:redirection-uri (->> (:client-id session) (lookup-client+ (:client-registry this))))
-                        }
+                             {:cylon/authenticated? true}))]
 
-                       form
-                       data))))))
+           (post-signup-session-update data session-store req renderer)
+
+           )))
+
+
+;; I think the TOTP functionality could be made optional,
+;; but yes, we probably could do a similar component without
+;; it. Strike the balance between unreasonable conditional logic and
+;; code duplication.
+
+(defrecord SignupWithTotp [renderer session-store user-domain verification-code-store emailer fields fields-reset]
+  WebService
+  (request-handlers [this]
+    {::GET-signup-form
+     (fn [req]
+       (let [resp (response (render-signup-form
+                             renderer req
+                             {:form {:method :post
+                                     :action (path-for req ::POST-signup-form)
+                                     :fields fields}}))]
+         (if-not (session session-store req)
+           ;; We create an empty session. This is because the POST
+           ;; handler requires that a session exists within which it can
+           ;; store the identity on a successful login
+           (respond-with-new-session! session-store req {} resp)
+           resp)))
+
+     ::POST-signup-form
+     (fn [req]
+       (post-signup-handler-fn this req
+        (fn  [data session-store req renderer]
+          (let [session (session session-store req)
+                form (-> req params-request :form-params)]
+            (assoc-session-data! session-store req data)
+            (response (render-welcome
+                       renderer req
+                       (merge
+                         {:session session
+                          :redirection-uri "http://localhost:8010/devices"
+                          ;;(:redirection-uri (->> (:client-id session) (lookup-client+ (:client-registry this))))
+                          } form data)))))))
+
+     ::POST-signup-form-directly
+     (fn [req]
+       (post-signup-handler-fn this req
+        (fn  [data session-store req renderer]
+          (let [
+                form (-> req params-request :form-params)
+                response (response (render-welcome
+                       renderer req
+                       (merge
+                         {:session (session session-store req)
+                          :redirection-uri "http://localhost:8010/devices"
+                          ;;(:redirection-uri (->> (:client-id session) (lookup-client+ (:client-registry this))))
+                          } form data)))]
+
+            (respond-with-new-session! session-store req data response)))))
 
      ::verify-user-email
      (fn [req]
@@ -131,7 +154,8 @@
 
   (routes [this]
     ["/" {"signup" {:get ::GET-signup-form
-                    :post ::POST-signup-form}
+                    :post ::POST-signup-form-directly}
+          "signup_post" {:post ::POST-signup-form}
           "verify-email" {:get ::verify-user-email}
           "reset-password" {:get ::reset-password-form
                             :post ::process-reset-password}

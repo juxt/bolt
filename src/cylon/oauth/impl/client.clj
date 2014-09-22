@@ -50,6 +50,7 @@
                  :homepage-uri
                  :description
                  :redirection-uri
+                 :signup-uri
                  :required-scopes
                  :requires-user-acceptance?
                  ])))]
@@ -223,6 +224,7 @@
                      :application-name s/Str
                      :homepage-uri s/Str
                      :redirection-uri s/Str
+                     (s/optional-key :signup-uri) s/Str
 
                      :required-scopes #{s/Keyword}
                      ;; TODO What's this? Can we document it?

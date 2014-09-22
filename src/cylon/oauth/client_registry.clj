@@ -17,6 +17,7 @@
                   :homepage-uri s/Str
                   (s/optional-key :description) s/Str
                   :redirection-uri s/Str
+                  (s/optional-key :signup-uri) s/Str
                   :required-scopes #{s/Keyword}
                   :requires-user-acceptance? s/Bool}]
   (register-client p properties))
@@ -25,6 +26,7 @@
                            :homepage-uri s/Str
                            (s/optional-key :description) s/Str
                            :redirection-uri s/Str
+                           (s/optional-key :signup-uri) s/Str
                            :client-id s/Str
                            :client-secret s/Str
                            :required-scopes #{s/Keyword}

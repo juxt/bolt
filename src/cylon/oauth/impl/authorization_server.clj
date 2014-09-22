@@ -299,8 +299,8 @@
 
      (respond-with-new-session! session-store req
       (merge {:client-id (-> req :query-params (get "client_id"))
-        :requested-scopes (decode-scope (-> req :query-params (get "scope")))
-        :state (-> req :query-params (get "state"))
+              :requested-scopes (decode-scope (-> req :query-params (get "scope")))
+              :state (-> req :query-params (get "state"))
               :response-type  "code"} session-state)
       response
       )))
@@ -309,12 +309,34 @@
     (debugf (format "state session %s , state request %s"
                     (:state (session session-store req))
                     (-> req :query-params (get "state"))))
+    (debugf (format "response-type %s , response-type request %s"
+                    (:response-type (session session-store req))
+                    (-> req :query-params (get "response_type"))))
 
-    (when-let [session-state (:state (session session-store req))]
+    #_(when-let [session-state (:state (session session-store req))]
       (let [request-state (-> req :query-params (get "state"))]
         (when (and request-state (not= session-state request-state))
           (debugf "updating session state to request state")
           (assoc-session-data! session-store req {:state request-state}))))
+
+    (letfn [(take-from-request-to-session [request-key session-kw transform-fn]
+              (let [request-value (-> req :query-params (get request-key))
+                    final-value (if transform-fn (transform-fn  request-value) request-value)]
+                (when  (not= (session-kw (session session-store req)) final-value )
+                  (debugf (str "updating session " (name session-kw) " to request " request-key))
+                  (assoc-session-data! session-store req {session-kw final-value})))
+              )]
+
+      (take-from-request-to-session "response_type" :response-type nil)
+      (take-from-request-to-session "client_id" :client-id nil)
+      (take-from-request-to-session "scope" :requested-scopes decode-scope)
+      (take-from-request-to-session "state" :state nil))
+
+
+
+
+
+
     ))
 
 (defn new-authorization-server [& {:as opts}]
