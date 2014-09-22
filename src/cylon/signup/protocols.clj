@@ -13,4 +13,4 @@
   (render-reset-password [_ req model]))
 
 (defprotocol Emailer
-  (send-email [_ email body]))
+  (send-email [_ email subject body]))

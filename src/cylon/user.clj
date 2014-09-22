@@ -15,4 +15,6 @@
   (user-email-verified! [_ identity]))
 
 (defprotocol ResetUserEmail
-  (find-user-by-email [_ email]))
+  (find-user-by-email [_ email])
+  (reset-password! [_ indentity password])
+  )

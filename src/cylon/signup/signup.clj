@@ -15,15 +15,15 @@
    [ring.middleware.params :refer (params-request)]
    [ring.middleware.cookies :refer (cookies-response wrap-cookies)]
    [ring.util.response :refer (response redirect)]
-   [cylon.user :refer (add-user! user-email-verified! find-user-by-email)]
+   [cylon.user :refer (add-user! user-email-verified! find-user-by-email reset-password!)]
    [cylon.totp :as totp]
    [cylon.totp :refer (OneTimePasswordStore set-totp-secret)]
    [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)]
    [schema.core :as s ]))
 
-(defn make-verification-link [req code email]
+(defn make-verification-link [req target code email]
   (let [values  ((juxt (comp name :scheme) :server-name :server-port) req)
-        verify-user-email-path (path-for req ::verify-user-email)]
+        verify-user-email-path (path-for req target)]
     (apply format "%s://%s:%d%s?code=%s&email=%s" (conj values verify-user-email-path code email))))
 
 (defn- post-signup-handler-fn  [{:keys [user-domain emailer verification-code-store session-store renderer]} req post-signup-session-update]
@@ -50,8 +50,9 @@
              (create-token! verification-code-store code {:email email :name name})
 
              (send-email emailer email
+                         "Please give me access to beta"
                          (format "Thanks for signing up. Please click on this link to verify your account: %s"
-                                 (make-verification-link req code email)))))
+                                 (make-verification-link req ::verify-user-email code email)))))
 
          ;; Create a session that contains the secret-key
          (let [data (merge {:cylon/subject-identifier user-id
@@ -71,7 +72,7 @@
 ;; it. Strike the balance between unreasonable conditional logic and
 ;; code duplication.
 
-(defrecord SignupWithTotp [renderer session-store user-domain verification-code-store emailer fields fields-reset]
+(defrecord SignupWithTotp [renderer session-store user-domain verification-code-store emailer fields fields-reset fields-confirm-password]
   WebService
   (request-handlers [this]
     {::GET-signup-form
@@ -135,6 +136,36 @@
 
          (response (render-email-verified renderer req {:message body}))))
 
+     ::verify-user-email-reset-password
+     (fn [req]
+       (let [params (-> req params-request :params)
+             body
+             (if-let [[email code] [ (get params "email") (get params "code")]]
+               (if-let [store (get-token-by-id (:verification-code-store this) code)]
+                 (if (= email (:email store))
+                   (do
+                     ;; TODO: should we check if user has an active session????
+                     ;; TODO: we should to check about expiry time of this code
+
+                     ;; theoretically we reach to this step from login page so we have a server-session
+                     (assoc-session-data! session-store req {:reset-code-identity (:name store)})
+                       {:status 200
+                        :body (render-reset-password
+                               renderer req
+                               {:form {:method :post
+                                       :action (path-for req ::confirm-password)
+                                       :fields fields-confirm-password}})})
+                   (format "Sorry but your session associated with this email '%s' seems to not be logic" email))
+                 (format "Sorry but your session associated with this email '%s' seems to not be valid" email))
+
+               (format "Sorry but there were problems trying to retrieve your data related with your mail '%s' " (get params "email")))]
+
+         (if (nil? (:status body))
+           (response (render-email-verified renderer req {:message body}))
+           body
+           )))
+
+
      ::reset-password-form
      (fn [req]
        {:status 200
@@ -149,19 +180,60 @@
        (let [form (-> req params-request :form-params)
              email (get form "email")]
          (if-let [user-by-mail (find-user-by-email user-domain email)]
+           (do
+             (let [code (str (java.util.UUID/randomUUID))]
+             (create-token! verification-code-store code {:email email :name (:user user-by-mail)})
 
-           (response
-            (format "We've found in our db, thanks for reseting for this mail: %s"
-                    email))
-           (response
-            (format "No user with this mail %s in our db. Try again" email))
-           )))})
+             (send-email emailer email
+                         "Reset password confirmation step"
+                         (format "Please click on this link to reset your password account: %s"
+                                 (make-verification-link req ::verify-user-email-reset-password code email))))
+
+             (response
+             (format "We've found in our db, thanks for reseting for this mail: %s. You'll recieve an email with confirmation link"
+                     email)))
+           {:status 200
+            :body (render-reset-password
+                   renderer req
+                   {:form {:method :post
+                           :action (path-for req ::process-reset-password)
+                           :fields fields-reset}
+                    :reset-status (format "No user with this mail %s in our db. Try again" email)})}
+
+           )))
+
+     ::confirm-password
+     (fn [req]
+       (if-let [identity (:reset-code-identity (session session-store req))]
+        ;;TODO:  remove token from store??
+         (let [form (-> req params-request :form-params)
+               pw (get form "new_pw")
+               pw-bis (get form "new_pw_bis")]
+           (if (= pw pw-bis)
+             (do
+               (reset-password! user-domain identity pw)
+               {:status 200
+                :body "You are like a hero, successful result"}
+               )
+             {:status 200
+              :body "Your passwords aren't the same :( "}
+             )
+           )
+         {:status 200
+          :body "you shouldn't be here! :( "}
+         )
+       )
+
+     })
 
   (routes [this]
     ["/" {"signup" {:get ::GET-signup-form
                     :post ::POST-signup-form-directly}
           "signup_post" {:post ::POST-signup-form}
           "verify-email" {:get ::verify-user-email}
+          "verify-email-reset-pw" {:get ::verify-user-email-reset-password
+                                   :post ::confirm-password}
+
           "reset-password" {:get ::reset-password-form
                             :post ::process-reset-password}
           }])
@@ -182,6 +254,12 @@
                    :label s/Str
                    (s/optional-key :placeholder) s/Str
                    (s/optional-key :password?) s/Bool}]
+   :fields-confirm-password [{:name s/Str
+                   :label s/Str
+                   (s/optional-key :placeholder) s/Str
+                   (s/optional-key :password?) s/Bool}]
+
+
    (s/optional-key :emailer) (s/protocol Emailer)})
 
 (defn new-signup-with-totp [& {:as opts}]
@@ -194,13 +272,11 @@
                  {:name "email" :label "Email" :placeholder "email"}]
                 :fields-reset
                 [{:name "email" :label "Email" :placeholder "email"}]
+                :fields-confirm-password
+                [{:name "new_pw" :label "New Password" :password? true :placeholder "new password"}
+                 {:name "new_pw_bis" :label "Repeat New Password" :password? true :placeholder "repeat new password"}]
+
                 })
         (s/validate new-signup-with-totp-schema)
         map->SignupWithTotp)
    [:user-domain :session-store :renderer :verification-code-store]))
-
-
-;; notes
-#_[ {:name "old_pw" :label "Old Password" :password? true :placeholder "old password"}
-    {:name "new_pw" :label "New Password" :password? true :placeholder "new password"}
-    {:name "new_pw_bis" :label "Repeat New Password" :password? true :placeholder "repeat new password"}]
