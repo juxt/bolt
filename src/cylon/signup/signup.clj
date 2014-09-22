@@ -72,7 +72,7 @@
 ;; it. Strike the balance between unreasonable conditional logic and
 ;; code duplication.
 
-(defrecord SignupWithTotp [renderer session-store user-domain verification-code-store emailer fields fields-reset fields-confirm-password]
+(defrecord SignupWithTotp [renderer session-store user-domain verification-code-store emailer fields fields-reset fields-confirm-password client-registry]
   WebService
   (request-handlers [this]
     {::GET-signup-form
@@ -96,13 +96,18 @@
           (let [session (session session-store req)
                 form (-> req params-request :form-params)]
             (assoc-session-data! session-store req data)
-            (response (render-welcome
-                       renderer req
-                       (merge
-                         {:session session
-                          :redirection-uri "http://localhost:8010/devices"
-                          ;;(:redirection-uri (->> (:client-id session) (lookup-client+ (:client-registry this))))
-                          } form data)))))))
+            (if-let  [client-id (:client-id session)]
+              (response (render-welcome
+                         renderer req
+                         (merge
+                          {:session session
+                           :redirection-uri (:homepage-uri (lookup-client+ client-registry client-id))
+                           } form data)))
+              (response (render-welcome
+                         renderer req
+                         (merge
+                          {:session session
+                           } form data))))))))
 
      ::POST-signup-form-directly
      (fn [req]
@@ -282,4 +287,4 @@
                 })
         (s/validate new-signup-with-totp-schema)
         map->SignupWithTotp)
-   [:user-domain :session-store :renderer :verification-code-store]))
+   [:user-domain :session-store :renderer :verification-code-store :client-registry]))
