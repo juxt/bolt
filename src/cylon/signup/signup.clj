@@ -134,7 +134,7 @@
 
                (format "Sorry but there were problems trying to retrieve your data related with your mail '%s' " (get params "email")))]
 
-         (response (render-email-verified renderer req {:message body}))))
+         (response (render-email-verified renderer req {:message body :header "Verify user email"}))))
 
      ::verify-user-email-reset-password
      (fn [req]
@@ -161,9 +161,8 @@
                (format "Sorry but there were problems trying to retrieve your data related with your mail '%s' " (get params "email")))]
 
          (if (nil? (:status body))
-           (response (render-email-verified renderer req {:message body}))
-           body
-           )))
+           (response (render-email-verified renderer req {:message body :header "Reset Password Process"} ))
+           body)))
 
 
      ::reset-password-form
@@ -187,20 +186,21 @@
              (send-email emailer email
                          "Reset password confirmation step"
                          (format "Please click on this link to reset your password account: %s"
-                                 (make-verification-link req ::verify-user-email-reset-password code email))))
+                                 (make-verification-link req ::verify-user-email-reset-password code email)))
 
              (response
-             (format "We've found in our db, thanks for reseting for this mail: %s. You'll recieve an email with confirmation link"
-                     email)))
+              (render-email-verified
+               renderer req
+               {:message (format "We've found in our db, thanks for reseting for this mail: %s.
+ You'll recieve an email with confirmation link" email)
+                :header "Reset Password Process"} ))))
            {:status 200
             :body (render-reset-password
                    renderer req
                    {:form {:method :post
                            :action (path-for req ::process-reset-password)
                            :fields fields-reset}
-                    :reset-status (format "No user with this mail %s in our db. Try again" email)})}
-
-           )))
+                    :reset-status (format "No user with this mail %s in our db. Try again" email)})})))
 
      ::confirm-password
      (fn [req]
@@ -212,15 +212,18 @@
            (if (= pw pw-bis)
              (do
                (reset-password! user-domain identity pw)
-               {:status 200
-                :body "You are like a hero, successful result"}
-               )
+               (response (render-email-verified renderer req {:message "You are like a hero, successful result"
+                                                              :header "Reset Password Process"} )))
              {:status 200
-              :body "Your passwords aren't the same :( "}
-             )
+              :body (render-reset-password
+                   renderer req
+                   {:form {:method :post
+                           :action (path-for req ::confirm-password)
+                           :fields fields-confirm-password}
+                    :reset-status "Your passwords aren't the same :( . Try again"})})
            )
          {:status 200
-          :body "you shouldn't be here! :( "}
+          :body "you shouldn't be here! :(  "}
          )
        )
 
