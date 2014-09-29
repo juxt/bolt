@@ -11,8 +11,10 @@
    [clojure.string :as str]
    [cylon.oauth.client-registry :refer (lookup-client+)]
    [cylon.oauth.authorization :refer (AccessTokenAuthorizer authorized?)]
-   [cylon.authorization :refer (RequestAuthorizer request-authorized?)]
+   [cylon.authorization :refer (authorized-request?)]
+   [cylon.authorization.protocols :refer (RequestAuthorizer)]
    [cylon.authentication :refer (initiate-authentication-interaction get-outcome)]
+   [cylon.authentication.protocols :refer (AuthenticationInteraction)]
    [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)]
    [clj-time.core :refer (now plus days)]
    [cheshire.core :refer (encode)]
@@ -24,10 +26,11 @@
    [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]
    [ring.util.response :refer (redirect)]
    [cylon.oauth.client-registry :refer (ClientRegistry)]
-   [cylon.oauth.encoding :refer (decode-scope encode-scope as-query-string)]
+   [cylon.oauth.encoding :refer (decode-scope encode-scope)]
+   [cylon.util :refer (as-query-string)]
    [cylon.session.protocols :refer (SessionStore)]
    [cylon.token-store.protocols :refer (TokenStore)]
-   [cylon.authentication :refer (AuthenticationInteraction)]))
+   ))
 
 (defn wrap-schema-validation [h]
   (fn [req]
@@ -84,7 +87,7 @@
              ;; about this request for the return. We
 
              (if-not (:cylon/authenticated? authentication)
-               (initiate-authentication-interaction authenticator req {})
+               (initiate-authentication-interaction authenticator req)
 
                ;; Else... The user is AUTHENTICATED (now), so we AUTHORIZE the CLIENT
                (let [{response-type "response_type"
@@ -289,7 +292,7 @@
                  scope)))
 
   RequestAuthorizer
-  (request-authorized? [component request scope]
+  (authorized-request? [component request scope]
     (when-let [auth-header (get (:headers request) "authorization")]
       ;; Only match 'Bearer' tokens for now
       (let [access-token (second (re-matches #"\QBearer\E\s+(.*)" auth-header))]

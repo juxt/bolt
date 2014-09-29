@@ -2,7 +2,6 @@
   (:require
    [cylon.signup.protocols :refer (render-signup-form send-email render-email-verified Emailer SignupFormRenderer WelcomeRenderer render-welcome)]
    [clojure.tools.logging :refer :all]
-   [cylon.authentication :refer (InteractionStep get-location step-required?)]
    [cylon.session :refer (session respond-with-new-session! assoc-session-data!)]
    [cylon.session.protocols :refer (SessionStore)]
    [cylon.token-store :refer (create-token! get-token-by-id)]
@@ -132,14 +131,7 @@
           "verify-email" {:get ::verify-user-email}
           }])
 
-  (uri-context [this] "")
-
-  InteractionStep
-  (get-location [this req]
-    (path-for req ::GET-signup-form))
-  (step-required? [this req] true))
-
-
+  (uri-context [this] ""))
 
 (defn new-signup-with-totp [& {:as opts}]
   (component/using

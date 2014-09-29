@@ -18,6 +18,4 @@
 
   (respond-close-session! [_ req resp]
     "Delete the session from the store, response should inform the
-    browser by setting the cookie with a 1970 expiry")
-
-  #_(dissoc-data! [_ req key]))
+    browser by setting the cookie with a 1970 expiry"))

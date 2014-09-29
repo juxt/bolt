@@ -1,4 +1,6 @@
-(ns cylon.util)
+(ns cylon.util
+  (:require
+   [schema.core :as s]))
 
 (defprotocol KorksSet
   (as-set [_]))
@@ -13,9 +15,31 @@
   clojure.lang.PersistentList
   (as-set [l] (set l)))
 
+(defn uri-with-qs [req]
+  (str (:uri req)
+       (when-let [qs (:query-string req)] (when (not-empty qs) (str "?" qs )))))
+
 (defn absolute-uri [req]
-  (cond->
-   (apply format "%s://%s:%s%s"
-          ((juxt (comp name :scheme) :server-name :server-port :uri)
-           req))
-   (:query-string req) (str "?" (:query-string req))))
+  (apply format "%s://%s:%s%s"
+         ((juxt (comp name :scheme) :server-name :server-port uri-with-qs)
+          req)))
+
+(defn as-query-string [m]
+  (->>
+   (map (comp (partial apply str)
+              (partial interpose "="))
+        m)
+   (interpose "&")
+   (cons "?")
+   (apply str)))
+
+;; Schema
+
+(s/defschema Request "A Ring-style request"
+  {:headers s/Any
+   s/Keyword s/Any})
+
+(s/defschema Response "A Ring-style response"
+  {(s/optional-key :status) s/Num
+   (s/optional-key :headers) s/Any
+   (s/optional-key :body) s/Str})
