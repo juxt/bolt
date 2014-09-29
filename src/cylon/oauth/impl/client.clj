@@ -145,6 +145,7 @@
       wrap-params)
 
      ::logout (fn [req]
+                ;; TODO Perhaps we need to redirect to a logout on the auth-server side, with a original-uri of location-after-logout
                 (->> (if location-after-logout
                        (redirect location-after-logout)
                        {:status 200

@@ -66,9 +66,9 @@
 
            ;; TODO We should validate the incoming response_type
 
-           (debugf "OAuth2 authorization server: Authorizing request.")
 
            (let [authentication (get-outcome authenticator req)]
+             (debugf "OAuth2 authorization server: Authorizing request. User authentication is %s" authentication)
              ;; Establish whether the user-agent is already authenticated.
 
 
@@ -140,10 +140,7 @@
 
                        (do
                          (debugf (format "App doesn't require user acceptance, granting scopes as required: [%s]" required-scopes))
-                         (swap! store update-in
-                                [{:client-id client-id
-                                  :code code}]
-                                assoc :granted-scopes required-scopes)
+                         (swap! store update-in [code] assoc :granted-scopes required-scopes)
                          ;; 4.1.2: "If the resource owner grants the
                          ;; access request, the authorization server
                          ;; issues an authorization code and delivers it
@@ -165,7 +162,10 @@
 
      ;; TODO Implement RFC 6749 4.1.2.1 Error Response
 
-     ;; Can we comment this? What is it for? Who calls it? etc.
+     ;; ::permit is called by ::authorization-endpoint above, and it assumes
+     ;; various things are placed in the current session. It hasn't been
+     ;; properly tested (and we know it won't work as currently written)
+     ;; so treat as a stub for now.
      ::permit
      (->
       ;; TODO I'm worred about the fact we must ensure that the session
@@ -187,10 +187,7 @@
                   ]
 
               (debugf "Granting scopes: %s" granted-scopes)
-              (swap! store update-in
-                     [{:client-id client-id
-                       :code code}]
-                     assoc :granted-scopes granted-scopes)
+              (swap! store update-in [code] assoc :granted-scopes granted-scopes)
 
               (redirect
                (format "%s?code=%s&state=%s"
@@ -215,10 +212,7 @@
 
                (if-let [{sub :cylon/subject-identifier
                          granted-scopes :granted-scopes}
-                        (get @store
-                             ;; I don't think this key has to include client-id
-                             ;; - it can just be 'code'.
-                             {:client-id client-id :code code})]
+                        (get @store code)]
 
                  (let [access-token (str (java.util.UUID/randomUUID))
                        _ (create-token! access-token-store
@@ -243,28 +237,32 @@
                    ;; status code:"
 
                    (debugf "About to OK, granted scopes is %s (type is %s)" granted-scopes (type granted-scopes))
-                   (respond-close-session! session-store req {:status 200
-                                                              :body (encode {"access_token" access-token
-                                                                             "token_type" "Bearer"
-                                                                             "expires_in" 3600
-                                                                             ;; TODO Refresh token (optional)
+                   (respond-close-session!
+                    session-store req
+                    {:status 200
+                     :body (encode
+                            {"access_token" access-token
+                             "token_type" "Bearer"
+                             "expires_in" 3600
+                             ;; TODO Refresh token (optional)
 
-                                                                             ;; 5.1 scope OPTIONAL only if
-                                                                             ;; identical to scope requested by
-                                                                             ;; client, otherwise required. In
-                                                                             ;; this way, we pass back the scope
-                                                                             ;; to the client.
-                                                                             "scope" (encode-scope granted-scopes)
+                             ;; 5.1 scope OPTIONAL only if
+                             ;; identical to scope requested by
+                             ;; client, otherwise required. In
+                             ;; this way, we pass back the scope
+                             ;; to the client.
+                             "scope" (encode-scope granted-scopes)
 
-                                                                             ;; OpenID Connect ID Token
-                                                                             "id_token" (-> claim
-                                                                                            jwt
-                                                                                            (sign :HS256 "secret") to-str)
+                             ;; OpenID Connect ID Token
+                             "id_token"
+                             (-> claim
+                                 jwt
+                                 (sign :HS256 "secret") to-str)
 
-                                                                             })})
-                   )
+                             })}))
+
                  {:status 400
-                  :body "Invalid request - unknown code"}))))
+                  :body (format "Invalid request - unrecognized code: %s" code)}))))
          wrap-params )})
 
   (routes [_]

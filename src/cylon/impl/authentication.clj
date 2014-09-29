@@ -222,15 +222,15 @@
      (->
       (fn [req]
         (let [params (:form-params req)
-              identity (get params "user")
+              uid (get params "user")
               password (get params "password")
               session (session session-store req)]
 
-          (if (and identity
-                   (not-empty identity)
-                   (verify-password password-verifier (.trim identity) password))
+          (if (and uid
+                   (not-empty uid)
+                   (verify-password password-verifier (.trim uid) password))
             (do
-              (assoc-session-data! session-store req {:cylon/identity identity})
+              (assoc-session-data! session-store req {:cylon/subject-identifier uid})
               {:status 200
                :body "Thank you! - you gave the correct information!"})
 
@@ -267,8 +267,8 @@
      (fn [req]
        ;; TODO this "let .. secret " is only for showing the helper message to the developer
        ;; TODO  remove in production
-       (let [identity (:cylon/identity (session session-store req))
-             secret (get-totp-secret totp-store identity)]
+       (let [uid (:cylon/subject-identifier (session session-store req))
+             secret (get-totp-secret totp-store uid)]
          (if secret
            {:status 200
             :body (html
@@ -291,8 +291,8 @@
       (fn [req]
         (let [params (:form-params req)
               totp-code (get params "totp-code")
-              identity (:cylon/identity (session session-store req))
-              secret (get-totp-secret totp-store identity)]
+              uid (:cylon/subject-identifier (session session-store req))
+              secret (get-totp-secret totp-store uid)]
           (if
               (= totp-code (totp-token secret))
 
@@ -318,8 +318,8 @@
     )
   (step-required? [this req]
     false
-    #_(let [identity (get-data session-store req  :cylon/identity)]
-        (not (nil? (get-totp-secret totp-store identity))))))
+    #_(let [uid (get-data session-store req  :cylon/subject-identifier)]
+        (not (nil? (get-totp-secret totp-store uid))))))
 
 (defn new-authentication-totp-form [& {:as opts}]
   (->>
