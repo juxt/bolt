@@ -72,6 +72,11 @@
       (cons (first s)
             (unchunk (next s))))))
 
+(defn adapt-link-up [res]
+  (if (empty? res)
+    res
+    (conj (vec res)  [(-> res last last first) '()] )))
+
 (defn link-up [s]
   (take-while second
               (drop 1 (iterate (comp (juxt first next) second)
@@ -111,7 +116,7 @@
   (request-handlers [this]
     (debugf "Merging steps %s" steps)
     (apply merge
-           (for [[step next-steps] (link-up ((apply juxt steps) this))]
+           (for [[step next-steps] (adapt-link-up (link-up ((apply juxt steps) this)))]
              ;; The point of this is to wire together the steps.
              ;; POSTS which return 200 (OK) are 'mutated' return a 302 to the next step
              (reduce-kv
@@ -149,30 +154,6 @@
                [(uri-context step) [(routes step)]]))])
 
   (uri-context [this] ""))
-
-(defrecord AuthBug []
-  WebService
-  (request-handlers [this]
-    {::GET-other
-     (fn [req]
-       {:status 200
-        :body "bug"})
-     }
-    )
-  (routes [_] ["/" {"bug" {:get ::GET-other}}])
-  (uri-context [_] "/other")
-
-  InteractionStep
-  (get-location [this req]
-    (path-for req ::GET-other)
-    )
-  (step-required? [this req]
-    false))
-
-(defn new-auth-bug [& {:as opts}]
-  (->>
-   opts
-   map->AuthBug))
 
 (defn new-multi-factor-authentication-interaction [& {:as opts}]
   (component/using
