@@ -14,8 +14,8 @@
   (as-set [l] (set l)))
 
 (defn absolute-uri [req]
-  (apply format "%s://%s%s"
-         ((juxt (comp name :scheme)
-                (comp #(get % "host") :headers)
-                :uri)
-          req)))
+  (cond->
+   (apply format "%s://%s:%s%s"
+          ((juxt (comp name :scheme) :server-name :server-port :uri)
+           req))
+   (:query-string req) (str "?" (:query-string req))))

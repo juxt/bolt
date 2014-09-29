@@ -9,7 +9,7 @@
    #_[cylon.impl.request :refer (new-composite-disjunctive-request-authenticator)]
 ;; TODO
    #_[cylon.request :refer (new-http-basic-request-authenticator authenticate-request)]
-   [cylon.user :refer (UserStore)]
+   [cylon.user.protocols :refer (UserStore)]
    [schema.core :as s]))
 
 ;; For a REST API, it is useful to support both HTTP Basic

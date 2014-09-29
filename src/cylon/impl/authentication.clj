@@ -6,8 +6,8 @@
    [com.stuartsierra.component :as component]
    [cylon.authentication :refer (Authenticator authenticate AuthenticationInteraction InteractionStep get-location step-required?)]
    [cylon.session :refer (session assoc-session-data! respond-with-new-session!)]
+   [cylon.password :refer (verify-password)]
    [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)]
-   [cylon.user :refer (UserStore verify-user)]
    [hiccup.core :refer (html)]
    [modular.bidi :refer (WebService request-handlers routes uri-context path-for)]
    [plumbing.core :refer (<-)]
@@ -28,7 +28,7 @@
        (s/validate {:user s/Str})
        map->StaticAuthenticator))
 
-(defrecord HttpBasicAuthenticator []
+(defrecord HttpBasicAuthenticator [password-verifier]
   Authenticator
   (authenticate [this request]
     (when-let [header (get-in request [:headers "authorization"])]
@@ -36,7 +36,7 @@
         (let [[user password] (->> (String. (DatatypeConverter/parseBase64Binary basic-creds) "UTF-8")
                                    (re-matches #"(.*):(.*)")
                                    rest)]
-          (when (verify-user (:user-domain this) user password)
+          (when (verify-password password-verifier user password)
             {:cylon/user user
              :cylon/authentication-method :http-basic}))))))
 
@@ -44,7 +44,7 @@
   (component/using
    (->> opts
         map->HttpBasicAuthenticator)
-   [:user-domain]))
+   [:password-verifier]))
 
 ;; A request authenticator that tries multiple authenticators in
 ;; turn. Disjunctive means that a positive result from any given
@@ -93,19 +93,16 @@
           ;; which case, we should retrieve the session and treat it has
           ;; the initial-session-state)
           ]
-      (debugf "Initiating multi-factor authentication, redirecting to first step %s" first-step)
-      (if (session session-store req)
-        (redirect first-step)
-        ;; otherwise (not authenticated already)
-        (respond-with-new-session!
-         session-store req
-         (merge initial-session-state {:cylon/original-uri (get-original-uri req)})
-         (redirect first-step))))
-    )
+
+      ;; We ALWAYS start a new session when initiating a new authentication interaction.
+      (debugf "Initiating multi-factor authentication, creating new session and redirecting to first step %s" first-step)
+      (respond-with-new-session!
+       session-store req
+       (merge initial-session-state {:cylon/original-uri (get-original-uri req)})
+       (redirect first-step))))
+
   (get-outcome [this req]
     (session session-store req))
-  #_(clean-resources! [this req]
-      (remove! session-store req))
 
   ;; We proxy onto the dependencies which satisfy WebService in order to
   ;; change their behaviour.
@@ -197,7 +194,7 @@
 ;; 200 (OK) or 403 (Login failure).
 ;;
 ;; TODO Obviously we should also deal with errors, such as 500
-(defrecord LoginForm [fields session-store user-domain renderer]
+(defrecord LoginForm [fields session-store password-verifier renderer]
   WebService
   (request-handlers [this]
     {::GET-login-form
@@ -231,7 +228,7 @@
 
           (if (and identity
                    (not-empty identity)
-                   (verify-user user-domain (.trim identity) password))
+                   (verify-password password-verifier (.trim identity) password))
             (do
               (assoc-session-data! session-store req {:cylon/identity identity})
               {:status 200
@@ -261,9 +258,9 @@
                               (s/optional-key :placeholder) s/Str
                               (s/optional-key :password?) s/Bool}]})
        map->LoginForm
-       (<- (component/using [:user-domain :session-store :renderer]))))
+       (<- (component/using [:password-verifier :session-store :renderer]))))
 
-(defrecord TimeBasedOneTimePasswordForm [user-domain session-store]
+(defrecord TimeBasedOneTimePasswordForm [totp-store session-store]
   WebService
   (request-handlers [this]
     {::GET-totp-form
@@ -271,7 +268,7 @@
        ;; TODO this "let .. secret " is only for showing the helper message to the developer
        ;; TODO  remove in production
        (let [identity (:cylon/identity (session session-store req))
-             secret (get-totp-secret user-domain identity)]
+             secret (get-totp-secret totp-store identity)]
          (if secret
            {:status 200
             :body (html
@@ -295,7 +292,7 @@
         (let [params (:form-params req)
               totp-code (get params "totp-code")
               identity (:cylon/identity (session session-store req))
-              secret (get-totp-secret user-domain identity)]
+              secret (get-totp-secret totp-store identity)]
           (if
               (= totp-code (totp-token secret))
 
@@ -322,11 +319,11 @@
   (step-required? [this req]
     false
     #_(let [identity (get-data session-store req  :cylon/identity)]
-        (not (nil? (get-totp-secret user-domain identity))))))
+        (not (nil? (get-totp-secret totp-store identity))))))
 
 (defn new-authentication-totp-form [& {:as opts}]
   (->>
    opts
    (merge {})
    map->TimeBasedOneTimePasswordForm
-   (<- (component/using [:session-store :user-domain]))))
+   (<- (component/using [:session-store :totp-store]))))

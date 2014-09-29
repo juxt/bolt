@@ -160,34 +160,36 @@
   (get-access-token [this req]
     (session session-store req))
 
-  (solicit-access-token [this req uri]
-    (solicit-access-token this req uri []))
+  (solicit-access-token [this req authorize-uri]
+    (solicit-access-token this req authorize-uri []))
 
   ;; RFC 6749 4.1. Authorization Code Grant (A)
-  (solicit-access-token [this req uri scopes]
+  (solicit-access-token [this req authorize-uri scopes]
     (let [original-uri (absolute-uri req)
           state (str (java.util.UUID/randomUUID))
 
           ;; 4.1.1.  Authorization Request
-          response (let [loc (str
-                              uri
-                              (as-query-string {"response_type" "code" ; REQUIRED
-                                                "client_id" (:client-id this) ; REQUIRED
-                                        ; "redirect_uri" nil ; OPTIONAL (TODO)
-                                                "scope" (encode-scope
-                                                         (union (as-set scopes) ; OPTIONAL
-                                                                (:required-scopes this)))
-                                                "state" state ; RECOMMENDED to prevent CSRF
-                                                }))]
-                     (debugf "Redirecting to %s" loc)
-                     (redirect loc))
-
-          ]
-      ;; We need a session to store the original uri
+          response
+          (let [loc (str
+                     authorize-uri
+                     (as-query-string
+                      {"response_type" "code" ; REQUIRED
+                       "client_id" (:client-id this) ; REQUIRED
+                       ;; "redirect_uri" nil ; OPTIONAL (TODO)
+                       "scope" (encode-scope
+                                (union (as-set scopes) ; OPTIONAL
+                                       (:required-scopes this)))
+                       "state" state    ; RECOMMENDED to prevent CSRF
+                       }))]
+            (debugf "Redirecting to %s" loc)
+            (redirect loc))]
 
       (expect-state this state)
       ;; We create a session
       (debugf "Creating session to store original uri of %s" original-uri)
+      ;; We redirect to the (authorization) uri send the redirect response, but first
+
+      ;; We need a session to store the original uri
       (respond-with-new-session!
        session-store req {:cylon/original-uri original-uri} response)))
 

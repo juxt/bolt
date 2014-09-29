@@ -17,7 +17,7 @@
    (s/optional-key :headers) s/Any
    (s/optional-key :body) s/Str})
 
-(s/defn session :- (s/maybe{s/Keyword s/Any})
+(s/defn session :- (s/maybe {s/Keyword s/Any})
   [component :- (s/protocol p/SessionStore)
    request :- Request]
   (p/session component request))
