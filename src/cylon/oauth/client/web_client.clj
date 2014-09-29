@@ -1,5 +1,6 @@
-;; TODO Rename to cylon.oauth.client
-(ns cylon.oauth.impl.client
+;; Copyright © 2014, JUXT LTD. All Rights Reserved.
+
+(ns cylon.oauth.client.web-client
   (require
    [cheshire.core :refer (encode decode-stream)]
    [clj-jwt.core :refer (to-str jwt sign str->jwt verify encoded-claims)]
@@ -7,9 +8,9 @@
    [clojure.set :refer (union)]
    [clojure.tools.logging :refer :all]
    [com.stuartsierra.component :as component]
-   [cylon.authorization :refer (RequestAuthorizer)]
-   [cylon.oauth.client :refer (AccessTokenGrantee UserIdentity solicit-access-token)]
-   [cylon.oauth.client-registry :refer (register-client+)]
+   [cylon.authentication.protocols :refer (RequestAuthenticator)]
+   [cylon.oauth.client :refer (AccessTokenGrantee UserIdentity solicit-access-token expired?)]
+   [cylon.oauth.registry :refer (register-client)]
    [cylon.oauth.encoding :refer (encode-scope decode-scope)]
    [cylon.session :refer (session respond-with-new-session! assoc-session-data! respond-close-session!)]
    [cylon.util :refer (as-set absolute-uri as-query-string)]
@@ -42,7 +43,7 @@
     (if-let [reg client-registry]
       (let [{:keys [client-id client-secret]}
             (s/with-fn-validation
-              (register-client+
+              (register-client
                reg
                (select-keys
                 this
@@ -142,7 +143,10 @@
                         (infof "Scope is %s" scope)
                         (infof "Claims are %s" (:claims id-token))
 
-                        (assoc-session-data! session-store req {:access-token access-token :scope scope :open-id (-> id-token :claims) })
+                        (assoc-session-data! session-store req {:cylon/access-token access-token
+                                                                :cylon/scopes scope
+                                                                :cylon/open-id (-> id-token :claims)
+                                                                :cylon/subject-identifier (-> id-token :claims :sub)})
                         (redirect original-uri))))))))))
       wrap-params)
 
@@ -187,9 +191,6 @@
   (uri-context [this] "")
 
   AccessTokenGrantee
-  (get-access-token [this req]
-    (session session-store req))
-
   (solicit-access-token [this req authorize-uri]
     (solicit-access-token this req authorize-uri []))
 
@@ -225,10 +226,18 @@
 
   (expired? [_ req access-token] false)
 
+  RequestAuthenticator
+  (authenticate [component request]
+    (let [session (session session-store request)
+          access-token (:cylon/access-token session)]
+      (when-not (expired? component request access-token)
+        session)))
+
   UserIdentity
   (get-claims [this req]
     (when-let [session (session session-store req)]
       (:open-id session)))
+
 
   ;; TODO Deprecate this!
   TempState
@@ -271,42 +280,5 @@
         map->WebClient)
    [:client-registry :session-store]))
 
-;; But this isn't authorization - this is authentication
-;; can you write?
-;; > sorry; I thnk it can be renamed to : start-app-grant-workflow
-;; this fn encapsulates this kind of knowledge,, related to how start this process, where to go to grant the app privileges , so it has to be redirected , but doesn't check any value related to authentication there is not conditional here
-
-;; yes, but I would argue that this is still an authentication process which results in an access token
-;; an access token doesn't let you do anything, you must be authorized first
-;; the access token is a parameter into the authorizer
-;; authentication process results in a) user's identity b) an access token
-;; but the first step is totally independent of the second step
-;; both a) and b) are the results of a single workflow - the OAuth2 with OpenID/Connect layered on it
-;; i don't think so :)
-;; but we wouldn't run the oauth2 process (code exchange) twice - once for the user identity and another time for the access token - they are both established together using a single workflow
-; yes this is right , but i think that we are a bit mixing 2 workflows
-;; authn and authz will happen at the same time - you're right
-;; process A: it's really authn and partial authz, because
-;; process B is the completion of the authz step
-;; process B can assume that the access token is real and authentic.
-;; process B can also trust that the scopes associated with the access token are accurate and authentic
-;; process B can still choose to deny the user access to the resource, if the access token does not correspond to sufficient scopes
-;; so this discussion, is relaly about what to name this function
-;; and I don't think authorize captures the meaning
-;; process A: it's really authn and partial authz, because
-;; it would be more accurate to name this function 'process A'
-;; (but that would be silly)
-;; so I think we should name it authenticate because that captures more precisely (although not 100% accurately) what the process does
-;; but later we will run process B and that will be called authorization
-
-;; why don't you name it (defn grant app req)
-;; i think that really represents the fact or the start moment that the resource-owner grants the client to access the resource-server
-;; ok
-;; great!
-;; i see
-;; i'm going to the toilet )
-;; :)
-;; these comments wil be saved in github perhaps :)
-;; i'm getting coffee - i think you're right
-
-;; So this function does not belong in client.clj - it belongs in auth-server authorization.clj
+#_(defn get-subject-identifier [client req]
+  (->> req (get-claims client) :sub))

@@ -1,4 +1,4 @@
-(ns cylon.oauth.impl.logout
+(ns cylon.oauth.server.logout
   (:require
    [com.stuartsierra.component :refer (using)]
    [modular.bidi :refer (WebService)]

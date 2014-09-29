@@ -97,8 +97,7 @@
                             :name name}
                            (when (satisfies? OneTimePasswordStore user-store)
                              {:totp-secret totp-secret})
-                           (when true   ; authenticate on
-                             {:cylon/authenticated? true}))]
+                           )]
            (assoc-session-data! session-store req data)
            (response (render-welcome
                       renderer req

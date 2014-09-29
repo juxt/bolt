@@ -1,36 +1,34 @@
-(ns cylon.oauth.impl.authorization-server
+;; Copyright © 2014, JUXT LTD. All Rights Reserved.
+
+(ns cylon.oauth.server.server
   (require
-   [com.stuartsierra.component :as component :refer (Lifecycle)]
-   [clojure.tools.logging :refer :all]
-   [modular.bidi :refer (WebService)]
-   [bidi.bidi :refer (path-for)]
    [clojure.set :as set]
-   [hiccup.core :refer (html h)]
-   [schema.core :as s]
-   [plumbing.core :refer (<-)]
    [clojure.string :as str]
-   [cylon.oauth.client-registry :refer (lookup-client+)]
-   [cylon.oauth.authorization :refer (AccessTokenAuthorizer authorized?)]
-   [cylon.authorization :refer (authorized-request?)]
-   [cylon.authorization.protocols :refer (RequestAuthorizer)]
-   [cylon.authentication :refer (initiate-authentication-interaction get-outcome)]
-   [cylon.authentication.protocols :refer (AuthenticationInteraction)]
-   [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)]
-   [clj-time.core :refer (now plus days)]
+   [clojure.tools.logging :refer :all]
+   [bidi.bidi :refer (path-for)]
    [cheshire.core :refer (encode)]
    [clj-jwt.core :refer (to-str sign jwt)]
-   [ring.middleware.params :refer (wrap-params)]
-   [ring.middleware.cookies :refer (cookies-request)]
-   [cylon.session :refer (session respond-with-new-session! assoc-session-data! respond-close-session!)]
-   [cylon.token-store :refer (create-token! get-token-by-id)]
-   [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]
-   [ring.util.response :refer (redirect)]
-   [cylon.oauth.client-registry :refer (ClientRegistry)]
+   [clj-time.core :refer (now plus days)]
+   [com.stuartsierra.component :as component :refer (Lifecycle)]
+   [cylon.authentication :refer (authenticate initiate-authentication-interaction get-outcome)]
+   [cylon.authentication.protocols :refer (RequestAuthenticator AuthenticationInteraction)]
+   [cylon.oauth.registry.protocols :refer (ClientRegistry)]
+   [cylon.oauth.registry :refer (lookup-client)]
    [cylon.oauth.encoding :refer (decode-scope encode-scope)]
-   [cylon.util :refer (as-query-string)]
+   [cylon.session :refer (session respond-with-new-session! assoc-session-data! respond-close-session!)]
    [cylon.session.protocols :refer (SessionStore)]
+   [cylon.token-store :refer (create-token! get-token-by-id)]
    [cylon.token-store.protocols :refer (TokenStore)]
-   ))
+   [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)]
+   [cylon.util :refer (as-query-string)]
+   [hiccup.core :refer (html h)]
+   [modular.bidi :refer (WebService)]
+   [plumbing.core :refer (<-)]
+   [ring.middleware.cookies :refer (cookies-request)]
+   [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]
+   [ring.middleware.params :refer (wrap-params)]
+   [ring.util.response :refer (redirect)]
+   [schema.core :as s]))
 
 (defn wrap-schema-validation [h]
   (fn [req]
@@ -69,7 +67,6 @@
 
            ;; TODO We should validate the incoming response_type
 
-
            (let [authentication (get-outcome authenticator req)]
              (debugf "OAuth2 authorization server: Authorizing request. User authentication is %s" authentication)
              ;; Establish whether the user-agent is already authenticated.
@@ -86,7 +83,7 @@
              ;; create a new session, so we store important details
              ;; about this request for the return. We
 
-             (if-not (:cylon/authenticated? authentication)
+             (if-not (:cylon/subject-identifier authentication)
                (initiate-authentication-interaction authenticator req)
 
                ;; Else... The user is AUTHENTICATED (now), so we AUTHORIZE the CLIENT
@@ -102,7 +99,7 @@
 
                          {:keys [redirection-uri application-name description
                                  requires-user-acceptance? required-scopes] :as client}
-                         (lookup-client+ (:client-registry component) client-id)]
+                         (lookup-client (:client-registry component) client-id)]
 
                      ;; Why do we do this?
                      ;; you need to associate the user-data, scopes, redirect-uri with params...  with the code
@@ -175,7 +172,7 @@
       ;; represents a true authenticated user
       (fn [req]
         (let [session (session session-store req)]
-          (if (:cylon/authenticated? session)
+          (if (:cylon/subject-identifier session)
             (let [permitted-scopes (set (map
                                          (fn [x] (apply keyword (str/split x #"/")))
                                          (keys (:form-params req))))
@@ -186,7 +183,7 @@
                   granted-scopes (set/intersection permitted-scopes requested-scopes)
                   code (:code session)
                   client-id (:client-id session)
-                  {:keys [redirection-uri] :as client} (lookup-client+ (:client-registry component) client-id)
+                  {:keys [redirection-uri] :as client} (lookup-client (:client-registry component) client-id)
                   ]
 
               (debugf "Granting scopes: %s" granted-scopes)
@@ -206,7 +203,7 @@
            (let [params (:form-params req)
                  code (get params "code")
                  client-id (get params "client_id")
-                 client (lookup-client+ (:client-registry component) client-id)]
+                 client (lookup-client (:client-registry component) client-id)]
 
              ;; "When making the request, the client authenticates with
              ;; the authorization server."
@@ -228,7 +225,7 @@
                                   access-token
                                   {:client-id client-id
                                    :cylon/subject-identifier sub
-                                   :scopes granted-scopes})
+                                   :cylon/scopes granted-scopes})
 
                    ;; Store the access token
                    (assoc-session-data! session-store req {:cylon/access-token access-token})
@@ -281,22 +278,12 @@
 
   (uri-context [_] "/login/oauth")
 
-  AccessTokenAuthorizer
-  (authorized? [component access-token scope]
-    (if-not (contains? (set (keys scopes)) scope)
-      (throw (ex-info "Scope is not a known scope to this authorization server"
-                      {:component component
-                       :scope scope
-                       :scopes scopes}))
-      (contains? (:scopes (get-token-by-id access-token-store access-token))
-                 scope)))
-
-  RequestAuthorizer
-  (authorized-request? [component request scope]
+  RequestAuthenticator
+  (authenticate [component request]
     (when-let [auth-header (get (:headers request) "authorization")]
       ;; Only match 'Bearer' tokens for now
-      (let [access-token (second (re-matches #"\QBearer\E\s+(.*)" auth-header))]
-        (authorized? component access-token scope)))))
+      (when-let [access-token (second (re-matches #"\QBearer\E\s+(.*)" auth-header))]
+        (get-token-by-id access-token-store access-token)))))
 
 (defn new-authorization-server [& {:as opts}]
   (->> opts

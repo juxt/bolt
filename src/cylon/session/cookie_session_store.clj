@@ -49,8 +49,7 @@
 
     (let [id (str (java.util.UUID/randomUUID))
           token (create-token! token-store id data)]
-      (debugf (new Exception) "Creating new session (%s) cookie %s tied to token %s" (:token-type token-store) id token)
-
+      (debugf "Creating new session (%s) cookie %s tied to token %s" (:token-type token-store) id token)
       (cookies-response-with-session response cookie-id token)))
 
   (respond-close-session! [component request response]

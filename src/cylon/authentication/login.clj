@@ -82,7 +82,8 @@
        (let [params (-> req params-request :form-params)
              uid (get params "user")
              password (get params "password")
-             session (session session-store req)]
+             session (session session-store req)
+             post-login-redirect (get params "post_login_redirect")]
 
          (debugf "Form params posted to login form are %s" params)
 
@@ -90,15 +91,23 @@
                   (verify-password password-verifier (.trim uid) password))
 
            ;; Login successful!
-           (respond-with-new-session!
-            session-store req
-            {:cylon/subject-identifier uid}
-            (if-let [post-login-redirect (get params "post_login_redirect")]
-              (redirect-after-post post-login-redirect)
-              {:status 200 :body "Login successful"}))
+           (do
+             (debugf "Login successful!")
+             (respond-with-new-session!
+              session-store req
+              {:cylon/subject-identifier uid}
+              (if post-login-redirect
+                (redirect-after-post post-login-redirect)
+                {:status 200 :body "Login successful"})))
 
            ;; Login failed!
-           (redirect (path-for req ::login-form)))))})
+           (do
+             (debugf "Login failed!")
+             (redirect-after-post
+              (str (path-for req ::login-form)
+                   ;; We must be careful to add back the query string
+                   (when post-login-redirect
+                     (str "?post_login_redirect=" (URLEncoder/encode post-login-redirect)))))))))})
 
   (routes [this]
     ["" {"/login" {:get ::login-form
