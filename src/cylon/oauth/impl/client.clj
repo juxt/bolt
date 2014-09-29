@@ -1,24 +1,24 @@
 ;; TODO Rename to cylon.oauth.client
 (ns cylon.oauth.impl.client
   (require
-   [com.stuartsierra.component :as component]
-   [clojure.tools.logging :refer :all]
-   [clojure.set :refer (union)]
-   [schema.core :as s]
-   [modular.bidi :refer (WebService)]
-   [cylon.oauth.client :refer (AccessTokenGrantee UserIdentity solicit-access-token)]
-   [cylon.authorization :refer (RequestAuthorizer)]
-   [cylon.session :refer (session respond-with-new-session! assoc-session-data! respond-close-session!)]
-   [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]
-   [ring.util.response :refer (redirect)]
-   [ring.middleware.params :refer (wrap-params)]
-   [org.httpkit.client :refer (request) :rename {request http-request}]
    [cheshire.core :refer (encode decode-stream)]
-   [cylon.oauth.client-registry :refer (register-client+)]
-   [clojure.java.io :as io]
    [clj-jwt.core :refer (to-str jwt sign str->jwt verify encoded-claims)]
-   [cylon.util :refer (as-set absolute-uri)]
+   [clojure.java.io :as io]
+   [clojure.set :refer (union)]
+   [clojure.tools.logging :refer :all]
+   [com.stuartsierra.component :as component]
+   [cylon.authorization :refer (RequestAuthorizer)]
+   [cylon.oauth.client :refer (AccessTokenGrantee UserIdentity solicit-access-token)]
+   [cylon.oauth.client-registry :refer (register-client+)]
    [cylon.oauth.encoding :refer (encode-scope as-query-string decode-scope)]
+   [cylon.session :refer (session respond-with-new-session! assoc-session-data! respond-close-session!)]
+   [cylon.util :refer (as-set absolute-uri)]
+   [modular.bidi :refer (WebService)]
+   [org.httpkit.client :refer (request) :rename {request http-request}]
+   [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]
+   [ring.middleware.params :refer (wrap-params)]
+   [ring.util.response :refer (redirect)]
+   [schema.core :as s]
    ))
 
 ;; -------- Convenience - TODO promote somewhere
@@ -32,7 +32,9 @@
 ;; What I was saying was, in summary, that OpenID/Connect layers on top of OAuth2 - but in doing so complects the two processes: the first process (OAuth2) is responsible for authenticating the client application (let's call this Astro, a web ui for managing iot devices)
 ;; Alice is a user. She is using Astro to manage her azondi devices. The Oauth2 process is authenticating that Astro is a valid application.
 
-(defrecord WebClient [store access-token-uri location-after-logout session-store client-registry]
+(defrecord WebClient [store access-token-uri
+                      end-session-endpoint post-logout-redirect-uri
+                      session-store client-registry]
   component/Lifecycle
   (start [this]
     ;; If there's an :client-registry dependency, use it to
@@ -145,13 +147,40 @@
       wrap-params)
 
      ::logout (fn [req]
-                ;; TODO Perhaps we need to redirect to a logout on the auth-server side, with a original-uri of location-after-logout
-                (->> (if location-after-logout
-                       (redirect location-after-logout)
-                       {:status 200
-                        :body "You have logged out"})
-                     (respond-close-session! session-store req)))})
+                ;; http://openid.net/specs/openid-connect-session-1_0.html - chapter 5
 
+                ;; "An RP can notify the OP that the End-User has logged
+                ;; out of the site, and might want to log out of the OP
+                ;; as well. In this case, the RP, after having logged
+                ;; the End-User out of the RP, redirects the End-User's
+                ;; User Agent to the OP's logout endpoint URL. This URL
+                ;; is normally obtained via the end_session_endpoint
+                ;; element of the OP's Discovery response, or may be
+                ;; learned via other mechanisms."
+
+                ;; post_logout_redirect_uri
+                ;; OPTIONAL. URL to which the RP is requesting that the
+                ;; End-User's User
+                ;; Agent be redirected after a logout has been performed. The value MUST
+                ;; have been previously registered with the OP, either using the
+                ;; post_logout_redirect_uris Registration parameter or via another
+                ;; mechanism. If supplied, the OP SHOULD honor this request following
+                ;; the logout.
+
+                ;; TODO Perhaps we need to redirect to a logout on the auth-server side, with a original-uri of location-after-logout
+
+                (respond-close-session!
+                 session-store req
+                 (cond
+                  end-session-endpoint
+                  ;; "An RP can notify the OP that the End-User has logged out of the site"
+                  ;; If specified, add the OPTIONAL post_logout_redirect_uri query parameter
+                  (redirect (str end-session-endpoint (when post-logout-redirect-uri (str "?post_logout_redirect_uri=" post-logout-redirect-uri))))
+
+                  ;; If there's only a post-logout-redirect-uri, then redirect to it
+                   post-logout-redirect-uri (redirect post-logout-redirect-uri)
+                   :otherwise {:status 200 :body "Logged out"}
+                   )))})
 
   (routes [this] ["/" {"oauth/grant" {:get ::redirection-endpoint}
                        "logout" {:get ::logout}}])
@@ -174,7 +203,7 @@
           (let [loc (str
                      authorize-uri
                      (as-query-string
-                      {"response_type" "code" ; REQUIRED
+                      {"response_type" "code"        ; REQUIRED
                        "client_id" (:client-id this) ; REQUIRED
                        ;; "redirect_uri" nil ; OPTIONAL (TODO)
                        "scope" (encode-scope
@@ -226,6 +255,7 @@
                      :application-name s/Str
                      :homepage-uri s/Str
                      :redirection-uri s/Str
+                     (s/optional-key :post-logout-redirect-uri) s/Str
 
                      :required-scopes #{s/Keyword}
                      ;; TODO What's this? Can we document it?
@@ -233,6 +263,7 @@
 
                      :authorize-uri s/Str
                      :access-token-uri s/Str
+                     (s/optional-key :end-session-endpoint) s/Str
 
                      :requires-user-acceptance? s/Bool
                      (s/optional-key :location-after-logout) s/Str

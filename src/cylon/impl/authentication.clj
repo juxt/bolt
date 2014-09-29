@@ -3,16 +3,17 @@
 (ns cylon.impl.authentication
   (:require
    [clojure.tools.logging :refer :all]
-   [com.stuartsierra.component :as component]
+   [com.stuartsierra.component :as component :refer (using)]
    [cylon.authentication :refer (Authenticator authenticate AuthenticationInteraction InteractionStep get-location step-required?)]
-   [cylon.session :refer (session assoc-session-data! respond-with-new-session!)]
+   [cylon.session :refer (session assoc-session-data! respond-with-new-session! respond-close-session!)]
+   [cylon.token-store :refer (purge-token!)]
    [cylon.password :refer (verify-password)]
    [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)]
    [hiccup.core :refer (html)]
    [modular.bidi :refer (WebService request-handlers routes uri-context path-for)]
    [plumbing.core :refer (<-)]
-   [ring.middleware.cookies :refer (cookies-response wrap-cookies)]
-   [ring.middleware.params :refer (wrap-params)]
+   [ring.middleware.cookies :refer (cookies-response cookies-request)]
+   [ring.middleware.params :refer (params-request)]
    [ring.util.response :refer (redirect redirect-after-post)]
    [schema.core :as s])
   (:import
@@ -61,16 +62,16 @@
    (->CompositeDisjunctiveAuthenticator)
    (vec deps)))
 
-
-;; (If you're looking for CookieAuthenticator, it's in cylon.impl.session)
-
 ;; -----------------------------------------------------------------------
+
+;; Note: This MultiFactorAuthenticationInteraction is too 'clever' by
+;; far and should be replaced by more intentful explicit functions.
 
 (defn unchunk [s]
   (when (seq s)
     (lazy-seq
-      (cons (first s)
-            (unchunk (next s))))))
+     (cons (first s)
+           (unchunk (next s))))))
 
 (defn adapt-link-up [res]
   (if (empty? res)
@@ -200,25 +201,22 @@
          response)))
 
      ::POST-login-form
-     (->
-      (fn [req]
-        (let [params (:form-params req)
-              uid (get params "user")
-              password (get params "password")
-              session (session session-store req)]
+     (fn [req]
+       (let [params (-> req params-request :form-params)
+             uid (get params "user")
+             password (get params "password")
+             session (session session-store req)]
 
-          (if (and uid
-                   (not-empty uid)
-                   (verify-password password-verifier (.trim uid) password))
-            (do
-              (assoc-session-data! session-store req {:cylon/subject-identifier uid})
-              {:status 200
-               :body "Thank you! - you gave the correct information!"})
+         (if (and uid
+                  (not-empty uid)
+                  (verify-password password-verifier (.trim uid) password))
+           (do
+             (assoc-session-data! session-store req {:cylon/subject-identifier uid})
+             {:status 200
+              :body "Thank you! - you gave the correct information!"})
 
-            {:status 403
-             :body "Bad guess!!! Please try again :)"}
-            )))
-      wrap-params wrap-cookies)})
+           {:status 403
+            :body "Bad guess!!! Please try again :)"})))})
 
   (routes [_] ["/" {"login" {:get ::GET-login-form
                              :post ::POST-login-form}}])
@@ -264,29 +262,21 @@
                      (when secret [:p "(Hint, maybe it's something like... this ? " (totp-token secret) ")"])
                      ]])}
            ;; skip interaction step with flag => :status 999
-           {:status 403}))
-       )
+           {:status 403})))
 
      ::POST-totp-form
-     (->
-      (fn [req]
-        (let [params (:form-params req)
-              totp-code (get params "totp-code")
-              uid (:cylon/subject-identifier (session session-store req))
-              secret (get-totp-secret totp-store uid)]
-          (if
-              (= totp-code (totp-token secret))
-
-            {:status 200
-             :body "Thank you! That was the correct code"
-             ;; How do we signal to the dependant that we want to move to the next.
-             }
-
-            {:status 403
-             :body "Bad guess!!! Please try again :)"}
-
-            )))
-      wrap-params wrap-cookies)})
+     (fn [req]
+       (let [params (-> req params-request :form-params)
+             totp-code (get params "totp-code")
+             uid (:cylon/subject-identifier (session session-store req))
+             secret (get-totp-secret totp-store uid)]
+         (if (= totp-code (totp-token secret))
+           {:status 200
+            :body "Thank you! That was the correct code"
+            ;; How do we signal to the dependant that we want to move to the next.
+            }
+           {:status 403
+            :body "Bad guess!!! Please try again :)"})))})
 
   (routes [_] ["/" {"totp-challenge"
                     {:get ::GET-totp-form
@@ -308,3 +298,74 @@
    (merge {})
    map->TimeBasedOneTimePasswordForm
    (<- (component/using [:session-store :totp-store]))))
+
+
+;; ----
+
+#_(defrecord Login [session-store]
+  AuthenticationInteraction
+  (initiate-authentication-interaction [this req initial-session-state]
+    (let [steps ((apply juxt steps) this)
+          first-step (get-location (first steps) req)
+          ;; I think it's DONE
+          ;; (Note: It's possible that the user has already got a
+          ;; session, because they might have just signed up, etc. In
+          ;; which case, we should retrieve the session and treat it has
+          ;; the initial-session-state)
+          ]
+
+      ;; We ALWAYS start a new session when initiating a new authentication interaction.
+      (debugf "Initiating multi-factor authentication, creating new session and redirecting to first step %s" first-step)
+      (respond-with-new-session!
+       session-store req
+       (merge initial-session-state {:cylon/original-uri (get-original-uri req)})
+       (redirect first-step))))
+
+  (get-outcome [this req]
+    (session session-store req))
+
+  ;; We proxy onto the dependencies which satisfy WebService in order to
+  ;; change their behaviour.
+
+  WebService
+  (request-handlers [this]
+    (debugf "Merging steps %s" steps)
+    (apply merge
+           (for [[step next-steps] (adapt-link-up (link-up ((apply juxt steps) this)))]
+             ;; The point of this is to wire together the steps.
+             ;; POSTS which return 200 (OK) are 'mutated' return a 302 to the next step
+             (reduce-kv
+              (fn [acc k h]
+                (debugf (name k) h)
+                (assoc acc k
+                       (fn [req]
+                         (let [res (h req)]
+                           (if (= (:request-method req) :get)
+                             res
+                             ;; if not GET then change the response
+                             (case (:status res)
+                               ;; step-required? may be expensive, let's unchunk so as to not call it unnecessarily
+                               200 (if-let [next-step (first (filter #(step-required? % req) (unchunk next-steps)))]
+                                     {:status 302
+                                      :headers {"Location" (get-location next-step req)}
+                                      :body "Authenticator: Move to the next step"}
+
+                                     ;; No more steps, we're done. Redirect to the initiator.
+                                     (do
+                                       (assoc-session-data! (:session-store this) req {:cylon/authenticated? true})
+                                       ;; TODO What's this original uri? Can it also include the query string?
+                                       (let [original-uri (:cylon/original-uri (session session-store req))]
+                                         (debugf "Successful authentication, redirecting to original uri of %s" original-uri)
+                                         (redirect-after-post original-uri))))
+                               ;; It is the default policy of this
+                               ;; authenticator to allow the user to
+                               ;; retry entering her credentials
+                               403 (redirect-after-post (get-location step req))))))))
+              {}
+              (request-handlers step)))))
+
+  (routes [this]
+    ["" (vec (for [step ((apply juxt steps) this)]
+               [(uri-context step) [(routes step)]]))])
+
+  (uri-context [this] ""))

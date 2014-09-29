@@ -215,16 +215,20 @@
                         (get @store code)]
 
                  (let [access-token (str (java.util.UUID/randomUUID))
-                       _ (create-token! access-token-store
-                                        access-token
-                                        {:client-id client-id
-                                         :cylon/subject-identifier sub
-                                         :scopes granted-scopes})
                        claim {:iss iss
                               :sub sub
                               :aud client-id
                               :exp (plus (now) (days 1)) ; expiry ; TODO unhardcode
                               :iat (now)}]
+
+                   (create-token! access-token-store
+                                  access-token
+                                  {:client-id client-id
+                                   :cylon/subject-identifier sub
+                                   :scopes granted-scopes})
+
+                   ;; Store the access token
+                   (assoc-session-data! session-store req {:cylon/access-token access-token})
 
                    (infof "Claim is %s" claim)
 
