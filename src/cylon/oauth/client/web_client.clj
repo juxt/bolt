@@ -13,7 +13,7 @@
    [cylon.oauth.registry :refer (register-client)]
    [cylon.oauth.encoding :refer (encode-scope decode-scope)]
    [cylon.session :refer (session respond-with-new-session! assoc-session-data! respond-close-session!)]
-   [cylon.util :refer (as-set absolute-uri as-query-string)]
+   [cylon.util :refer (as-set absolute-uri as-www-form-urlencoded as-query-string)]
    [modular.bidi :refer (WebService)]
    [org.httpkit.client :refer (request) :rename {request http-request}]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]
@@ -109,11 +109,11 @@
 
                      ;; TODO: Better if we could construct this string
                      ;; with the help of some utility function.
-                     :body (format "grant_type=%s&code=%s&client_id=%s&client_secret=%s"
-                                   "authorization_code"
-                                   code
-                                   (:client-id this)
-                                   (:client-secret this))}
+
+                     :body (as-www-form-urlencoded {"grant_type" "authorization_code"
+                                                    "code" code
+                                                    "client_id" (:client-id this)
+                                                    "client_secret" (:client-secret this)})}
                     #(if (:error %)
                        %
                        (update-in % [:body] (comp decode-stream io/reader))))]
@@ -182,9 +182,9 @@
                   (redirect (str end-session-endpoint (when post-logout-redirect-uri (str "?post_logout_redirect_uri=" post-logout-redirect-uri))))
 
                   ;; If there's only a post-logout-redirect-uri, then redirect to it
-                   post-logout-redirect-uri (redirect post-logout-redirect-uri)
-                   :otherwise {:status 200 :body "Logged out"}
-                   )))})
+                  post-logout-redirect-uri (redirect post-logout-redirect-uri)
+                  :otherwise {:status 200 :body "Logged out"}
+                  )))})
 
   (routes [this] ["/" {"oauth/grant" {:get ::redirection-endpoint}
                        "logout" {:get ::logout}}])
@@ -200,20 +200,17 @@
           state (str (java.util.UUID/randomUUID))
 
           ;; 4.1.1.  Authorization Request
-          response
-          (let [loc (str
-                     authorize-uri
-                     (as-query-string
-                      {"response_type" "code"        ; REQUIRED
-                       "client_id" (:client-id this) ; REQUIRED
-                       ;; "redirect_uri" nil ; OPTIONAL (TODO)
-                       "scope" (encode-scope
-                                (union (as-set scopes) ; OPTIONAL
-                                       (:required-scopes this)))
-                       "state" state    ; RECOMMENDED to prevent CSRF
-                       }))]
-            (debugf "Redirecting to %s" loc)
-            (redirect loc))]
+          loc (str
+               authorize-uri
+               (as-query-string
+                {"response_type" "code"        ; REQUIRED
+                 "client_id" (:client-id this) ; REQUIRED
+                 ;; "redirect_uri" nil ; OPTIONAL (TODO)
+                 "scope" (encode-scope
+                          (union (as-set scopes) ; OPTIONAL
+                                 (:required-scopes this)))
+                 "state" state          ; RECOMMENDED to prevent CSRF
+                 }))]
 
       (expect-state this state)
       ;; We create a session
@@ -222,7 +219,9 @@
 
       ;; We need a session to store the original uri
       (respond-with-new-session!
-       session-store req {:cylon/original-uri original-uri} response)))
+       session-store req
+       {:cylon/original-uri original-uri}
+       (redirect loc))))
 
   (expired? [_ req access-token] false)
 

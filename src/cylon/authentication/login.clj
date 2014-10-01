@@ -103,6 +103,16 @@
            ;; Login failed!
            (do
              (debugf "Login failed!")
+
+             ;; TODO I think the best thing to do here is to create a
+             ;; session anyway - we have been posted after all. We can
+             ;; store in the session things like number of failed
+             ;; attempts (to attempt to prevent brute-force hacking
+             ;; attempts by limiting the number of sessions that can be
+             ;; used by each remote IP address). If we do this, then the
+             ;; post_login_redirect must be ascertained from the
+             ;; query-params, and then from the session.
+
              (redirect-after-post
               (str (path-for req ::login-form)
                    ;; We must be careful to add back the query string

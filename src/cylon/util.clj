@@ -1,6 +1,7 @@
 (ns cylon.util
   (:require
-   [schema.core :as s]))
+   [schema.core :as s])
+  (:import (java.net URLEncoder)))
 
 (defprotocol KorksSet
   (as-set [_]))
@@ -24,6 +25,12 @@
          ((juxt (comp name :scheme) :server-name :server-port uri-with-qs)
           req)))
 
+(defn as-www-form-urlencoded [m]
+  (->>
+   (map (fn [[k v]] (format "%s=%s" k (URLEncoder/encode v))) m)
+   (interpose "&")
+   (apply str)))
+
 (defn as-query-string [m]
   (->>
    (map (comp (partial apply str)
@@ -32,6 +39,8 @@
    (interpose "&")
    (cons "?")
    (apply str)))
+
+
 
 ;; Schema
 
