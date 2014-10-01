@@ -6,6 +6,8 @@
    [clojure.tools.logging :refer :all]
    [cylon.authentication.protocols :as p]
    [cylon.util :refer (Request Response)]
+   [cylon.session :refer (session)]
+   [cylon.session.protocols :refer (SessionStore)]
    [schema.core :as s]
    [com.stuartsierra.component :refer (using)]
    [plumbing.core :refer (<-)]))

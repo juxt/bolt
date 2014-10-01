@@ -9,7 +9,7 @@
    [clojure.tools.logging :refer :all]
    [com.stuartsierra.component :as component]
    [cylon.authentication.protocols :refer (RequestAuthenticator)]
-   [cylon.oauth.client :refer (AccessTokenGrantee UserIdentity solicit-access-token expired?)]
+   [cylon.oauth.client :refer (AccessTokenGrantee solicit-access-token expired?)]
    [cylon.oauth.registry :refer (register-client)]
    [cylon.oauth.encoding :refer (encode-scope decode-scope)]
    [cylon.session :refer (session respond-with-new-session! assoc-session-data! respond-close-session!)]
@@ -110,10 +110,11 @@
                      ;; TODO: Better if we could construct this string
                      ;; with the help of some utility function.
 
-                     :body (as-www-form-urlencoded {"grant_type" "authorization_code"
-                                                    "code" code
-                                                    "client_id" (:client-id this)
-                                                    "client_secret" (:client-secret this)})}
+                     :body (as-www-form-urlencoded
+                            {"grant_type" "authorization_code"
+                             "code" code
+                             "client_id" (:client-id this)
+                             "client_secret" (:client-secret this)})}
                     #(if (:error %)
                        %
                        (update-in % [:body] (comp decode-stream io/reader))))]
@@ -143,10 +144,11 @@
                         (infof "Scope is %s" scope)
                         (infof "Claims are %s" (:claims id-token))
 
-                        (assoc-session-data! session-store req {:cylon/access-token access-token
-                                                                :cylon/scopes scope
-                                                                :cylon/open-id (-> id-token :claims)
-                                                                :cylon/subject-identifier (-> id-token :claims :sub)})
+                        (assoc-session-data!
+                         session-store req {:cylon/access-token access-token
+                                            :cylon/scopes scope
+                                            :cylon/open-id (-> id-token :claims)
+                                            :cylon/subject-identifier (-> id-token :claims :sub)})
                         (redirect original-uri))))))))))
       wrap-params)
 
@@ -227,16 +229,7 @@
 
   RequestAuthenticator
   (authenticate [component request]
-    (let [session (session session-store request)
-          access-token (:cylon/access-token session)]
-      (when-not (expired? component request access-token)
-        session)))
-
-  UserIdentity
-  (get-claims [this req]
-    (when-let [session (session session-store req)]
-      (:open-id session)))
-
+    (session session-store request))
 
   ;; TODO Deprecate this!
   TempState
@@ -278,6 +271,3 @@
                      })
         map->WebClient)
    [:client-registry :session-store]))
-
-#_(defn get-subject-identifier [client req]
-  (->> req (get-claims client) :sub))

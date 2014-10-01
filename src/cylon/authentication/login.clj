@@ -53,7 +53,7 @@
   AuthenticationInteraction
   (initiate-authentication-interaction [this req]
     (if-let [p (path-for req ::login-form)]
-      (let [loc (str p (as-query-string {"post_login_redirect" (URLEncoder/encode (uri-with-qs req))} ))]
+      (let [loc (str p (as-query-string {"post_login_redirect" (URLEncoder/encode (uri-with-qs req))}))]
         (debugf "Redirecting to %s" loc)
         (redirect loc))
       (throw (ex-info "No path to login form" {}))))
@@ -124,8 +124,6 @@
                    :post ::process-login-attempt}}])
 
   (uri-context [this] ""))
-
-
 
 (defn new-login [& {:as opts}]
   (->> opts

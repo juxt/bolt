@@ -21,11 +21,6 @@
     in a new request being made with an access token, if possible."
     ))
 
-(defprotocol UserIdentity
-  (get-claims [_ req]
-    "Get the claims contained in the id-token returned as part of an
-    OpenID/Connect exchange."))
-
 ;; Ring middleware to restrict a handler to a given role.
 ;; The algo in here should fit many usages. However, other functions
 ;; could be provided to implement different policies.
