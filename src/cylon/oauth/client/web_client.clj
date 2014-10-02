@@ -13,6 +13,7 @@
    [cylon.oauth.registry :refer (register-client)]
    [cylon.oauth.encoding :refer (encode-scope decode-scope)]
    [cylon.session :refer (session respond-with-new-session! assoc-session-data! respond-close-session!)]
+   [cylon.token-store :refer (create-token! get-token-by-id purge-token!)]
    [cylon.util :refer (as-set absolute-uri as-www-form-urlencoded as-query-string)]
    [modular.bidi :refer (WebService)]
    [org.httpkit.client :refer (request) :rename {request http-request}]
@@ -22,20 +23,10 @@
    [schema.core :as s]
    ))
 
-;; -------- Convenience - TODO promote somewhere
-
-(defprotocol TempState
-  (expect-state [_ state])
-  (expecting-state? [this state]))
-
-;; It's nice for me to write down my thoughts to you because it captures what i'm thinking and we discuss here via typing !!
-
-;; What I was saying was, in summary, that OpenID/Connect layers on top of OAuth2 - but in doing so complects the two processes: the first process (OAuth2) is responsible for authenticating the client application (let's call this Astro, a web ui for managing iot devices)
-;; Alice is a user. She is using Astro to manage her azondi devices. The Oauth2 process is authenticating that Astro is a valid application.
-
-(defrecord WebClient [store access-token-uri
+(defrecord WebClient [access-token-uri
                       end-session-endpoint post-logout-redirect-uri
-                      session-store client-registry]
+                      session-store state-store
+                      client-registry]
   component/Lifecycle
   (start [this]
     ;; If there's an :client-registry dependency, use it to
@@ -74,9 +65,10 @@
      (->
       (fn [req]
         (let [params (:query-params req)
-              state (get params "state")]
+              state (get params "state")
+              tok (get-token-by-id state-store state)]
 
-          (if (not (expecting-state? this state))
+          (if (nil? tok)
             {:status 400 :body "Unexpected user state"}
 
             (let [code (get params "code")
@@ -118,6 +110,8 @@
                     #(if (:error %)
                        %
                        (update-in % [:body] (comp decode-stream io/reader))))]
+
+              (purge-token! state-store state)
 
               (if-let [error (:error at-resp)]
                 {:status 403
@@ -214,7 +208,7 @@
                  "state" state          ; RECOMMENDED to prevent CSRF
                  }))]
 
-      (expect-state this state)
+      (create-token! state-store state {})
       ;; We create a session
       (debugf "Creating session to store original uri of %s" original-uri)
       ;; We redirect to the (authorization) uri send the redirect response, but first
@@ -229,17 +223,7 @@
 
   RequestAuthenticator
   (authenticate [component request]
-    (session session-store request))
-
-  ;; TODO Deprecate this!
-  TempState
-  (expect-state [this state]
-    (swap! store update-in [:expected-states] conj state))
-  (expecting-state? [this state]
-    (if (contains? (:expected-states @store) state)
-      (do
-        (swap! store update-in [:expected-states] disj state)
-        true))))
+    (session session-store request)))
 
 (defn new-web-client
   "Represents an OAuth2 client. This component provides all the web
@@ -249,8 +233,7 @@
   [& {:as opts}]
   (component/using
    (->> opts
-        (merge {:store (atom {:expected-states #{}})
-                :requires-user-acceptance? true})
+        (merge {:requires-user-acceptance? true})
         (s/validate {(s/optional-key :client-id) s/Str
                      (s/optional-key :client-secret) s/Str
                      :application-name s/Str
@@ -259,8 +242,6 @@
                      (s/optional-key :post-logout-redirect-uri) s/Str
 
                      :required-scopes #{s/Keyword}
-                     ;; TODO What's this? Can we document it?
-                     :store s/Any
 
                      :authorize-uri s/Str
                      :access-token-uri s/Str
@@ -269,4 +250,4 @@
                      :requires-user-acceptance? s/Bool
                      })
         map->WebClient)
-   [:session-store]))
+   [:session-store :state-store]))
