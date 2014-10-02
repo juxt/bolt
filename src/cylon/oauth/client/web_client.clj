@@ -40,11 +40,11 @@
   (start [this]
     ;; If there's an :client-registry dependency, use it to
     ;; register this app.
-    (if-let [reg client-registry]
+    (if client-registry
       (let [{:keys [client-id client-secret]}
             (s/with-fn-validation
               (register-client
-               reg
+               client-registry
                (select-keys
                 this
                 [:client-id
@@ -267,7 +267,6 @@
                      (s/optional-key :end-session-endpoint) s/Str
 
                      :requires-user-acceptance? s/Bool
-                     (s/optional-key :location-after-logout) s/Str
                      })
         map->WebClient)
-   [:client-registry :session-store]))
+   [:session-store]))

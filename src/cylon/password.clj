@@ -59,7 +59,7 @@
   (make-password-hash [component password]
     (->hashed-password password-hash-algo (:rng component) password)))
 
-(defn new-password-verifier [& {:as opts}]
+(defn new-durable-password-verifier [& {:as opts}]
   (->> opts
        (merge {})
        map->UserStorePasswordVerifier
