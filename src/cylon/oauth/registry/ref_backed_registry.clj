@@ -1,7 +1,7 @@
-(ns cylon.oauth.impl.client-registry
+(ns cylon.oauth.registry.ref-backed-registry
   (require
    [com.stuartsierra.component :as component]
-   [cylon.oauth.client-registry :refer (ClientRegistry)]))
+   [cylon.oauth.registry.protocols :refer (ClientRegistry)]))
 
 ;; Optional ClientRegistry implementation
 

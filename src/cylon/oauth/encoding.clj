@@ -16,12 +16,3 @@
        (remove empty?)
        (map (fn [x] (apply keyword (str/split x #":"))))
        set))
-
-(defn as-query-string [m]
-  (->>
-   (map (comp (partial apply str)
-              (partial interpose "="))
-        m)
-   (interpose "&")
-   (cons "?")
-   (apply str)))

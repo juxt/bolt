@@ -1,6 +1,10 @@
-(ns cylon.oauth.authorization)
+;; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
-(defprotocol AccessTokenAuthorizer
-  ;; Determine if given credentials (found in request) meet a given
-  ;; requirement
-  (authorized? [_ access-token scope]))
+(ns cylon.oauth.authorization
+  (:require
+   [cylon.authentication :refer (authenticate)])
+  )
+
+(defn scope-authorized? [authenticator req scope]
+  (let [creds (authenticate authenticator req)]
+    (contains? (:cylon/scopes creds) scope)))

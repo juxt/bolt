@@ -2,7 +2,10 @@
   (:require
    [clojure.tools.logging :refer :all]
    [com.stuartsierra.component :refer (using)]
+   [cylon.session :refer (session)]
    [cylon.session.protocols :refer (SessionStore)]
+
+   [cylon.authentication.protocols :refer (RequestAuthenticator)]
    [cylon.token-store :refer (get-token-by-id merge-token! create-token! purge-token!)]
    [ring.middleware.cookies :refer (cookies-request cookies-response)]
    [schema.core :as s]
@@ -49,7 +52,7 @@
 
     (let [id (str (java.util.UUID/randomUUID))
           token (create-token! token-store id data)]
-      (debugf "Creating new session cookie %s tied to token %s" id token)
+      (debugf "Creating new session (%s) cookie %s tied to token %s" (:token-type token-store) id token)
       (cookies-response-with-session response cookie-id token)))
 
   (respond-close-session! [component request response]
@@ -57,7 +60,11 @@
       (purge-token! token-store tokid))
     (cookies-response
        (merge-with merge response
-                   {:cookies {cookie-id delete-cookie}}))))
+                   {:cookies {cookie-id delete-cookie}})))
+
+  RequestAuthenticator
+  (authenticate [component req]
+    (session component req)))
 
 (def new-cookie-session-store-schema {:cookie-id s/Str})
 

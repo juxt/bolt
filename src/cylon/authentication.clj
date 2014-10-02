@@ -1,43 +1,59 @@
 ;; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
-(ns cylon.authentication)
+(ns cylon.authentication
+  (:require
+   [clojure.string :as str]
+   [clojure.tools.logging :refer :all]
+   [cylon.authentication.protocols :as p]
+   [cylon.util :refer (Request Response)]
+   [cylon.session :refer (session)]
+   [cylon.session.protocols :refer (SessionStore)]
+   [schema.core :as s]
+   [com.stuartsierra.component :refer (using)]
+   [plumbing.core :refer (<-)]))
 
-;; Deprecated?
+;; RequestAuthenticator
 
-(defprotocol Authenticator
-  ;; If the request is authentic, return a map containing additional
-  ;; facts about the request.
-  (authenticate [_ request]))
+(s/defn authenticate :- {s/Keyword s/Any}
+  [component :- (s/protocol p/RequestAuthenticator)
+   request :- Request]
+  (p/authenticate component request))
 
-(extend-protocol Authenticator
-  Boolean
+(defrecord DispatchingRequestAuthenticator [mappings]
+  p/RequestAuthenticator
   (authenticate [this request]
-    (when this {})))
+    (when-let [header (get-in request [:headers "authorization"])]
+      (let [token-type (first (str/split (str/trim header) #"\s"))
+            dependency (get mappings token-type)]
+        (if-let [delegate-authenticator (get this dependency)]
+          (authenticate delegate-authenticator request)
+          (debugf "Unrecognized token type (%s -> %s) in incoming Authorization header, with mappings as %s" token-type dependency mappings))))))
 
+(def new-dispatching-request-authenticator-schema
+  {:mappings {s/Str s/Keyword}})
 
-;; -- NEW AUTH STEPS -----------------------------------------------------------
+(defn new-dispatching-request-authenticator [& {:as opts}]
+  (->> opts
+       (merge {})
+       (s/validate new-dispatching-request-authenticator-schema)
+       (map->DispatchingRequestAuthenticator)
+       (<- (using (-> opts :mappings vals vec)))))
 
-;; We define a state-machine
+;; Utility
 
-;; Steps can register in the state machine
+;; TODO: It's possible that it would be useful to memoize authentication on each request
 
-;; but in future, when we've removed the original protocol above, let's rename this to Authenticator
-(defprotocol AuthenticationInteraction
-  (initiate-authentication-interaction [_ request initial-session-state])
-  (get-outcome [_ request])
-  #_(clean-resources! [_ request])
-)
+(defn get-subject-identifier [authenticator req]
+  (:cylon/subject-identifier (authenticate authenticator req)))
 
-(defprotocol InteractionStep
-  (get-location [_ request])
-  ;; Given the request, is this step required? If not, continue to the next step
-  (step-required? [_ request]))
+;; AuthenticationInteraction
 
-;; Each step is a REDIRECT-GET / POST pair
+(s/defn initiate-authentication-interaction :- Response
+  [component :- (s/protocol p/AuthenticationInteraction)
+   request :- Request]
+  (p/initiate-authentication-interaction component request))
 
-;; We start with a session populated with an original-uri, which is where the user wants to be
-
-;; Login Flow
-
-
-;; TOTP Flow
+(s/defn get-outcome :- (s/maybe {s/Keyword s/Any})
+  [component :- (s/protocol p/AuthenticationInteraction)
+   request :- Request]
+  (p/get-outcome component request))

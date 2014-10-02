@@ -1,23 +1,22 @@
-;; One simple component that does signup, reset password, login form. etc.
-;; Mostly you want something simple that works which you can tweak later - you can provide your own implementation based on the reference implementation
-
 (ns cylon.signup.signup
   (:require
-   [cylon.signup.protocols :refer (render-signup-form send-email render-email-verified render-reset-password Emailer render-welcome)]
+   [cylon.signup.protocols :refer (render-signup-form send-email render-email-verified Emailer SignupFormRenderer WelcomeRenderer render-welcome)]
    [clojure.tools.logging :refer :all]
-   [cylon.authentication :refer (InteractionStep get-location step-required?)]
    [cylon.session :refer (session respond-with-new-session! assoc-session-data!)]
+   [cylon.session.protocols :refer (SessionStore)]
    [cylon.token-store :refer (create-token! get-token-by-id)]
-   [com.stuartsierra.component :as component]
+   [cylon.token-store.protocols :refer (TokenStore)]
+   [cylon.password.protocols :refer (PasswordVerifier make-password-hash)]
+   [com.stuartsierra.component :as component :refer (Lifecycle)]
    [modular.bidi :refer (WebService path-for)]
    [hiccup.core :refer (html)]
    [ring.middleware.params :refer (params-request)]
    [ring.middleware.cookies :refer (cookies-response wrap-cookies)]
    [ring.util.response :refer (response redirect)]
-   [cylon.user :refer (add-user! user-email-verified!)]
+   [cylon.user :refer (create-user! verify-email!)]
+   [cylon.user.protocols :refer (UserStore)]
    [cylon.totp :as totp]
-   [cylon.totp :refer (OneTimePasswordStore set-totp-secret)]
-   [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)]
+   [cylon.totp :refer (OneTimePasswordStore get-totp-secret set-totp-secret totp-token)]
    [schema.core :as s ]))
 
 (defn make-verification-link [req code email]
@@ -25,12 +24,26 @@
         verify-user-email-path (path-for req ::verify-user-email)]
     (apply format "%s://%s:%d%s?code=%s&email=%s" (conj values verify-user-email-path code email))))
 
-;; I think the TOTP functionality could be made optional,
-;; but yes, we probably could do a similar component without
-;; it. Strike the balance between unreasonable conditional logic and
-;; code duplication.
+(def new-signup-with-totp-schema
+  {:fields [{:name s/Str
+             :label s/Str
+             (s/optional-key :placeholder) s/Str
+             (s/optional-key :password?) s/Bool}]})
 
-(defrecord SignupWithTotp [renderer session-store user-domain verification-code-store emailer fields fields-reset]
+(defrecord SignupWithTotp [renderer session-store user-store password-verifier verification-code-store emailer fields]
+  Lifecycle
+  (start [component]
+    (s/validate (merge
+                 new-signup-with-totp-schema
+                 {:user-store (s/protocol UserStore)
+                  :session-store (s/protocol SessionStore)
+                  :password-verifier (s/protocol PasswordVerifier)
+                  :verification-code-store (s/protocol TokenStore)
+                  :renderer (s/both (s/protocol SignupFormRenderer)
+                                    (s/protocol WelcomeRenderer))
+                  (s/optional-key :emailer) (s/protocol Emailer)})
+                component))
+  (stop [component] component)
   WebService
   (request-handlers [this]
     {::GET-signup-form
@@ -51,37 +64,40 @@
      (fn [req]
        (debugf "Processing signup")
        (let [form (-> req params-request :form-params)
-             user-id (get form "user-id")
+             uid (get form "user-id")
              password (get form "password")
              email (get form "email")
              name (get form "name")
-             totp-secret (when (satisfies? OneTimePasswordStore user-domain)
+             totp-secret (when (satisfies? OneTimePasswordStore user-store)
                            (totp/secret-key))]
 
          ;; Add the user
-         (add-user! user-domain user-id password {:name name :email email})
+         (create-user! user-store uid (make-password-hash password-verifier password)
+                       email
+                       {:name name})
 
          ;; Add the totp-secret
-         (when (satisfies? OneTimePasswordStore user-domain)
-           (set-totp-secret user-domain user-id totp-secret))
+         (when (satisfies? OneTimePasswordStore user-store)
+           (set-totp-secret user-store uid totp-secret))
 
          ;; Send the email to the user now!
          (when emailer
            ;; TODO Possibly we should encrypt and decrypt the verification-code (symmetric)
            (let [code (str (java.util.UUID/randomUUID))]
-             (create-token! verification-code-store code {:email email :name name})
+             (create-token! verification-code-store
+                            code
+                            {:email email :id uid})
 
              (send-email emailer email
                          (format "Thanks for signing up. Please click on this link to verify your account: %s"
                                  (make-verification-link req code email)))))
 
          ;; Create a session that contains the secret-key
-         (let [data (merge {:cylon/subject-identifier user-id
+         (let [data (merge {:cylon/subject-identifier uid
                             :name name}
-                           (when (satisfies? OneTimePasswordStore user-domain)
+                           (when (satisfies? OneTimePasswordStore user-store)
                              {:totp-secret totp-secret})
-                           (when true ; authenticate on
-                             {:cylon/authenticated? true}))]
+                           )]
            (assoc-session-data! session-store req data)
            (response (render-welcome
                       renderer req
@@ -97,7 +113,7 @@
              (if-let [[email code] [ (get params "email") (get params "code")]]
                (if-let [store (get-token-by-id (:verification-code-store this) code)]
                  (if (= email (:email store))
-                   (do (user-email-verified! (:user-domain this) (:name store))
+                   (do (verify-email! user-store (:name store))
                        (format "Thanks, Your email '%s'  has been verified correctly " email))
                    (format "Sorry but your session associated with this email '%s' seems to not be logic" email))
                  (format "Sorry but your session associated with this email '%s' seems to not be valid" email))
@@ -106,48 +122,15 @@
 
          (response (render-email-verified renderer req {:message body}))))
 
-     ::reset-password-form
-     (fn [req]
-       {:status 200
-        :body (render-reset-password
-               renderer req
-               {:form {:method :post
-                       :action (path-for req ::process-reset-password)
-                       :fields fields-reset}})})
-
-     ::process-reset-password
-     (fn [req]
-       (let [form (-> req params-request :form-params)]
-         (response
-          (format "Thanks for reseting pw. Old pw: %s. New pw: %s"
-                  (get form "old_pw")
-                  (get form "new_pw")))))})
+     })
 
   (routes [this]
     ["/" {"signup" {:get ::GET-signup-form
                     :post ::POST-signup-form}
           "verify-email" {:get ::verify-user-email}
-          "reset-password" {:get ::reset-password-form
-                            :post ::process-reset-password}
           }])
 
-  (uri-context [this] "")
-
-  InteractionStep
-  (get-location [this req]
-    (path-for req ::GET-signup-form))
-  (step-required? [this req] true))
-
-(def new-signup-with-totp-schema
-  {:fields [{:name s/Str
-             :label s/Str
-             (s/optional-key :placeholder) s/Str
-             (s/optional-key :password?) s/Bool}]
-   :fields-reset [{:name s/Str
-                   :label s/Str
-                   (s/optional-key :placeholder) s/Str
-                   (s/optional-key :password?) s/Bool}]
-   (s/optional-key :emailer) (s/protocol Emailer)})
+  (uri-context [this] ""))
 
 (defn new-signup-with-totp [& {:as opts}]
   (component/using
@@ -157,12 +140,12 @@
                  {:name "password" :label "Password" :password? true :placeholder "password"}
                  {:name "name" :label "Name" :placeholder "name"}
                  {:name "email" :label "Email" :placeholder "email"}]
-                :fields-reset
-                [
-                 {:name "old_pw" :label "Old Password" :password? true :placeholder "old password"}
-                 {:name "new_pw" :label "New Password" :password? true :placeholder "new password"}
-                 {:name "new_pw_bis" :label "Repeat New Password" :password? true :placeholder "repeat new password"}]
                 })
         (s/validate new-signup-with-totp-schema)
         map->SignupWithTotp)
-   [:user-domain :session-store :renderer :verification-code-store]))
+   [:user-store
+    :password-verifier
+    :session-store
+    :renderer
+    :verification-code-store
+    :emailer]))

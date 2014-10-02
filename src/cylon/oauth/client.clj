@@ -1,14 +1,12 @@
 (ns cylon.oauth.client
   (:require
    [clojure.tools.logging :refer :all]
+   [cylon.authentication :refer (authenticate)]
    [schema.core :as s]))
 
 ;; I don't think this is a wonderful name but until we can think of
 ;; something better :)
 (defprotocol AccessTokenGrantee
-  (get-access-token [_ req]
-    "Get the access-token held by the client, if one has been granted, ")
-
   (solicit-access-token
     [_ req uri]
     [_ req uri scope-korks]
@@ -23,35 +21,22 @@
     in a new request being made with an access token, if possible."
     ))
 
-(s/defn ^{:doc "May returns nil if no access token"}
-  get-access-token+ :- {(s/optional-key :access-token) s/Str
-                        (s/optional-key :scope) #{s/Keyword}
-                        (s/optional-key :original-uri) s/Str
-                        s/Keyword s/Any}
-  [p :- (s/protocol AccessTokenGrantee)
-   req :- s/Any]
-  (or (get-access-token p req) {}))
-
-(defprotocol UserIdentity
-  (get-claims [_ req]
-    "Get the claims contained in the id-token returned as part of an
-    OpenID/Connect exchange."))
-
-(defn get-subject-identifier [client req]
-  (->> req (get-claims client) :sub))
-
 ;; Ring middleware to restrict a handler to a given role.
 ;; The algo in here should fit many usages. However, other functions
 ;; could be provided to implement different policies.
+
 (defn wrap-require-authorization
   "Restrict a handler to a role. :identity and :access-token are added
   to the request. If a role is specified, also check that the role
   exists in the scope of the client. If role isn't specified, the
   identity and access-token are still retrieved."
-  [h client & [role]]
+  [h client & [scope]]
   (fn [req]
-    (let [{:keys [access-token scope]}
-          (s/with-fn-validation (get-access-token+ client req))]
+    (let [{access-token :cylon/access-token
+           scopes :cylon/scopes
+           sub :cylon/subject-identifier}
+          (authenticate client req)]
+
       (cond
        (nil? access-token)
        (do
@@ -65,11 +50,11 @@
          ;; used to refresh the access-token
          (refresh-access-token client req))
 
-       (and role (not (contains? scope role)))
+       (and scope (not (contains? scopes scope)))
        ;; TODO Must do something better than this
        {:status 401 :body "Sorry, you just don't have enough privileges to access this page"}
 
        :otherwise
        (h (assoc req
-            :cylon/subject-identifier (get-subject-identifier client req)
+            :cylon/subject-identifier sub
             :cylon/access-token access-token))))))
