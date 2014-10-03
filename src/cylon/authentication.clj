@@ -14,7 +14,7 @@
 
 ;; RequestAuthenticator
 
-(s/defn authenticate :- {s/Keyword s/Any}
+(s/defn authenticate :- (s/maybe {s/Keyword s/Any})
   [component :- (s/protocol p/RequestAuthenticator)
    request :- Request]
   (p/authenticate component request))
