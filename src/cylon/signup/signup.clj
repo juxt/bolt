@@ -89,6 +89,7 @@
                             {:email email :id uid})
 
              (send-email emailer email
+                         "Please verify your email address"
                          (format "Thanks for signing up. Please click on this link to verify your account: %s"
                                  (make-verification-link req code email)))))
 
