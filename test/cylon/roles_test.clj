@@ -1,6 +1,6 @@
 (ns cylon.roles-test
   (:require
-   [cylon.core :refer :all]
+   [cylon.authorization :refer :all]
    [clojure.test :refer :all]
    [clojure.set :as set]))
 

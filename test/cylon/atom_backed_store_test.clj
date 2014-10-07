@@ -1,8 +1,8 @@
 (ns cylon.atom-backed-store-test
   (:require
    [clojure.test :refer :all]
-   [cylon.store.atom-backed-store :refer :all]
-   [cylon.store :refer :all]
+   [cylon.token-store.atom-backed-store :refer :all]
+   [cylon.token-store :refer :all]
    [schema.core :as s]))
 
 (defn atom-fixture [f]
