@@ -15,8 +15,6 @@
 (defprotocol EmailVerifiedRenderer
   (render-email-verified [_ req model]))
 
-
-
 (defprotocol Emailer
   (send-email [_ email title body]))
 
