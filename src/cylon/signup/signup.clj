@@ -1,6 +1,6 @@
 (ns cylon.signup.signup
   (:require
-   [cylon.signup.protocols :refer (render-signup-form send-email render-email-verified Emailer SignupFormRenderer WelcomeRenderer render-welcome)]
+   [cylon.signup.protocols :refer (render-signup-form send-email render-email-verified Emailer SignupFormRenderer)]
    [clojure.tools.logging :refer :all]
    [cylon.session :refer (session respond-with-new-session! assoc-session-data!)]
    [cylon.session.protocols :refer (SessionStore)]
@@ -12,7 +12,7 @@
    [hiccup.core :refer (html)]
    [ring.middleware.params :refer (params-request)]
    [ring.middleware.cookies :refer (cookies-response wrap-cookies)]
-   [ring.util.response :refer (response redirect)]
+   [ring.util.response :refer (response redirect redirect-after-post)]
    [cylon.user :refer (create-user! verify-email!)]
    [cylon.user.protocols :refer (UserStore)]
    [cylon.totp :as totp]
@@ -28,7 +28,8 @@
   {:fields [{:name s/Str
              :label s/Str
              (s/optional-key :placeholder) s/Str
-             (s/optional-key :password?) s/Bool}]})
+             (s/optional-key :password?) s/Bool}]
+   (s/optional-key :post-signup-redirect) s/Str})
 
 (defrecord SignupWithTotp [renderer session-store user-store password-verifier verification-code-store emailer fields]
   Lifecycle
@@ -39,13 +40,12 @@
                   :session-store (s/protocol SessionStore)
                   :password-verifier (s/protocol PasswordVerifier)
                   :verification-code-store (s/protocol TokenStore)
-                  :renderer (s/both (s/protocol SignupFormRenderer)
-                                    (s/protocol WelcomeRenderer))
+                  :renderer s/Any
                   (s/optional-key :emailer) (s/protocol Emailer)})
                 component))
   (stop [component] component)
   WebService
-  (request-handlers [this]
+  (request-handlers [component]
     {::GET-signup-form
      (fn [req]
        (let [resp (response (render-signup-form
@@ -57,6 +57,8 @@
            ;; We create an empty session. This is because the POST
            ;; handler requires that a session exists within which it can
            ;; store the identity on a successful login
+           ;; (revisit: the comment above is wrong, the POST handler can
+           ;; create the session)
            (respond-with-new-session! session-store req {} resp)
            resp)))
 
@@ -94,25 +96,25 @@
                                  (make-verification-link req code email)))))
 
          ;; Create a session that contains the secret-key
-         (let [data (merge {:cylon/subject-identifier uid
-                            :name name}
+         (let [data (merge {:cylon/subject-identifier uid :name name}
                            (when (satisfies? OneTimePasswordStore user-store)
-                             {:totp-secret totp-secret})
-                           )]
+                             {:totp-secret totp-secret}))]
            (assoc-session-data! session-store req data)
-           (response (render-welcome
-                      renderer req
-                      (merge
-                       {:session (session session-store req)}
-                       form
-                       data))))))
+
+           (respond-with-new-session!
+            session-store req
+            {:cylon/subject-identifier uid}
+            (if-let [loc (or (get form "post_signup_redirect")
+                             (:post-signup-redirect component))]
+              (redirect-after-post loc)
+              (response (format "Thank you, %s, for signing up" name)))))))
 
      ::verify-user-email
      (fn [req]
        (let [params (-> req params-request :params)
              body
              (if-let [[email code] [ (get params "email") (get params "code")]]
-               (if-let [store (get-token-by-id (:verification-code-store this) code)]
+               (if-let [store (get-token-by-id (:verification-code-store component) code)]
                  (if (= email (:email store))
                    (do (verify-email! user-store (:name store))
                        (format "Thanks, Your email '%s'  has been verified correctly " email))
@@ -125,13 +127,13 @@
 
      })
 
-  (routes [this]
+  (routes [_]
     ["/" {"signup" {:get ::GET-signup-form
                     :post ::POST-signup-form}
           "verify-email" {:get ::verify-user-email}
           }])
 
-  (uri-context [this] ""))
+  (uri-context [_] ""))
 
 (defn new-signup-with-totp [& {:as opts}]
   (component/using
