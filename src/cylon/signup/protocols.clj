@@ -18,4 +18,7 @@
 
 
 (defprotocol Emailer
-  (send-email [_ email body]))
+  (send-email [_ email title body]))
+
+(defprotocol EmailVerifier
+  (send-verification [_ req email]))

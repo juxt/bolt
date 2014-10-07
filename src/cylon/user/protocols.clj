@@ -11,3 +11,11 @@
   (get-user-by-email [_ email])
   (delete-user! [_ uid])
   (verify-email! [_ uid]))
+
+(defprotocol VerifyUserEmail
+  (user-email-verified! [_ identity]))
+
+(defprotocol ResetUserEmail
+  (find-user-by-email [_ email])
+  (reset-password! [_ indentity password])
+  )
