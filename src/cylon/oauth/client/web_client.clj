@@ -1,7 +1,7 @@
 ;; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
 (ns cylon.oauth.client.web-client
-  (require
+  (:require
    [cheshire.core :refer (encode decode-stream)]
    [clj-jwt.core :refer (to-str jwt sign str->jwt verify encoded-claims)]
    [clojure.java.io :as io]
@@ -11,6 +11,7 @@
    [cylon.authentication.protocols :refer (RequestAuthenticator)]
    [cylon.oauth.client :refer (AccessTokenGrantee solicit-access-token expired?)]
    [cylon.oauth.registry :refer (register-client)]
+   [cylon.oauth.registry.protocols :refer (ClientRegistry)]
    [cylon.oauth.encoding :refer (encode-scope decode-scope)]
    [cylon.session :refer (session respond-with-new-session! assoc-session-data! respond-close-session!)]
    [cylon.token-store :refer (create-token! get-token-by-id purge-token!)]
@@ -31,6 +32,8 @@
   (start [this]
     ;; If there's an :client-registry dependency, use it to
     ;; register this app.
+    (debugf "Starting web client and registering with the client-registry: %s" client-registry)
+
     (if client-registry
       (let [{:keys [client-id client-secret]}
             (s/with-fn-validation
