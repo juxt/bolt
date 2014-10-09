@@ -39,9 +39,10 @@ missing in the Clojure landscape and the gap that Cylon aims to fill.
 The key difference is that [Friend](https://github.com/cemerick/friend)
 is designed upon [Compojure](https://github.com/weavejester/compojure),
 whereas Cylon is based on
-[Component](https://github.com/stuartsierra/component). It is designed
-specifically for modular applications, where functionality can be added
-through the addition of extra components.
+[Component](https://github.com/stuartsierra/component).
+
+Cylon is designed specifically for modular applications, where
+functionality can be added through the addition of extra components.
 
 Stuart Sierra's component library provides a balanced, elegant and
 "essential" foundation for bringing all these parts together into a
