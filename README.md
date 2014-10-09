@@ -27,8 +27,8 @@ declared dependency references into each component.
 Cylon provides an _integrated system_, rather than requiring developers
 to roll their own from smaller libraries.
 
-Alternative systems can be created by interchanging components,
-providing necessary flexibility for bespoke Clojure applications.
+Functionality can be customised by interchanging components, providing
+necessary flexibility for bespoke Clojure applications.
 
 Nevertheless, 'out-of-the-box' defaults should provide good security, on
 par with other languages and frameworks. That is what is currently
