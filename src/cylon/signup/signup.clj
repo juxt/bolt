@@ -1,6 +1,8 @@
+;; Copyright © 2014, JUXT LTD. All Rights Reserved.
+
 (ns cylon.signup.signup
   (:require
-   [cylon.signup.protocols :refer (render-signup-form send-email render-email-verified Emailer SignupFormRenderer)]
+   [cylon.signup.protocols :refer (render-signup-form send-email! render-email-verified Emailer SignupFormRenderer)]
    [clojure.tools.logging :refer :all]
    [cylon.session :refer (session respond-with-new-session! assoc-session-data!)]
    [cylon.session.protocols :refer (SessionStore)]
@@ -90,10 +92,11 @@
                             code
                             {:email email :id uid})
 
-             (send-email emailer email
-                         "Please verify your email address"
-                         (format "Thanks for signing up. Please click on this link to verify your account: %s"
-                                 (make-verification-link req code email)))))
+             (send-email! emailer email
+                          "Please verify your email address"
+                          (format "Thanks for signing up. Please click on this link to verify your account: %s"
+                                  (make-verification-link req code email))
+                          "text/plain")))
 
          ;; Create a session that contains the secret-key
          (let [data (merge {:cylon/subject-identifier uid :name name}

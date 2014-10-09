@@ -1,3 +1,5 @@
+;; Copyright © 2014, JUXT LTD. All Rights Reserved.
+
 (ns cylon.signup.protocols)
 
 (defprotocol SignupFormRenderer
@@ -16,7 +18,10 @@
   (render-email-verified [_ req model]))
 
 (defprotocol Emailer
-  (send-email [_ email title body]))
+  (send-email! [_ address subject body content-type]
+    "Send an email to a recipient, with the given subject and body. The
+    content-type argument is intended to allow the sending of HTML
+    emails, with embedded images."))
 
 (defprotocol WelcomeEmailRenderer
   (render-email-verification-message [_ link]

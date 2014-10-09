@@ -4,7 +4,7 @@
    [com.stuartsierra.component :as component]
                                         ;   [cylon.session :refer (session respond-with-new-session! assoc-session-data!)]
    [cylon.session.protocols :refer (session assoc-session-data!)]
-   [cylon.signup.protocols :refer (render-signup-form send-email render-simple-message  Emailer render-welcome render-request-reset-password-form)]
+   [cylon.signup.protocols :refer (render-signup-form send-email! render-simple-message  Emailer render-welcome render-request-reset-password-form)]
    [cylon.token-store :refer (create-token! get-token-by-id purge-token!)]
    [cylon.totp :refer (OneTimePasswordStore set-totp-secret get-totp-secret totp-token secret-key)]
    [cylon.verify-mail :refer (make-verification-link)]
@@ -42,16 +42,17 @@
            (let [code (str (java.util.UUID/randomUUID))]
              (create-token! verification-code-store code {:email email :name (:user user-by-mail)})
 
-             (send-email emailer email
-                         "Reset password confirmation step"
-                         (format "Please click on this link to reset your password account: %s"
-                                 (make-verification-link req ::reset-password-form code email)))
+             (send-email! emailer email
+                          "Reset password confirmation step"
+                          (format "Please click on this link to reset your password account: %s"
+                                  (make-verification-link req ::reset-password-form code email))
+                          "text/plain")
 
              (response
               (render-simple-message
                renderer req
                "Reset password"
-                (format "We've found your details and sent a password reset link to %s." email)
+               (format "We've found your details and sent a password reset link to %s." email)
                )))
            {:status 200
             :body (render-request-reset-password-form
