@@ -22,21 +22,6 @@ with associated protocols specifying functions for start/stop and
 others. A _system_ is a set of these components, with the inclusion of
 declared dependency references into each component.
 
-## Quick start
-
-To create a modular website integrated with Cylon security comonents, use `lein modular`.
-
-    $ lein new modular myapp +cylon
-
-If you plan to create web APIs, Cylon also offers OAuth2, allowing you
-to expose this APIs securely for use by other applications.
-
-Add __`+idp`__ (__+__ __id__entity __p__rovider) if you wish to store
-
-You can add them individually or both together in the same application :-
-
-    $ lein new modular myapp +cylon +idp +rp
-
 ## Discussion
 
 Cylon provides an _integrated system_, rather than requiring developers
