@@ -1,6 +1,6 @@
 (ns cylon.signup.signup
   (:require
-   [cylon.signup.protocols :refer (render-signup-form send-email render-email-verified Emailer SignupFormRenderer)]
+   [cylon.signup.protocols :refer (render-signup-form send-email render-email-verified Emailer SignupFormRenderer send-verification-link verify-email-results-codes)]
    [clojure.tools.logging :refer :all]
    [cylon.session :refer (session respond-with-new-session! assoc-session-data!)]
    [cylon.session.protocols :refer (SessionStore)]
@@ -30,6 +30,10 @@
              (s/optional-key :placeholder) s/Str
              (s/optional-key :password?) s/Bool}]
    (s/optional-key :post-signup-redirect) s/Str})
+
+(defn- get-verify-email-result [k]
+  (first (select-keys verify-email-results-codes [k])))
+
 
 (defrecord SignupWithTotp [renderer session-store user-store password-verifier verification-code-store emailer fields]
   Lifecycle
@@ -90,10 +94,7 @@
                             code
                             {:email email :id uid})
 
-             (send-email emailer email
-                         "Please verify your email address"
-                         (format "Thanks for signing up. Please click on this link to verify your account: %s"
-                                 (make-verification-link req code email)))))
+             (send-verification-link emailer email (make-verification-link req code email))))
 
          ;; Create a session that contains the secret-key
          (let [data (merge {:cylon/subject-identifier uid :name name}
@@ -112,18 +113,18 @@
      ::verify-user-email
      (fn [req]
        (let [params (-> req params-request :params)
-             body
-             (if-let [[email code] [ (get params "email") (get params "code")]]
-               (if-let [store (get-token-by-id (:verification-code-store component) code)]
-                 (if (= email (:email store))
-                   (do (verify-email! user-store (:name store))
-                       (format "Thanks, Your email '%s'  has been verified correctly " email))
-                   (format "Sorry but your session associated with this email '%s' seems to not be logic" email))
-                 (format "Sorry but your session associated with this email '%s' seems to not be valid" email))
+             [k body]
+             (let [[email code] [ (get params "email") (get params "code")]]
+               (if (and email code)
+                 (if-let [store (get-token-by-id (:verification-code-store component) code)]
+                   (if (= email (:email store))
+                     (do (verify-email! user-store (:name store))
+                         (get-verify-email-result :cylon.signup.protocols/success))
+                     (get-verify-email-result :cylon.signup.protocols/error-email-not-in-store))
+                   (get-verify-email-result :cylon.signup.protocols/error-code-not-valid))
+                 (get-verify-email-result :cylon.signup.protocols/error-form-data)))]
 
-               (format "Sorry but there were problems trying to retrieve your data related with your mail '%s' " (get params "email")))]
-
-         (response (render-email-verified renderer req {:message body}))))
+         (response (render-email-verified renderer req {:message body :code k}))))
 
      })
 
