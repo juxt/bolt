@@ -54,8 +54,8 @@
 
   (uri-context [this] "")
 
-  EmailVerifier
-  (send-verification [this req user-data]
+  #_EmailVerifier
+  #_(send-verification [this req user-data]
     ;; TODO Possibly we should encrypt and decrypt the verification-code (symmetric)
     (let [code (str (java.util.UUID/randomUUID))]
       (create-token! verification-code-store code (select-keys user-data [:email :name]))
