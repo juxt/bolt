@@ -18,5 +18,7 @@
 (defprotocol Emailer
   (send-email [_ email title body]))
 
-(defprotocol EmailVerifier
-  (send-verification [_ req email]))
+(defprotocol WelcomeEmailRenderer
+  (render-email-verification-message [_ link]
+    "Return the text that will be emailed to a new user who has just
+    signing up. The text should include the given link."))
