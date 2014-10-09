@@ -2,7 +2,7 @@
   (:require
    [clojure.tools.logging :refer :all]
    [com.stuartsierra.component :as component]
-   [cylon.signup.protocols :refer (render-simple-message  EmailVerifier send-email! Emailer)]
+   [cylon.signup.protocols :refer (render-simple-message send-email! Emailer)]
    [cylon.token-store :refer (create-token! get-token-by-id purge-token!)]
    [cylon.totp :refer (OneTimePasswordStore set-totp-secret get-totp-secret totp-token secret-key)]
 
