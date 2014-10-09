@@ -4,24 +4,14 @@
 > requires integrated security frameworks - not standalone libraries!” –
 > John P. Hackworth, [Clojure web security is worse than you think](https://hackworth.be/2014/03/26/clojure-web-security-is-worse-than-you-think/)
 
-An integrated security system for Clojure applications built using
-Stuart Sierra's [component](https://github.com/stuartsierra/component).
+An integrated security system for Clojure applications based on a set of components written to the specifications of Stuart Sierra's [component](https://github.com/stuartsierra/component).
 
-Cylon provides protected routes, a customisable login form, a salted
-hashed HMAC password store with pluggable durability, a persistent
-session store, targeted
-[Liberator](http://clojure-liberator.github.io/liberator/) support, CSRF
-protection and more, by adding a single Cylon component to an existing
-[component](https://github.com/stuartsierra/component)-based
-application.
+Currently, Cylon represents merely an idea. This idea is to separate all
+security-related concerns from Clojure applications, so that they can be
+implemented in library form.
 
-## Installation
-
-Add the following dependency to your `project.clj` file
-
-```clojure
-[cylon "0.4.0"]
-```
+That said, Cylon is under constant development towards delivering
+practical benefit for Clojure web applications.
 
 ## Terms
 
@@ -52,19 +42,21 @@ You can add them individually or both together in the same application :-
 Cylon provides an _integrated system_, rather than requiring developers
 to roll their own from smaller libraries.
 
-Alternative systems _can_ be created by interchanging components,
+Alternative systems can be created by interchanging components,
 providing necessary flexibility for bespoke Clojure applications.
 
 Nevertheless, 'out-of-the-box' defaults should provide good security, on
 par with other languages and frameworks. That is what is currently
 missing in the Clojure landscape and the gap that Cylon aims to fill.
 
-### Differences with friend
+### Differences with Friend
 
-The key difference is that [friend](https://github.com/cemerick/friend)
-is designed upon compojure, whereas Cylon is designed upon component,
-and is designed specifically for modular applications, where
-functionality can be added through the addition of extra components.
+The key difference is that [Friend](https://github.com/cemerick/friend)
+is designed upon [Compojure](https://github.com/weavejester/compojure),
+whereas Cylon is based on
+[Component](https://github.com/stuartsierra/component). It is designed
+specifically for modular applications, where functionality can be added
+through the addition of extra components.
 
 Stuart Sierra's component library provides a balanced, elegant and
 "essential" foundation for bringing all these parts together into a
@@ -76,13 +68,23 @@ to comprehend but 'just works' or works 'like magic' then it limits the
 number of people who can understand it and point out potential
 weaknesses.
 
+To provide flexibility, Cylon fully embraces and consistently adopts
+_protocol polymorphism_ within Clojure, enabled by Stuart's
+approach. This will not to everyone's taste. Alternatives, such as the
+use of dynamic vars, are wholly avoided. Functional programming is a
+beautiful thing in the small, but presents practical challenges at
+scale. Polymorphism is one of the cornerstones of object orientation
+worth stealing.
+
+### Should you use Cylon?
+
 Ultimately, whether Cylon is right for you will depend on how you build
-your Clojure web applications. For smaller applications with a single set
-of Compojure routes, friend is a better choice.
+your Clojure web applications. For smaller applications with a single
+set of Compojure routes, Friend is a better choice.
 
 For larger applications, especially those with multiple modules and
 using [Liberator](http://clojure-liberator.github.io/liberator/) to
-provide a fuller REST API, Cylon is a very good fit.
+provide a fuller REST API, Cylon should be a good fit.
 
 ## Pronounication
 
@@ -90,26 +92,10 @@ Cylon is intented to be pronounced as in the 1978 movie of
 [Battlestar Gallactica](http://en.wikipedia.org/wiki/Cylon_%28Battlestar_Galactica%29),
 with the stress on the first syllable.  It is NOT pronounced 'Ceylon'.
 
-
-
-
-
-## TODO
-
-Cylon is new. Here's some of the items which will be covered soon or very soon.
-
-* CSRF
-* OpenId-Connect
-* Persistent sessions
-
 ## Limitations
 
-Currently Cylon only supports securing bidi routes and Liberator
-resources. We hope to support Compojure routes too, pull requests
-definitely accepted.
-
-We don't recommend relying on Cylon for production systems until we
-reach version 1.0, which will indicate that Cylon has been deployed into
+Cylon is not suitable for production systems until it reaches
+version 1.0, which will indicate that Cylon has been deployed into
 production elsewhere and has undergone thorough peer review.
 
 ## Join in the conversation
@@ -129,8 +115,8 @@ Aaron Bedra's seminal ClojureWest talk in 2014 –
 http://www.youtube.com/watch?v=CBL59w7fXw4 - this was the inspiration
 between Cylon.
 
-Special thanks to [Mastodon C](http://www.mastodonc.com/) for sponsoring
-the development on Cylon, and using it in their kixi projects
+[Mastodon C](http://www.mastodonc.com/) for sponsoring the development
+on Cylon, and using it in their kixi projects
 [kixi.hecuba](https://github.com/MastodonC/kixi.hecuba) and
 [kixi.stentor](https://github.com/MastodonC/kixi.stentor)
 
@@ -138,9 +124,22 @@ Also, to Neale Swinnerton [@sw1nn](https://twitter.com/sw1nn) for the
 original work in adopting Stuart's component library and showing how to
 migrate [Jig](https://github.com/juxt/jig) components to it.
 
-[Juan Antonio Ruz](https://github.com/tangrammar) designed and developed
-the TOTP two-factor authentication support. Additionally Juan conducted
-the background research and co-authored the OAuth2 support.
+[Yodit Stanton](https://github.com/yods) and the rest of the
+[opensensors.io](https://opensensors.io) team for putting up with the
+regular Cylon updates and being the first adopters of the OAuth2
+features.
+
+[Juan Antonio Ruz](https://github.com/tangrammar) for designing and
+developing the TOTP two-factor authentication support. Additionally Juan
+conducted the background research and co-authored the OAuth2 support,
+and many other aspects of the project.
+
+[Martin Trojer](https://github.com/martintrojer) and others from
+[JUXT](https://github.com/juxt) for a continual stream of
+thought-provoking ideas and good advice.
+
+[Andrey Antukh](https://github.com/niwibe) for suggestions about
+integration with [Buddy](https://github.com/niwibe/buddy).
 
 ## Copyright & License
 
