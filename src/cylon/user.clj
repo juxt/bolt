@@ -40,7 +40,7 @@
    pw-hash :- PasswordHashWithSalt]
   (p/set-user-password-hash! component uid pw-hash))
 
-(s/defn get-user-by-email :- User
+(s/defn get-user-by-email :- (s/maybe User)
   [component :- (s/protocol p/UserStore)
    email :- s/Str]
   (p/get-user-by-email component email))
