@@ -76,6 +76,7 @@
                      {:form {:method :post
                              :action (path-for req ::process-login-attempt)
                              :signup-uri (path-for req :cylon.signup.signup/GET-signup-form)
+                             :reset-password (path-for req :cylon.authentication.reset-password/request-reset-password-form)
                              :post-login-redirect (get qparams "post_login_redirect")
                              :fields fields}})}]
          response))

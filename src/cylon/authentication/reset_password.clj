@@ -1,15 +1,15 @@
-(ns cylon.reset-password
+(ns cylon.authentication.reset-password
   (:require
    [clojure.tools.logging :refer :all]
    [com.stuartsierra.component :as component]
-                                        ;   [cylon.session :refer (session respond-with-new-session! assoc-session-data!)]
-   [cylon.session.protocols :refer (session assoc-session-data!)]
-   [cylon.signup.protocols :refer (render-signup-form send-email! render-simple-message  Emailer render-welcome render-request-reset-password-form)]
+   [cylon.password.protocols :refer (make-password-hash)]
+   [cylon.session.protocols :refer (session assoc-session-data! respond-with-new-session!)]
+   [cylon.signup.protocols :refer ( send-email!   Emailer  render-request-reset-password-form render-simple-message)]
    [cylon.token-store :refer (create-token! get-token-by-id purge-token!)]
    [cylon.totp :refer (OneTimePasswordStore set-totp-secret get-totp-secret totp-token secret-key)]
-   [cylon.verify-mail :refer (make-verification-link)]
-   [cylon.user.protocols :refer (find-user-by-email reset-password!)]
+   [cylon.user.protocols :refer (get-user-by-email set-user-password-hash!)]
    [cylon.util :refer (absolute-uri)]
+   [cylon.verify-mail :refer (make-verification-link)]
    [hiccup.core :refer (html)]
    [modular.bidi :refer (WebService path-for)]
    [modular.bootstrap :refer (wrap-content-in-boilerplate)]
@@ -17,8 +17,8 @@
    [ring.util.response :refer (response redirect)]
    [schema.core :as s ]
    ))
-;(remove-ns 'cylon.reset-password)
-(defrecord ResetPassword [emailer renderer session-store user-domain verification-code-store fields-reset fields-confirm-password]
+;(remove-ns 'cylon.authentication.reset-password)
+(defrecord ResetPassword [emailer renderer session-store user-store verification-code-store fields-reset fields-confirm-password password-verifier]
   WebService
   (request-handlers [this]
     {
@@ -38,9 +38,9 @@
      (fn [req]
        (let [form (-> req params-request :form-params)
              email (get form "email")]
-         (if-let [user-by-mail (find-user-by-email user-domain email)]
+         (if-let [user-by-mail (get-user-by-email user-store email)]
            (let [code (str (java.util.UUID/randomUUID))]
-             (create-token! verification-code-store code {:email email :name (:user user-by-mail)})
+             (create-token! verification-code-store code {:email email :name (:name user-by-mail)})
 
              (send-email! emailer email
                           "Reset password confirmation step"
@@ -48,12 +48,15 @@
                                   (make-verification-link req ::reset-password-form code email))
                           "text/plain")
 
-             (response
-              (render-simple-message
-               renderer req
-               "Reset password"
-               (format "We've found your details and sent a password reset link to %s." email)
-               )))
+             (->>
+              (response
+               (render-simple-message
+                renderer req
+                "Reset password"
+                (format "We've found your details and sent a password reset link to %s." email)
+                ))
+              (respond-with-new-session! session-store req {})
+              ))
            {:status 200
             :body (render-request-reset-password-form
                    renderer req
@@ -61,7 +64,6 @@
                            :action (path-for req ::process-password-reset)
                            :fields fields-reset}
                     :reset-status (format "No user with this mail %s in our db. Try again" email)})})))
-
      ;; GET : if the code for reseting password is on get request and is active we ofer the form to include new password
      ::reset-password-form
      (fn [req ]
@@ -89,7 +91,7 @@
                (format "Sorry but there were problems trying to retrieve your data related with your mail '%s' " (get params "email")))]
 
          (if (nil? (:status body))
-           (response (render-simple-message renderer req "Reset Password Process"  body  ))
+           (response (render-simple-message renderer req "Reset Password Process" body))
            body)))
 
      ;;POST: save the new password having an active session and the post parameter new-password
@@ -101,9 +103,9 @@
                pw (get form "new_pw")]
 
            (purge-token! (:verification-code-store this) (:verification-code (session session-store req)))
-           (reset-password! user-domain identity pw)
-           (response (render-simple-message renderer req  "Reset Password Process"
-                                            "You are like a hero, successful result")))
+           (set-user-password-hash! user-store identity (make-password-hash password-verifier pw))
+           (response (render-simple-message renderer req  "Congratulations :)"
+                                            "Your password has been successfuly changed")))
          {:status 200
           :body "you shouldn't be here! :(  "}
          )
@@ -139,4 +141,4 @@
                )
         (s/validate new-reset-password-schema)
         map->ResetPassword)
-   [:user-domain :session-store :renderer :verification-code-store]))
+   [:user-store :session-store :renderer :verification-code-store :password-verifier]))

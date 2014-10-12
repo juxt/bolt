@@ -6,7 +6,7 @@
    [cylon.token-store :refer (create-token! get-token-by-id purge-token!)]
    [cylon.totp :refer (OneTimePasswordStore set-totp-secret get-totp-secret totp-token secret-key)]
 
-   [cylon.user.protocols :refer (create-user! user-email-verified!  reset-password!)]
+   [cylon.user.protocols :refer (create-user! user-email-verified!  )]
    [cylon.util :refer (absolute-uri)]
 
    [hiccup.core :refer (html)]
