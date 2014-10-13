@@ -3,7 +3,7 @@
 (ns cylon.authentication.login
   (:require
    [clojure.tools.logging :refer :all]
-   [cylon.authentication.protocols :refer (AuthenticationInteraction)]
+   [cylon.authentication.protocols :as p :refer (AuthenticationInteraction)]
    [cylon.password :refer (verify-password)]
    [cylon.password.protocols :refer (PasswordVerifier)]
    [cylon.session :refer (session assoc-session-data! respond-with-new-session!)]
@@ -20,9 +20,6 @@
   (:import (java.net URLEncoder))
   )
 
-(defprotocol LoginFormRenderer
-  (render-login-form [_ req model]))
-
 (def field-schema
   {:name s/Str
    :label s/Str
@@ -31,7 +28,7 @@
 
 (def new-login-schema {:fields [field-schema]})
 
-(s/defn render-login-form+ :- s/Str
+(s/defn render-login-form :- s/Str
   [component :- (s/protocol LoginFormRenderer)
    req :- Request
    model :- {:form {:method s/Keyword
@@ -39,7 +36,7 @@
                     (s/optional-key :signup-uri) s/Str
                     (s/optional-key :post-login-redirect) s/Str
                     :fields [field-schema]}}]
-  (render-login-form component req model))
+  (p/render-login-form component req model))
 
 (defrecord Login [user-store session-store renderer password-verifier fields]
   Lifecycle
@@ -71,7 +68,7 @@
        (let [qparams (-> req params-request :query-params)
              response
              {:status 200
-              :body (render-login-form+
+              :body (render-login-form
                      renderer req
                      {:form {:method :post
                              :action (path-for req ::process-login-attempt)
