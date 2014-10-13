@@ -19,7 +19,6 @@
    [cylon.session.protocols :refer (SessionStore)]
    [cylon.token-store :refer (create-token! get-token-by-id)]
    [cylon.token-store.protocols :refer (TokenStore)]
-   [cylon.totp :refer (OneTimePasswordStore get-totp-secret totp-token)]
    [cylon.util :refer (as-query-string)]
    [hiccup.core :refer (html h)]
    [modular.bidi :refer (WebService)]

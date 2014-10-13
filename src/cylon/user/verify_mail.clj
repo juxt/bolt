@@ -1,21 +1,17 @@
-(ns cylon.verify-mail
+(ns cylon.user.verify-mail
   (:require
    [clojure.tools.logging :refer :all]
    [com.stuartsierra.component :as component]
-   [cylon.signup.protocols :refer (render-simple-message send-email! Emailer)]
+   [cylon.user.protocols :refer (render-simple-message send-email! Emailer create-user! user-email-verified!)]
    [cylon.token-store :refer (create-token! get-token-by-id purge-token!)]
-   [cylon.totp :refer (OneTimePasswordStore set-totp-secret get-totp-secret totp-token secret-key)]
-
-   [cylon.user.protocols :refer (create-user! user-email-verified!  )]
+   [cylon.user.totp :refer (OneTimePasswordStore set-totp-secret get-totp-secret totp-token secret-key)]
    [cylon.util :refer (absolute-uri)]
-
    [hiccup.core :refer (html)]
    [modular.bidi :refer (WebService path-for)]
    [ring.middleware.cookies :refer (cookies-response wrap-cookies)]
    [ring.middleware.params :refer (params-request)]
    [ring.util.response :refer (response redirect)]
-   [schema.core :as s ]
-   ))
+   [schema.core :as s]))
 
 (defn make-verification-link [req target code email]
   (let [values  ((juxt (comp name :scheme) :server-name :server-port) req)
@@ -33,21 +29,18 @@
        (let [params (-> req params-request :params)
              body
              (if-let [[email code] [ (get params "email") (get params "code")]]
-               (if-let [store (get-token-by-id verification-code-store  code)]
+               (if-let [store (get-token-by-id verification-code-store code)]
                  (if (= email (:email store))
                    (do
                      (purge-token! (:verification-code-store this) code)
                      (user-email-verified! (:user-domain this) (:name store))
-                     (format "Thanks, Your email '%s'  has been verified correctly " email))
+                     (format "Thanks, Your email '%s'  has been verified correctly" email))
                    (format "Sorry but your session associated with this email '%s' seems to not be logic" email))
                  (format "Sorry but your session associated with this email '%s' seems to not be valid" email))
 
-               (format "Sorry but there were problems trying to retrieve your data related with your mail '%s' " (get params "email")))]
+               (format "Sorry but there were problems trying to retrieve your data related with your mail '%s'" (get params "email")))]
 
-         (response (render-simple-message renderer req "Verify user email" body ))))
-
-
-     })
+         (response (render-simple-message renderer req "Verify user email" body))))})
 
   (routes [this]
     ["/" {"verify-email" {:get ::verify-user-email}}])

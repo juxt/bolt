@@ -17,8 +17,7 @@
    [ring.util.response :refer (response redirect redirect-after-post)]
    [cylon.user :refer (create-user! verify-email!)]
    [cylon.user.protocols :refer (UserStore)]
-   [cylon.totp :as totp]
-   [cylon.totp :refer (OneTimePasswordStore get-totp-secret set-totp-secret totp-token)]
+   [cylon.user.totp :as totp :refer (OneTimePasswordStore get-totp-secret set-totp-secret totp-token)]
    [schema.core :as s ]))
 
 (defn make-verification-link [req code email]
