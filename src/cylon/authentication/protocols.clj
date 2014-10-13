@@ -13,6 +13,3 @@
 (defprotocol AuthenticationInteraction
   (initiate-authentication-interaction [_ request])
   (get-outcome [_ request]))
-
-(defprotocol LoginFormRenderer
-  (render-login-form [_ req model]))

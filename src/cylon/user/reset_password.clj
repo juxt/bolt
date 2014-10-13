@@ -1,10 +1,12 @@
-(ns cylon.authentication.reset-password
+;; Copyright © 2014, JUXT LTD. All Rights Reserved.
+
+(ns cylon.user.reset-password
   (:require
    [clojure.tools.logging :refer :all]
    [com.stuartsierra.component :as component]
    [cylon.password.protocols :refer (make-password-hash)]
    [cylon.session.protocols :refer (session assoc-session-data! respond-with-new-session!)]
-   [cylon.signup.protocols :refer ( send-email!   Emailer  render-request-reset-password-form render-simple-message)]
+   [cylon.user.protocols :refer (send-email! Emailer render-request-reset-password-form render-simple-message)]
    [cylon.token-store :refer (create-token! get-token-by-id purge-token!)]
    [cylon.totp :refer (OneTimePasswordStore set-totp-secret get-totp-secret totp-token secret-key)]
    [cylon.user.protocols :refer (get-user-by-email set-user-password-hash!)]
@@ -15,9 +17,8 @@
    [modular.bootstrap :refer (wrap-content-in-boilerplate)]
    [ring.middleware.params :refer (params-request)]
    [ring.util.response :refer (response redirect)]
-   [schema.core :as s ]
-   ))
-;(remove-ns 'cylon.authentication.reset-password)
+   [schema.core :as s]))
+
 (defrecord ResetPassword [emailer renderer session-store user-store verification-code-store fields-reset fields-confirm-password password-verifier]
   WebService
   (request-handlers [this]

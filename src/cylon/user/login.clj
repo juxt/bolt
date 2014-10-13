@@ -1,17 +1,15 @@
 ;; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
-(ns cylon.authentication.login
+(ns cylon.user.login
   (:require
    [clojure.tools.logging :refer :all]
-   [cylon.authentication.protocols
-    :as p
-    :refer (AuthenticationInteraction LoginFormRenderer)]
+   [cylon.user.protocols :as p]
+   [cylon.authentication.protocols :refer (AuthenticationInteraction)]
    [cylon.password :refer (verify-password)]
    [cylon.password.protocols :refer (PasswordVerifier)]
    [cylon.session :refer (session assoc-session-data! respond-with-new-session!)]
    [cylon.session.protocols :refer (SessionStore)]
    [cylon.user :refer (get-user-by-email)]
-   [cylon.user.protocols :refer (UserStore)]
    [cylon.util :refer (as-query-string uri-with-qs Request)]
    [modular.bidi :refer (WebService path-for)]
    [ring.util.response :refer (redirect redirect-after-post)]
@@ -31,7 +29,7 @@
 (def new-login-schema {:fields [field-schema]})
 
 (s/defn render-login-form :- s/Str
-  [component :- (s/protocol LoginFormRenderer)
+  [component :- (s/protocol p/LoginFormRenderer)
    req :- Request
    model :- {:form {:method s/Keyword
                     :action s/Str
@@ -46,9 +44,9 @@
     (s/validate
      (merge new-login-schema
             {:session-store (s/protocol SessionStore)
-             :renderer (s/protocol LoginFormRenderer)
+             :renderer (s/protocol p/LoginFormRenderer)
              :password-verifier (s/protocol PasswordVerifier)
-             :user-store (s/protocol UserStore)
+             :user-store (s/protocol p/UserStore)
              }) component))
   (stop [component] component)
 

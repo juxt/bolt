@@ -1,8 +1,8 @@
 ;; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
-(ns cylon.signup.signup
+(ns cylon.user.signup
   (:require
-   [cylon.signup.protocols :refer (render-signup-form send-email! render-email-verified Emailer SignupFormRenderer)]
+   [cylon.user.protocols :refer (render-signup-form send-email! render-email-verified Emailer SignupFormRenderer)]
    [clojure.tools.logging :refer :all]
    [cylon.session :refer (session respond-with-new-session! assoc-session-data!)]
    [cylon.session.protocols :refer (SessionStore)]
