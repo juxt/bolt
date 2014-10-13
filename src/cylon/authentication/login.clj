@@ -3,7 +3,9 @@
 (ns cylon.authentication.login
   (:require
    [clojure.tools.logging :refer :all]
-   [cylon.authentication.protocols :as p :refer (AuthenticationInteraction)]
+   [cylon.authentication.protocols
+    :as p
+    :refer (AuthenticationInteraction LoginFormRenderer)]
    [cylon.password :refer (verify-password)]
    [cylon.password.protocols :refer (PasswordVerifier)]
    [cylon.session :refer (session assoc-session-data! respond-with-new-session!)]
@@ -75,7 +77,9 @@
                              :signup-uri (path-for req :cylon.signup.signup/GET-signup-form)
                              :reset-password (path-for req :cylon.authentication.reset-password/request-reset-password-form)
                              :post-login-redirect (get qparams "post_login_redirect")
-                             :fields fields}})}]
+
+                             :fields fields}
+                      :login-failed? (Boolean/valueOf (get qparams "login_failed"))})}]
          response))
 
      ::process-login-attempt
@@ -118,8 +122,14 @@
                  (redirect-after-post
                   (str (path-for req ::login-form)
                        ;; We must be careful to add back the query string
-                       (when post-login-redirect
-                         (str "?post_login_redirect=" (URLEncoder/encode post-login-redirect)))))))))))})
+                       (as-query-string
+                        (merge
+                         (when post-login-redirect
+                           {"post_login_redirect" (URLEncoder/encode post-login-redirect)})
+                         ;; Add a login_failed to help with indicating the failure to the user.
+                         {"login_failed" true}
+                         ))))))))))})
+
 
   (routes [this]
     ["" {"/login" {:get ::login-form
