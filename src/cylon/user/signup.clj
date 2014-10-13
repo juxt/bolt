@@ -2,8 +2,9 @@
 
 (ns cylon.user.signup
   (:require
-   [cylon.user.protocols :refer (render-signup-form send-email! render-email-verified Emailer SignupFormRenderer)]
+   [cylon.user.protocols :refer (Emailer UserFormRenderer)]
    [clojure.tools.logging :refer :all]
+   [cylon.util :refer (absolute-prefix as-query-string wrap-schema-validation)]
    [cylon.session :refer (session respond-with-new-session! assoc-session-data!)]
    [cylon.session.protocols :refer (SessionStore)]
    [cylon.token-store :refer (create-token! get-token-by-id)]
@@ -15,13 +16,14 @@
    [ring.middleware.params :refer (params-request)]
    [ring.middleware.cookies :refer (cookies-response wrap-cookies)]
    [ring.util.response :refer (response redirect redirect-after-post)]
-   [cylon.user :refer (create-user! verify-email!)]
+   [cylon.user :refer (create-user! verify-email! render-signup-form send-email! render-welcome-email-message render-email-verified
+                                    )]
    [cylon.user.protocols :refer (UserStore)]
    [cylon.user.totp :as totp :refer (OneTimePasswordStore get-totp-secret set-totp-secret totp-token)]
    [schema.core :as s ]))
 
 (defn make-verification-link [req code email]
-  (let [values  ((juxt (comp name :scheme) :server-name :server-port) req)
+  (let [values ((juxt (comp name :scheme) :server-name :server-port) req)
         verify-user-email-path (path-for req ::verify-user-email)]
     (apply format "%s://%s:%d%s?code=%s&email=%s" (conj values verify-user-email-path code email))))
 
@@ -64,70 +66,73 @@
            resp)))
 
      ::POST-signup-form
-     (fn [req]
-       (debugf "Processing signup")
-       (let [form (-> req params-request :form-params)
-             uid (get form "user-id")
-             password (get form "password")
-             email (get form "email")
-             name (get form "name")
-             totp-secret (when (satisfies? OneTimePasswordStore user-store)
-                           (totp/secret-key))]
+     (->
+      (fn [req]
+        (debugf "Processing signup")
+        (let [form (-> req params-request :form-params)
+              uid (get form "user-id")
+              password (get form "password")
+              email (get form "email")
+              name (get form "name")
+              totp-secret (when (satisfies? OneTimePasswordStore user-store)
+                            (totp/secret-key))]
 
-         ;; Add the user
-         (create-user! user-store uid (make-password-hash password-verifier password)
-                       email
-                       {:name name})
+          ;; Add the user
+          (create-user! user-store uid (make-password-hash password-verifier password)
+                        email
+                        {:name name})
 
-         ;; Add the totp-secret
-         (when (satisfies? OneTimePasswordStore user-store)
-           (set-totp-secret user-store uid totp-secret))
+          ;; Add the totp-secret
+          (when (satisfies? OneTimePasswordStore user-store)
+            (set-totp-secret user-store uid totp-secret))
 
-         ;; Send the email to the user now!
-         (when emailer
-           ;; TODO Possibly we should encrypt and decrypt the verification-code (symmetric)
-           (let [code (str (java.util.UUID/randomUUID))]
-             (create-token! verification-code-store
-                            code
-                            {:email email :id uid})
+          ;; Send the email to the user now!
+          (when emailer
+            ;; TODO Possibly we should encrypt and decrypt the verification-code (symmetric)
+            (let [code (str (java.util.UUID/randomUUID))]
+              (create-token!
+               verification-code-store code
+               {:cylon/subject-identifier uid
+                :email email})
 
-             (send-email! emailer email
-                          "Please verify your email address"
-                          (format "Thanks for signing up. Please click on this link to verify your account: %s"
-                                  (make-verification-link req code email))
-                          "text/plain")))
+              (send-email!
+               emailer
+               (merge {:to email}
+                      (render-welcome-email-message
+                       renderer
+                       {:email-verification-link
+                        (str
+                         (absolute-prefix req)
+                         (path-for req ::verify-user-email)
+                         (as-query-string {"code" code}))})))))
 
-         ;; Create a session that contains the secret-key
-         (let [data (merge {:cylon/subject-identifier uid :name name}
-                           (when (satisfies? OneTimePasswordStore user-store)
-                             {:totp-secret totp-secret}))]
-           (assoc-session-data! session-store req data)
+          ;; Create a session that contains the secret-key
+          (let [data (merge {:cylon/subject-identifier uid :name name}
+                            (when (satisfies? OneTimePasswordStore user-store)
+                              {:totp-secret totp-secret}))]
+            (assoc-session-data! session-store req data)
 
-           (respond-with-new-session!
-            session-store req
-            {:cylon/subject-identifier uid}
-            (if-let [loc (or (get form "post_signup_redirect")
-                             (:post-signup-redirect component))]
-              (redirect-after-post loc)
-              (response (format "Thank you, %s, for signing up" name)))))))
+            (respond-with-new-session!
+             session-store req
+             {:cylon/subject-identifier uid} ; keep logged in after signup
+             (if-let [loc (or (get form "post_signup_redirect")
+                              (:post-signup-redirect component))]
+               (redirect-after-post loc)
+               (response (format "Thank you, %s, for signing up" name)))))))
+      wrap-schema-validation)
 
      ::verify-user-email
-     (fn [req]
-       (let [params (-> req params-request :params)
-             body
-             (if-let [[email code] [ (get params "email") (get params "code")]]
-               (if-let [store (get-token-by-id (:verification-code-store component) code)]
-                 (if (= email (:email store))
-                   (do (verify-email! user-store (:name store))
-                       (format "Thanks, Your email '%s'  has been verified correctly " email))
-                   (format "Sorry but your session associated with this email '%s' seems to not be logic" email))
-                 (format "Sorry but your session associated with this email '%s' seems to not be valid" email))
-
-               (format "Sorry but there were problems trying to retrieve your data related with your mail '%s' " (get params "email")))]
-
-         (response (render-email-verified renderer req {:message body}))))
-
-     })
+     (->
+      (fn [req]
+        (let [params (-> req params-request :params)]
+          (let [token-id (get params "code")
+                token (get-token-by-id (:verification-code-store component) token-id)]
+            (if-let [uid (:cylon/subject-identifier token)]
+              (do
+                (verify-email! user-store uid)
+                (response (render-email-verified renderer req token)))
+              {:status 400 :body (format "No known verification code: %s" token-id)}))))
+      wrap-schema-validation)})
 
   (routes [_]
     ["/" {"signup" {:get ::GET-signup-form

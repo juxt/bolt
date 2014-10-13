@@ -19,7 +19,7 @@
    [cylon.session.protocols :refer (SessionStore)]
    [cylon.token-store :refer (create-token! get-token-by-id)]
    [cylon.token-store.protocols :refer (TokenStore)]
-   [cylon.util :refer (as-query-string)]
+   [cylon.util :refer (as-query-string wrap-schema-validation)]
    [hiccup.core :refer (html h)]
    [modular.bidi :refer (WebService)]
    [plumbing.core :refer (<-)]
@@ -28,12 +28,6 @@
    [ring.middleware.params :refer (params-request)]
    [ring.util.response :refer (redirect)]
    [schema.core :as s]))
-
-;; TODO Should be promoted higher up the http chain
-(defn wrap-schema-validation [h]
-  (fn [req]
-    (s/with-fn-validation
-      (h req))))
 
 (def new-authorization-server-schema
   {:scopes {s/Keyword {:description s/Str}}

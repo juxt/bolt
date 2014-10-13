@@ -9,8 +9,8 @@
    [cylon.password.protocols :refer (PasswordVerifier)]
    [cylon.session :refer (session assoc-session-data! respond-with-new-session!)]
    [cylon.session.protocols :refer (SessionStore)]
-   [cylon.user :refer (get-user-by-email)]
-   [cylon.util :refer (as-query-string uri-with-qs Request)]
+   [cylon.user :refer (get-user-by-email FormField render-login-form)]
+   [cylon.util :refer (as-query-string uri-with-qs Request wrap-schema-validation)]
    [modular.bidi :refer (WebService path-for)]
    [ring.util.response :refer (redirect redirect-after-post)]
    [ring.middleware.params :refer (params-request)]
@@ -20,34 +20,16 @@
   (:import (java.net URLEncoder))
   )
 
-(def field-schema
-  {:name s/Str
-   :label s/Str
-   (s/optional-key :placeholder) s/Str
-   (s/optional-key :password?) s/Bool})
-
-(def new-login-schema {:fields [field-schema]})
-
-(s/defn render-login-form :- s/Str
-  [component :- (s/protocol p/LoginFormRenderer)
-   req :- Request
-   model :- {:form {:method s/Keyword
-                    :action s/Str
-                    (s/optional-key :signup-uri) s/Str
-                    (s/optional-key :post-login-redirect) s/Str
-                    :fields [field-schema]}}]
-  (p/render-login-form component req model))
-
 (defrecord Login [user-store session-store renderer password-verifier fields]
   Lifecycle
   (start [component]
     (s/validate
-     (merge new-login-schema
-            {:session-store (s/protocol SessionStore)
-             :renderer (s/protocol p/LoginFormRenderer)
-             :password-verifier (s/protocol PasswordVerifier)
-             :user-store (s/protocol p/UserStore)
-             }) component))
+     {:session-store (s/protocol SessionStore)
+      :renderer (s/protocol p/LoginFormRenderer)
+      :password-verifier (s/protocol PasswordVerifier)
+      :user-store (s/protocol p/UserStore)
+      :fields [FormField]}
+     component))
   (stop [component] component)
 
   AuthenticationInteraction
@@ -74,9 +56,7 @@
                              :action (path-for req ::process-login-attempt)
                              :signup-uri (path-for req :cylon.signup.signup/GET-signup-form)
                              :reset-password (path-for req :cylon.authentication.reset-password/request-reset-password-form)
-                             :post-login-redirect (get qparams "post_login_redirect")
-
-                             :fields fields}
+                             :fields (conj fields {:name "post_login_redirect" :value (get qparams "post_login_redirect") :type :hidden})}
                       :login-failed? (Boolean/valueOf (get qparams "login_failed"))})}]
          response))
 
@@ -137,8 +117,8 @@
 
 (defn new-login [& {:as opts}]
   (->> opts
-       (merge {:fields [{:name "user" :label "User" :placeholder "id or email"}
-                        {:name "password" :label "Password" :password? true :placeholder "password"}]})
-       (s/validate new-login-schema)
+       (merge {:fields [{:name "user" :label "User" :type "text" :placeholder "id or email"}
+                        {:name "password" :label "Password" :type "password" :placeholder "password"}]})
+       (s/validate {:fields [FormField]})
        map->Login
        (<- (using [:password-verifier :session-store :renderer :user-store]))))

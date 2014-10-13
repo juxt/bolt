@@ -20,10 +20,13 @@
   (str (:uri req)
        (when-let [qs (:query-string req)] (when (not-empty qs) (str "?" qs )))))
 
-(defn absolute-uri [req]
-  (apply format "%s://%s:%s%s"
-         ((juxt (comp name :scheme) :server-name :server-port uri-with-qs)
+(defn absolute-prefix [req]
+  (apply format "%s://%s:%s"
+         ((juxt (comp name :scheme) :server-name :server-port)
           req)))
+
+(defn absolute-uri [req]
+  (str (absolute-prefix req) (uri-with-qs req)))
 
 (defn as-www-form-urlencoded [m]
   (->>
@@ -40,8 +43,6 @@
    (cons "?")
    (apply str)))
 
-
-
 ;; Schema
 
 (s/defschema Request "A Ring-style request"
@@ -52,3 +53,10 @@
   {(s/optional-key :status) s/Num
    (s/optional-key :headers) s/Any
    (s/optional-key :body) s/Str})
+
+;; Scheam validation
+
+(defn wrap-schema-validation [h]
+  (fn [req]
+    (s/with-fn-validation
+      (h req))))
