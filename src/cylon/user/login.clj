@@ -40,7 +40,8 @@
         (redirect loc))
       (throw (ex-info "No path to login form" {}))))
 
-  (get-outcome [this req]
+  RequestAuthenticator
+  (authenticate [this req]
     (session session-store req))
 
   WebService

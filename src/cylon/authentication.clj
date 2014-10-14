@@ -52,8 +52,3 @@
   [component :- (s/protocol p/AuthenticationHandshake)
    request :- Request]
   (p/initiate-authentication-handshake component request))
-
-(s/defn get-outcome :- (s/maybe {s/Keyword s/Any})
-  [component :- (s/protocol p/AuthenticationHandshake)
-   request :- Request]
-  (p/get-outcome component request))

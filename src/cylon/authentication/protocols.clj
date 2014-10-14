@@ -14,5 +14,4 @@
 (defprotocol AuthenticationHandshake
   (initiate-authentication-handshake [_ request]
     "Return a Ring response that redirects the user-agent into an
-    interaction to establish its authenticity")
-  (get-outcome [_ request]))
+    interaction to establish its authenticity"))

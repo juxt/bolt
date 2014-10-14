@@ -10,7 +10,7 @@
    [clj-jwt.core :refer (to-str sign jwt)]
    [clj-time.core :refer (now plus days)]
    [com.stuartsierra.component :as component :refer (Lifecycle)]
-   [cylon.authentication :refer (authenticate initiate-authentication-handshake get-outcome)]
+   [cylon.authentication :refer (authenticate initiate-authentication-handshake)]
    [cylon.authentication.protocols :refer (RequestAuthenticator AuthenticationHandshake)]
    [cylon.oauth.registry.protocols :refer (ClientRegistry)]
    [cylon.oauth.registry :refer (lookup-client)]
@@ -66,7 +66,7 @@
 
         ;; TODO We should validate the incoming response_type
 
-        (let [authentication (get-outcome authentication-handshake req)]
+        (let [authentication (authenticate authentication-handshake req)]
           (debugf "OAuth2 authorization server: Authorizing request. User authentication is %s" authentication)
           ;; Establish whether the user-agent is already authenticated.
 
