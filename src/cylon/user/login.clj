@@ -4,7 +4,7 @@
   (:require
    [clojure.tools.logging :refer :all]
    [cylon.user.protocols :as p]
-   [cylon.authentication.protocols :refer (AuthenticationHandshake)]
+   [cylon.authentication.protocols :refer (RequestAuthenticator AuthenticationHandshake)]
    [cylon.password :refer (verify-password)]
    [cylon.password.protocols :refer (PasswordVerifier)]
    [cylon.session :refer (session assoc-session-data! respond-with-new-session!)]
