@@ -78,7 +78,7 @@
 
 (s/defschema FormField
   {:name s/Str
-   :label s/Str
+   (s/optional-key :label) s/Str
    (s/optional-key :placeholder) s/Str
    (s/optional-key :type) s/Str
    (s/optional-key :value) s/Str})
@@ -92,7 +92,8 @@
   [component :- (s/protocol p/LoginFormRenderer)
    req :- Request
    model :- {:form Form
-             (s/optional-key :login-failed?) s/Bool}]
+             (s/optional-key :login-failed?) s/Bool
+             s/Keyword s/Any}]
   (p/render-login-form component req model))
 
 ;; User form renderer API

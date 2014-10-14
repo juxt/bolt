@@ -47,67 +47,69 @@
   WebService
   (request-handlers [this]
     {::login-form
-     (fn [req]
-       (let [qparams (-> req params-request :query-params)
-             response
-             {:status 200
-              :body (render-login-form
-                     renderer req
-                     {:form {:method :post
-                             :action (path-for req ::process-login-attempt)
-                             :signup-uri (path-for req :cylon.signup.signup/GET-signup-form)
-                             :reset-password (path-for req :cylon.authentication.reset-password/request-reset-password-form)
-                             :fields (conj fields {:name "post_login_redirect" :value (get qparams "post_login_redirect") :type :hidden})}
-                      :login-failed? (Boolean/valueOf (get qparams "login_failed"))})}]
-         response))
+     (->
+      (fn [req]
+        (let [qparams (-> req params-request :query-params)
+              response
+              {:status 200
+               :body (render-login-form
+                      renderer req
+                      {:form {:method :post
+                              :action (path-for req ::process-login-attempt)
+                              :fields (conj fields {:name "post_login_redirect" :value (get qparams "post_login_redirect") :type "hidden"})}
+                       :login-failed? (Boolean/valueOf (get qparams "login_failed"))})}]
+          response))
+      wrap-schema-validation)
 
      ::process-login-attempt
-     (fn [req]
-       (let [params (-> req params-request :form-params)
-             uid (get params "user")
-             password (get params "password")
-             session (session session-store req)
-             post-login-redirect (get params "post_login_redirect")]
+     (->
+      (fn [req]
+        (let [params (-> req params-request :form-params)
+              uid (get params "user")
+              password (get params "password")
+              session (session session-store req)
+              post-login-redirect (get params "post_login_redirect")]
 
-         (debugf "Form params posted to login form are %s" params)
+          (debugf "Form params posted to login form are %s" params)
 
-         (if (and uid (not-empty uid))
-           ;; checking uid email based
-           (if-let [uid (or (and (.contains uid "@") (:uid (get-user-by-email user-store uid))) (.trim uid))]
-             (if  (verify-password password-verifier uid password)
-               ;; Login successful!
-               (do
-                 (debugf "Login successful!")
-                 (respond-with-new-session!
-                  session-store req
-                  {:cylon/subject-identifier uid}
-                  (if post-login-redirect
-                    (redirect-after-post post-login-redirect)
-                    {:status 200 :body "Login successful"})))
+          (if (and uid (not-empty uid))
+            ;; checking uid email based
+            (if-let [uid (or (and (.contains uid "@") (:uid (get-user-by-email user-store uid))) (.trim uid))]
+              (if  (verify-password password-verifier uid password)
+                ;; Login successful!
+                (do
+                  (debugf "Login successful!")
+                  (respond-with-new-session!
+                   session-store req
+                   {:cylon/subject-identifier uid}
+                   (if post-login-redirect
+                     (redirect-after-post post-login-redirect)
+                     {:status 200 :body "Login successful"})))
 
-               ;; Login failed!
-               (do
-                 (debugf "Login failed!")
+                ;; Login failed!
+                (do
+                  (debugf "Login failed!")
 
-                 ;; TODO I think the best thing to do here is to create a
-                 ;; session anyway - we have been posted after all. We can
-                 ;; store in the session things like number of failed
-                 ;; attempts (to attempt to prevent brute-force hacking
-                 ;; attempts by limiting the number of sessions that can be
-                 ;; used by each remote IP address). If we do this, then the
-                 ;; post_login_redirect must be ascertained from the
-                 ;; query-params, and then from the session.
+                  ;; TODO I think the best thing to do here is to create a
+                  ;; session anyway - we have been posted after all. We can
+                  ;; store in the session things like number of failed
+                  ;; attempts (to attempt to prevent brute-force hacking
+                  ;; attempts by limiting the number of sessions that can be
+                  ;; used by each remote IP address). If we do this, then the
+                  ;; post_login_redirect must be ascertained from the
+                  ;; query-params, and then from the session.
 
-                 (redirect-after-post
-                  (str (path-for req ::login-form)
-                       ;; We must be careful to add back the query string
-                       (as-query-string
-                        (merge
-                         (when post-login-redirect
-                           {"post_login_redirect" (URLEncoder/encode post-login-redirect)})
-                         ;; Add a login_failed to help with indicating the failure to the user.
-                         {"login_failed" true}
-                         ))))))))))})
+                  (redirect-after-post
+                   (str (path-for req ::login-form)
+                        ;; We must be careful to add back the query string
+                        (as-query-string
+                         (merge
+                          (when post-login-redirect
+                            {"post_login_redirect" (URLEncoder/encode post-login-redirect)})
+                          ;; Add a login_failed to help with indicating the failure to the user.
+                          {"login_failed" true}
+                          ))))))))))
+      wrap-schema-validation)})
 
 
   (routes [this]

@@ -47,6 +47,7 @@
                   (s/optional-key :emailer) (s/protocol Emailer)})
                 component))
   (stop [component] component)
+
   WebService
   (request-handlers [component]
     {::GET-signup-form
