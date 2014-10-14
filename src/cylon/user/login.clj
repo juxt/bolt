@@ -4,7 +4,7 @@
   (:require
    [clojure.tools.logging :refer :all]
    [cylon.user.protocols :as p]
-   [cylon.authentication.protocols :refer (AuthenticationInteraction)]
+   [cylon.authentication.protocols :refer (AuthenticationHandshake)]
    [cylon.password :refer (verify-password)]
    [cylon.password.protocols :refer (PasswordVerifier)]
    [cylon.session :refer (session assoc-session-data! respond-with-new-session!)]
@@ -32,8 +32,8 @@
      component))
   (stop [component] component)
 
-  AuthenticationInteraction
-  (initiate-authentication-interaction [this req]
+  AuthenticationHandshake
+  (initiate-authentication-handshake [this req]
     (if-let [p (path-for req ::login-form)]
       (let [loc (str p (as-query-string {"post_login_redirect" (URLEncoder/encode (uri-with-qs req))}))]
         (debugf "Redirecting to %s" loc)

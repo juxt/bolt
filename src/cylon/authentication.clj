@@ -46,14 +46,14 @@
 (defn get-subject-identifier [authenticator req]
   (:cylon/subject-identifier (authenticate authenticator req)))
 
-;; AuthenticationInteraction
+;; AuthenticationHandshake
 
-(s/defn initiate-authentication-interaction :- Response
-  [component :- (s/protocol p/AuthenticationInteraction)
+(s/defn initiate-authentication-handshake :- Response
+  [component :- (s/protocol p/AuthenticationHandshake)
    request :- Request]
-  (p/initiate-authentication-interaction component request))
+  (p/initiate-authentication-handshake component request))
 
 (s/defn get-outcome :- (s/maybe {s/Keyword s/Any})
-  [component :- (s/protocol p/AuthenticationInteraction)
+  [component :- (s/protocol p/AuthenticationHandshake)
    request :- Request]
   (p/get-outcome component request))

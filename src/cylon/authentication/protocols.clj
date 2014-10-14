@@ -10,6 +10,6 @@
   nil
   (authenticate [_ req] nil))
 
-(defprotocol AuthenticationInteraction
-  (initiate-authentication-interaction [_ request])
+(defprotocol AuthenticationHandshake
+  (initiate-authentication-handshake [_ request])
   (get-outcome [_ request]))

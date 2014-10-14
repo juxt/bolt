@@ -10,8 +10,8 @@
    [clj-jwt.core :refer (to-str sign jwt)]
    [clj-time.core :refer (now plus days)]
    [com.stuartsierra.component :as component :refer (Lifecycle)]
-   [cylon.authentication :refer (authenticate initiate-authentication-interaction get-outcome)]
-   [cylon.authentication.protocols :refer (RequestAuthenticator AuthenticationInteraction)]
+   [cylon.authentication :refer (authenticate initiate-authentication-handshake get-outcome)]
+   [cylon.authentication.protocols :refer (RequestAuthenticator AuthenticationHandshake)]
    [cylon.oauth.registry.protocols :refer (ClientRegistry)]
    [cylon.oauth.registry :refer (lookup-client)]
    [cylon.oauth.encoding :refer (decode-scope encode-scope)]
@@ -38,21 +38,21 @@
 (defrecord AuthorizationServer [store scopes iss
                                 session-store
                                 access-token-store
-                                authentication-interaction
+                                authentication-handshake
                                 client-registry]
   Lifecycle
   (start [component]
-    ;; It is essential that the authentication-interaction has the same
+    ;; It is essential that the authentication-handshake has the same
     ;; session store as this component, otherwise we won't be
     ;; able to access the authentication outcome when this
     ;; handler is called again.
-    (assert (= (:session-store authentication-interaction) session-store))
+    (assert (= (:session-store authentication-handshake) session-store))
 
     (s/validate
      (merge new-authorization-server-schema
             {:session-store (s/protocol SessionStore)
              :access-token-store (s/protocol TokenStore)
-             :authentication-interaction (s/protocol AuthenticationInteraction)
+             :authentication-handshake (s/protocol AuthenticationHandshake)
              :client-registry (s/protocol ClientRegistry)
              })
      component))
@@ -66,7 +66,7 @@
 
         ;; TODO We should validate the incoming response_type
 
-        (let [authentication (get-outcome authentication-interaction req)]
+        (let [authentication (get-outcome authentication-handshake req)]
           (debugf "OAuth2 authorization server: Authorizing request. User authentication is %s" authentication)
           ;; Establish whether the user-agent is already authenticated.
 
@@ -83,7 +83,7 @@
           ;; about this request for the return. We
 
           (if-not (:cylon/subject-identifier authentication)
-            (initiate-authentication-interaction authentication-interaction req)
+            (initiate-authentication-handshake authentication-handshake req)
 
             ;; Else... The user is AUTHENTICATED (now), so we AUTHORIZE the CLIENT
             (let [{response-type "response_type"
@@ -280,4 +280,4 @@
             [:access-token-store
              :session-store
              :client-registry
-             :authentication-interaction]))))
+             :authentication-handshake]))))
