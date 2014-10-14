@@ -15,7 +15,6 @@
    [cylon.util :refer (absolute-uri absolute-prefix as-query-string)]
    [hiccup.core :refer (html)]
    [modular.bidi :refer (WebService path-for)]
-   [modular.bootstrap :refer (wrap-content-in-boilerplate)]
    [ring.middleware.params :refer (params-request)]
    [ring.util.response :refer (response redirect)]
    [schema.core :as s]))
