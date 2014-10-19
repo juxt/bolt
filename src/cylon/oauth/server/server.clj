@@ -44,8 +44,7 @@
   (start [component]
     ;; It is essential that the authentication-handshake has the same
     ;; session store as this component, otherwise we won't be
-    ;; able to access the authentication outcome when this
-    ;; handler is called again.
+    ;; able to access the authentication when this handler is called again.
     (assert (= (:session-store authentication-handshake) session-store))
 
     (s/validate
@@ -74,7 +73,7 @@
           ;; If we aren't authenticated, we hand off to the
           ;; authentication process, which will honor an existing
           ;; session or create a new one if one doesn't already
-          ;; exist. Since we what to remember certain details of this
+          ;; exist. Since we want to remember certain details of this
           ;; authorization request, we elect to create the session
           ;; here. The authentication will return to this same handler.
 
