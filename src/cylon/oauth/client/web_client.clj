@@ -76,7 +76,7 @@
 
             (let [code (get params "code")
 
-                  _ (infof "Exchanging code (%s) for access token %s" access-token-uri)
+                  _ (infof "Exchanging code (%s) for access token via %s" code access-token-uri)
 
                   ;; Exchange the code for an access token
                   ;; This is a blocking operation. We elect to wait for
