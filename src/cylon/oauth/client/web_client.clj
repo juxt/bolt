@@ -76,6 +76,8 @@
 
             (let [code (get params "code")
 
+                  _ (infof "Exchanging code (%s) for access token %s" access-token-uri)
+
                   ;; Exchange the code for an access token
                   ;; This is a blocking operation. We elect to wait for
                   ;; the response. In a future version we might go fully
@@ -110,8 +112,12 @@
                              "code" code
                              "client_id" (:client-id this)
                              "client_secret" (:client-secret this)})}
+
+                    ;; TODO Arguably we need better error handling here
                     #(if (:error %)
-                       %
+                       (do
+                         (errorf "Failed to get token from %s, response was %s" access-token-uri %)
+                         %)
                        (update-in % [:body] (comp decode-stream io/reader))))]
 
               (purge-token! state-store state)

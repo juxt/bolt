@@ -145,6 +145,8 @@
                       ;; to the client by adding the following
                       ;; parameters to the query component of the
                       ;; redirection URI"
+                      (debugf "Redirecting to redirection uri: %s" redirection-uri)
+
                       (redirect
                        (str redirection-uri
                             (as-query-string
