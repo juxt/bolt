@@ -265,7 +265,6 @@
 
   (routes [_]
     ["/" {"authorize" {:get ::authorization-endpoint}
-          "signup" {:get ::auth-signup-endpoint}
           "permit-client" {:post ::permit}
           ;; TODO: Can we use a hyphen instead here?
           "access_token" {:post ::token-endpoint}}])
