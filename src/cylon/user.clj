@@ -30,7 +30,7 @@
    uid :- s/Str]
   (p/get-user component uid))
 
-(s/defn get-user-password-hash :- PasswordHashWithSalt
+(s/defn get-user-password-hash :- (s/maybe PasswordHashWithSalt)
   [component :- (s/protocol p/UserStore)
    uid :- s/Str]
   (p/get-user-password-hash component uid))
