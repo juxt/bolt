@@ -54,7 +54,7 @@
    (s/optional-key :headers) s/Any
    (s/optional-key :body) s/Str})
 
-;; Scheam validation
+;; Schema validation
 
 (defn wrap-schema-validation [h]
   (fn [req]
