@@ -20,7 +20,7 @@
   (:import (java.net URLEncoder))
   )
 
-(defrecord Login [user-store session-store renderer password-verifier fields]
+(defrecord Login [user-store session-store renderer password-verifier fields uri-context]
   Lifecycle
   (start [component]
     (s/validate
@@ -28,7 +28,8 @@
       :renderer (s/protocol p/LoginFormRenderer)
       :password-verifier (s/protocol PasswordVerifier)
       :user-store (s/protocol p/UserStore)
-      :fields [FormField]}
+      :fields [FormField]
+      :uri-context s/Str}
      component))
   (stop [component] component)
 
@@ -116,12 +117,14 @@
     ["" {"/login" {:get ::login-form
                    :post ::process-login-attempt}}])
 
-  (uri-context [this] ""))
+  (uri-context [this] uri-context))
 
 (defn new-login [& {:as opts}]
   (->> opts
        (merge {:fields [{:name "user" :label "User" :type "text" :placeholder "id or email"}
-                        {:name "password" :label "Password" :type "password" :placeholder "password"}]})
-       (s/validate {:fields [FormField]})
+                        {:name "password" :label "Password" :type "password" :placeholder "password"}]
+               :uri-context ""})
+       (s/validate {:fields [FormField]
+                    :uri-context s/Str})
        map->Login
        (<- (using [:password-verifier :session-store :renderer :user-store]))))

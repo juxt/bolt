@@ -27,7 +27,8 @@
 (defrecord WebClient [access-token-uri
                       end-session-endpoint post-logout-redirect-uri
                       session-store state-store
-                      client-registry]
+                      client-registry
+                      uri-context]
   component/Lifecycle
   (start [this]
     ;; If there's an :client-registry dependency, use it to
@@ -191,9 +192,10 @@
                   :otherwise {:status 200 :body "Logged out"}
                   )))})
 
-  (routes [this] ["/" {"oauth/grant" {:get ::redirection-endpoint}
+  (routes [this] ["/" {"grant" {:get ::redirection-endpoint}
                        "logout" {:get ::logout}}])
-  (uri-context [this] "")
+
+  (uri-context [this] uri-context)
 
   AccessTokenGrantee
   (solicit-access-token [this req authorize-uri]
@@ -242,7 +244,8 @@
   [& {:as opts}]
   (component/using
    (->> opts
-        (merge {:requires-user-acceptance? true})
+        (merge {:requires-user-acceptance? true
+                :uri-context ""})
         (s/validate {(s/optional-key :client-id) s/Str
                      (s/optional-key :client-secret) s/Str
                      :application-name s/Str
@@ -257,6 +260,7 @@
                      (s/optional-key :end-session-endpoint) s/Str
 
                      :requires-user-acceptance? s/Bool
+                     :uri-context s/Str
                      })
         map->WebClient)
    [:session-store :state-store]))

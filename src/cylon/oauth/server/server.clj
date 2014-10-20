@@ -33,13 +33,15 @@
   {:scopes {s/Keyword {:description s/Str}}
    :store s/Any
    :iss s/Str             ; uri actually, see openid-connect ch 2.
+   :uri-context s/Str
    })
 
 (defrecord AuthorizationServer [store scopes iss
                                 session-store
                                 access-token-store
                                 authentication-handshake
-                                client-registry]
+                                client-registry
+                                uri-context]
   Lifecycle
   (start [component]
     ;; It is essential that the authentication-handshake has the same
@@ -268,11 +270,12 @@
           "permit-client" {:post ::permit}
           "access-token" {:post ::token-endpoint}}])
 
-  (uri-context [_] "/login/oauth"))
+  (uri-context [_] uri-context))
 
 (defn new-authorization-server [& {:as opts}]
   (->> opts
-       (merge {:store (atom {})})
+       (merge {:store (atom {})
+               :uri-context "/login/oauth"})
        (s/validate new-authorization-server-schema)
        map->AuthorizationServer
        (<- (component/using

@@ -32,9 +32,10 @@
              :label s/Str
              (s/optional-key :placeholder) s/Str
              (s/optional-key :password?) s/Bool}]
+   :uri-context s/Str
    (s/optional-key :post-signup-redirect) s/Str})
 
-(defrecord SignupWithTotp [renderer session-store user-store password-verifier verification-code-store emailer fields]
+(defrecord SignupWithTotp [renderer session-store user-store password-verifier verification-code-store emailer fields uri-context]
   Lifecycle
   (start [component]
     (s/validate (merge
@@ -141,7 +142,7 @@
           "verify-email" {:get ::verify-user-email}
           }])
 
-  (uri-context [_] ""))
+  (uri-context [_] uri-context))
 
 (defn new-signup-with-totp [& {:as opts}]
   (component/using
@@ -151,6 +152,7 @@
                  {:name "password" :label "Password" :password? true :placeholder "password"}
                  {:name "name" :label "Name" :placeholder "name"}
                  {:name "email" :label "Email" :placeholder "email"}]
+                :uri-context s/Str
                 })
         (s/validate new-signup-with-totp-schema)
         map->SignupWithTotp)

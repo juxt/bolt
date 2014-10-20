@@ -6,9 +6,10 @@
    [cylon.session :refer (session respond-close-session!)]
    [ring.util.response :refer (redirect)]
    [ring.middleware.params :refer (params-request)]
+   [schema.core :as s]
    [plumbing.core :refer (<-)]))
 
-(defrecord Logout [session-store]
+(defrecord Logout [session-store uri-context]
   WebService
   (request-handlers [component]
     {::logout
@@ -35,10 +36,14 @@
             (redirect post-logout-redirect-uri)
             {:status 200 :body "Logged out of auth server"}))))})
   (routes [component] ["/logout" ::logout])
-  (uri-context [_] ""))
+  (uri-context [_] uri-context))
+
+(def new-logout-schema
+  {:uri-context s/Str})
 
 (defn new-logout [& {:as opts}]
   (->> opts
-       (merge {})
+       (merge {:uri-context ""})
+       (s/validate new-logout-schema)
        map->Logout
        (<- (using [:session-store]))))
