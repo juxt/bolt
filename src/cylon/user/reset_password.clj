@@ -19,7 +19,7 @@
    [ring.util.response :refer (response redirect)]
    [schema.core :as s]))
 
-(defrecord ResetPassword [emailer renderer session-store user-store verification-code-store fields-reset fields-confirm-password password-verifier]
+(defrecord ResetPassword [emailer renderer session-store user-store verification-code-store fields-reset fields-confirm-password password-verifier uri-context]
   WebService
   (request-handlers [this]
     {
@@ -115,13 +115,14 @@
           "reset-password" {:get ::reset-password-form
                             :post ::process-password-reset}}])
 
-  (uri-context [this] ""))
+  (uri-context [this] uri-context))
 
 (def new-reset-password-schema
   {:fields-reset
    [FormField]
    :fields-confirm-password
-   [FormField]})
+   [FormField]
+   :uri-context s/Str})
 
 (defn new-reset-password [& {:as opts}]
   (component/using
@@ -136,7 +137,9 @@
           [{:name "new_pw"
             :type "password"
             :label "New Password"
-            :placeholder "new password"}]})
+            :placeholder "new password"}]
+          :uri-context ""
+          })
         (s/validate new-reset-password-schema)
         map->ResetPassword)
    [:user-store :session-store :renderer
