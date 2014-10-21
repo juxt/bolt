@@ -25,7 +25,7 @@
    user-details :- {s/Keyword s/Any}]
   (p/create-user! component uid pw-hash email user-details))
 
-(s/defn get-user :- User
+(s/defn get-user :- (s/maybe User)
   [component :- (s/protocol p/UserStore)
    uid :- s/Str]
   (p/get-user component uid))
@@ -152,3 +152,12 @@
    req :- Request
    model :- {}]
   (p/render-password-changed-response component req model))
+
+;; Error form renderer API
+
+(s/defn render-error :- s/Str
+  [component :- (s/protocol p/ErrorRenderer)
+   req :- Request
+   model :- {:error-type (s/enum :user-already-exists)
+             s/Keyword s/Any}]
+  (p/render-error-response component req model))

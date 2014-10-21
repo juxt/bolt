@@ -47,4 +47,9 @@
     form that will capture the new password. ")
   (render-password-changed-response [_ req model]
     "Return the HTML that will be used to tell the user that their
-    password has been changed."))
+    password has been changed.")
+  )
+
+(defprotocol ErrorRenderer
+  (render-error-response [_ req model]
+    "If anything fails, gracefully report to the user."))

@@ -2,7 +2,7 @@
 
 (ns cylon.user.signup
   (:require
-   [cylon.user.protocols :refer (Emailer UserFormRenderer)]
+   [cylon.user.protocols :refer (Emailer UserFormRenderer ErrorRenderer)]
    [clojure.tools.logging :refer :all]
    [cylon.util :refer (absolute-prefix as-query-string wrap-schema-validation)]
    [cylon.session :refer (session respond-with-new-session! assoc-session-data!)]
@@ -16,11 +16,11 @@
    [ring.middleware.params :refer (params-request)]
    [ring.middleware.cookies :refer (cookies-response wrap-cookies)]
    [ring.util.response :refer (response redirect redirect-after-post)]
-   [cylon.user :refer (create-user! verify-email! render-signup-form send-email! render-welcome-email-message render-email-verified
-                                    )]
+   [cylon.user :refer (create-user! get-user verify-email! render-signup-form send-email! render-welcome-email-message render-email-verified render-error)]
    [cylon.user.protocols :refer (UserStore)]
    [cylon.user.totp :as totp :refer (OneTimePasswordStore get-totp-secret set-totp-secret totp-token)]
-   [schema.core :as s ]))
+   [schema.core :as s])
+  (:import (clojure.lang ExceptionInfo)))
 
 (defn make-verification-link [req code email]
   (let [values ((juxt (comp name :scheme) :server-name :server-port) req)
@@ -34,6 +34,19 @@
              (s/optional-key :password?) s/Bool}]
    :uri-context s/Str
    (s/optional-key :post-signup-redirect) s/Str})
+
+(defn wrap-error-rendering [h renderer]
+  (if (satisfies? ErrorRenderer renderer)
+    (fn [req]
+      (try
+        (h req)
+        (catch ExceptionInfo e
+          (let [{error-type :error-type :as data} (ex-data e)]
+            {:status (case error-type
+                       :user-already-exists 422
+                       422)
+             :body (render-error renderer req data)}))))
+    h))
 
 (defrecord SignupWithTotp [renderer session-store user-store password-verifier verification-code-store emailer fields uri-context]
   Lifecycle
@@ -79,6 +92,12 @@
               totp-secret (when (satisfies? OneTimePasswordStore user-store)
                             (totp/secret-key))]
 
+          ;; Check the user doesn't already exist, if she does, render an error page
+          (when (get-user user-store uid)
+            (throw (ex-info (format "User already exists: %s" uid)
+                            {:error-type :user-already-exists
+                             :user-id uid})))
+
           ;; Add the user
           (create-user! user-store uid (make-password-hash password-verifier password)
                         email
@@ -121,7 +140,10 @@
                               (:post-signup-redirect component))]
                (redirect-after-post loc)
                (response (format "Thank you, %s, for signing up" name)))))))
-      wrap-schema-validation)
+
+      wrap-schema-validation
+      (wrap-error-rendering renderer)
+      )
 
      ::verify-user-email
      (->
