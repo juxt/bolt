@@ -73,7 +73,11 @@
               tok (get-token-by-id state-store state)]
 
           (if (nil? tok)
-            {:status 400 :body "Unexpected user state"}
+            (let [session (session session-store req)
+                  original-uri (:cylon/original-uri session)]
+              (if original-uri
+                (redirect original-uri)
+                {:status 400 :body "Unexpected user state"}))
 
             (let [code (get params "code")
 
