@@ -10,6 +10,7 @@
    [cylon.token-store :refer (create-token! get-token-by-id)]
    [cylon.token-store.protocols :refer (TokenStore)]
    [cylon.password.protocols :refer (PasswordVerifier make-password-hash)]
+   [cylon.event :refer (EventPublisher raise-event! etype)]
    [com.stuartsierra.component :as component :refer (Lifecycle)]
    [modular.bidi :refer (WebService path-for)]
    [hiccup.core :refer (html)]
@@ -41,6 +42,7 @@
       (try
         (h req)
         (catch ExceptionInfo e
+          (errorf e "User signup error")
           (let [{error-type :error-type :as data} (ex-data e)]
             {:status (case error-type
                        :user-already-exists 422
@@ -48,7 +50,7 @@
              :body (render-error renderer req data)}))))
     h))
 
-(defrecord SignupWithTotp [renderer session-store user-store password-verifier verification-code-store emailer fields uri-context]
+(defrecord SignupWithTotp [renderer session-store user-store password-verifier verification-code-store emailer fields uri-context events]
   Lifecycle
   (start [component]
     (s/validate (merge
@@ -57,6 +59,7 @@
                   :session-store (s/protocol SessionStore)
                   :password-verifier (s/protocol PasswordVerifier)
                   :verification-code-store (s/protocol TokenStore)
+                  :events (s/maybe (s/protocol EventPublisher))
                   :renderer s/Any
                   (s/optional-key :emailer) (s/protocol Emailer)})
                 component))
@@ -106,6 +109,11 @@
           ;; Add the totp-secret
           (when (satisfies? OneTimePasswordStore user-store)
             (set-totp-secret user-store uid totp-secret))
+
+          ;; Signal that the user has been created.
+          (raise-event! events {etype ::user-created
+                                :cylon/subject-identifier uid
+                                :name name})
 
           ;; Send the email to the user now!
           (when emailer
