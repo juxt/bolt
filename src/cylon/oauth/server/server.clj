@@ -5,7 +5,7 @@
    [clojure.set :as set]
    [clojure.string :as str]
    [clojure.tools.logging :refer :all]
-   [bidi.bidi :refer (path-for)]
+   [bidi.bidi :as bidi]
    [cheshire.core :refer (encode)]
    [clj-jwt.core :refer (to-str sign jwt)]
    [clj-time.core :refer (now plus days)]
@@ -19,15 +19,16 @@
    [cylon.session.protocols :refer (SessionStore)]
    [cylon.token-store :refer (create-token! get-token-by-id)]
    [cylon.token-store.protocols :refer (TokenStore)]
-   [cylon.util :refer (as-query-string wrap-schema-validation)]
+   [cylon.util :refer (as-query-string wrap-schema-validation uri-with-qs)]
    [hiccup.core :refer (html h)]
-   [modular.bidi :refer (WebService)]
+   [modular.bidi :refer (WebService path-for)]
    [plumbing.core :refer (<-)]
    [ring.middleware.cookies :refer (cookies-request)]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]
    [ring.middleware.params :refer (params-request)]
    [ring.util.response :refer (redirect)]
-   [schema.core :as s]))
+   [schema.core :as s])
+  (:import (java.net URLEncoder)))
 
 (def new-authorization-server-schema
   {:scopes {s/Keyword {:description s/Str}}
@@ -39,21 +40,14 @@
 (defrecord AuthorizationServer [store scopes iss
                                 session-store
                                 access-token-store
-                                authentication-handshake
                                 client-registry
                                 uri-context]
   Lifecycle
   (start [component]
-    ;; It is essential that the authentication-handshake has the same
-    ;; session store as this component, otherwise we won't be
-    ;; able to access the authentication when this handler is called again.
-    (assert (= (:session-store authentication-handshake) session-store))
-
     (s/validate
      (merge new-authorization-server-schema
             {:session-store (s/protocol SessionStore)
              :access-token-store (s/protocol TokenStore)
-             :authentication-handshake (s/protocol AuthenticationHandshake)
              :client-registry (s/protocol ClientRegistry)
              })
      component))
@@ -67,7 +61,7 @@
 
         ;; TODO We should validate the incoming response_type
 
-        (let [authentication (authenticate authentication-handshake req)]
+        (let [authentication (authenticate component req)]
           (debugf "OAuth2 authorization server: Authorizing request. User authentication is %s" authentication)
           ;; Establish whether the user-agent is already authenticated.
 
@@ -84,7 +78,7 @@
           ;; about this request for the return. We
 
           (if-not (:cylon/subject-identifier authentication)
-            (initiate-authentication-handshake authentication-handshake req)
+            (initiate-authentication-handshake component req)
 
             ;; Else... The user is AUTHENTICATED (now), so we AUTHORIZE the CLIENT
             (let [{response-type "response_type"
@@ -126,7 +120,7 @@
                   (if requires-user-acceptance?
                     {:status 200
                      :body (html [:body
-                                  [:form {:method :post :action (path-for (:modular.bidi/routes req) ::permit)}
+                                  [:form {:method :post :action (bidi/path-for (:modular.bidi/routes req) ::permit)}
                                    [:h1 "Authorize application?"]
                                    [:p (format "An application (%s) is requesting to use your credentials" application-name)]
                                    [:h2 "Application description"]
@@ -270,7 +264,21 @@
           "permit-client" {:post ::permit}
           "access-token" {:post ::token-endpoint}}])
 
-  (uri-context [_] uri-context))
+  (uri-context [_] uri-context)
+
+  AuthenticationHandshake
+  (initiate-authentication-handshake [this req]
+    (if-let [p (path-for req :cylon.user.login/login-form)]
+      (let [loc (str p (as-query-string {"post_login_redirect" (URLEncoder/encode (uri-with-qs req))}))]
+        (debugf "Redirecting to %s" loc)
+        (redirect loc))
+      (throw (ex-info "No path to login form" {}))))
+
+  RequestAuthenticator
+  (authenticate [this req]
+    (session session-store req))
+
+  )
 
 (defn new-authorization-server [& {:as opts}]
   (->> opts
@@ -281,5 +289,4 @@
        (<- (component/using
             [:access-token-store
              :session-store
-             :client-registry
-             :authentication-handshake]))))
+             :client-registry]))))
