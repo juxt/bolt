@@ -5,7 +5,7 @@
    [clojure.set :as set]
    [clojure.string :as str]
    [clojure.tools.logging :refer :all]
-   [bidi.bidi :refer (path-for)]
+   [bidi.bidi :as bidi]
    [cheshire.core :refer (encode)]
    [clj-jwt.core :refer (to-str sign jwt)]
    [clj-time.core :refer (now plus days)]
@@ -21,7 +21,7 @@
    [cylon.token-store.protocols :refer (TokenStore)]
    [cylon.util :refer (as-query-string wrap-schema-validation uri-with-qs)]
    [hiccup.core :refer (html h)]
-   [modular.bidi :refer (WebService)]
+   [modular.bidi :refer (WebService path-for)]
    [plumbing.core :refer (<-)]
    [ring.middleware.cookies :refer (cookies-request)]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]
@@ -120,7 +120,7 @@
                   (if requires-user-acceptance?
                     {:status 200
                      :body (html [:body
-                                  [:form {:method :post :action (path-for (:modular.bidi/routes req) ::permit)}
+                                  [:form {:method :post :action (bidi/path-for (:modular.bidi/routes req) ::permit)}
                                    [:h1 "Authorize application?"]
                                    [:p (format "An application (%s) is requesting to use your credentials" application-name)]
                                    [:h2 "Application description"]
