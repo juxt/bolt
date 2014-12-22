@@ -14,7 +14,8 @@
    [cylon.token-store :refer (create-token! get-token-by-id purge-token!)]
    [cylon.util :refer (absolute-uri absolute-prefix as-query-string wrap-schema-validation)]
    [hiccup.core :refer (html)]
-   [modular.bidi :refer (WebService path-for)]
+   [bidi.bidi :refer (path-for)]
+   [modular.bidi :refer (WebService)]
    [ring.middleware.params :refer (params-request)]
    [ring.util.response :refer (response redirect)]
    [schema.core :as s]))
