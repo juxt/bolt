@@ -33,7 +33,7 @@
       :user-store (s/protocol p/UserStore)
       :fields [FormField]
       :uri-context s/Str
-      :router s/Any ;; codep doesn't satisfy protocols ;!
+      :router s/Any ;; you can't get specific protocol of a codependency in start time
       }
      component))
   (stop [component] component)

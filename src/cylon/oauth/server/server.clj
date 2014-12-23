@@ -54,7 +54,7 @@
             {:session-store (s/protocol SessionStore)
              :access-token-store (s/protocol TokenStore)
              :authentication-handshake (s/protocol AuthenticationHandshake)
-             :client-registry s/Any
+             :client-registry (s/protocol ClientRegistry)
              })
      component))
   (stop [component] component)
