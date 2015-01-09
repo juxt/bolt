@@ -5,10 +5,10 @@
   :url "https://github.com/juxt/cylon"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
-  :dependencies [[juxt.modular/bidi "0.5.2"]
-                 [juxt.modular/ring "0.5.0"]
-                 [prismatic/schema "0.2.1"]
-                 [prismatic/plumbing "0.2.2"]
+  :dependencies [[juxt.modular/bidi "0.7.2"]
+                 [juxt.modular/ring "0.5.2"]
+                 [prismatic/schema "0.3.3"]
+                 [prismatic/plumbing "0.3.5"]
                  [ring/ring-core "1.2.2"]
                  [malcolmsparks/co-dependency "0.1.5"]
                  [hiccup "1.0.5"]
@@ -16,8 +16,8 @@
 
                  ;; Required for OAuth2/OpenID-Connect support
                  [cheshire "5.3.1"]
-                 [juxt.modular/http-kit "0.5.1"]
-                 [liberator "0.11.0"]
+                 [juxt.modular/http-kit "0.5.3"]
+                 [liberator "0.12.0"]
                  [clj-jwt "0.0.8"]
                  ]
 
