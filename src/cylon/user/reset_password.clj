@@ -3,7 +3,7 @@
 (ns cylon.user.reset-password
   (:require
    [clojure.tools.logging :refer :all]
-   [com.stuartsierra.component :as component]
+   [com.stuartsierra.component :as component :refer (using)]
    [cylon.password.protocols :refer (make-password-hash)]
    [cylon.session.protocols :refer (session assoc-session-data! respond-with-new-session!)]
    [cylon.user.protocols :refer (Emailer LoginFormRenderer UserFormRenderer)]
@@ -14,12 +14,16 @@
    [cylon.token-store :refer (create-token! get-token-by-id purge-token!)]
    [cylon.util :refer (absolute-uri absolute-prefix as-query-string wrap-schema-validation)]
    [hiccup.core :refer (html)]
-   [modular.bidi :refer (WebService path-for)]
+   [bidi.bidi :refer (path-for)]
+   [modular.bidi :refer (WebService)]
    [ring.middleware.params :refer (params-request)]
    [ring.util.response :refer (response redirect)]
-   [schema.core :as s]))
+   [schema.core :as s]
+   [plumbing.core :refer (<-)]
+   [tangrammer.component.co-dependency :refer (co-using)]
+   ))
 
-(defrecord ResetPassword [emailer renderer session-store user-store verification-code-store fields-reset fields-confirm-password password-verifier uri-context]
+(defrecord ResetPassword [emailer renderer session-store user-store verification-code-store fields-reset fields-confirm-password password-verifier uri-context router]
   WebService
   (request-handlers [this]
     {
@@ -31,7 +35,7 @@
          :body (render-reset-password-request-form
                 renderer req
                 {:form {:method :post
-                        :action (path-for req ::process-reset-password-request)
+                        :action (path-for (:routes @router) ::process-reset-password-request)
                         :fields fields-reset}})})
       wrap-schema-validation)
 
@@ -52,7 +56,7 @@
                          renderer
                          {:link (str
                                  (absolute-prefix req)
-                                 (path-for req ::reset-password-form)
+                                 (path-for (:routes @router) ::reset-password-form)
                                  (as-query-string {"code" code}))})))
               (->>
                (response
@@ -61,7 +65,7 @@
                (respond-with-new-session! session-store req {})))
 
             ;; TODO Add email-failed? as query parameter
-            (redirect (path-for req ::request-reset-password-form)))))
+            (redirect (path-for (:routes @router) ::request-reset-password-form)))))
       wrap-schema-validation)
 
      ::reset-password-form
@@ -76,7 +80,7 @@
                       renderer req
                       (merge
                        {:form {:method :post
-                               :action (path-for req ::process-password-reset)
+                               :action (path-for (:routes @router) ::process-password-reset)
                                ;; add hidden field
                                :fields (conj fields-confirm-password
                                              {:name "code" :type "hidden" :value code})}}
@@ -125,22 +129,22 @@
    :uri-context s/Str})
 
 (defn new-reset-password [& {:as opts}]
-  (component/using
-   (->> opts
-        (merge
-         {:fields-reset
-          [{:name "email"
-            :type "text"
-            :label "Email"
-            :placeholder "email"}]
-          :fields-confirm-password
-          [{:name "new_pw"
-            :type "password"
-            :label "New Password"
-            :placeholder "new password"}]
-          :uri-context ""
-          })
-        (s/validate new-reset-password-schema)
-        map->ResetPassword)
-   [:user-store :session-store :renderer
-    :verification-code-store :password-verifier :emailer]))
+  (->> opts
+       (merge
+        {:fields-reset
+         [{:name "email"
+           :type "text"
+           :label "Email"
+           :placeholder "email"}]
+         :fields-confirm-password
+         [{:name "new_pw"
+           :type "password"
+           :label "New Password"
+           :placeholder "new password"}]
+         :uri-context ""
+         })
+       (s/validate new-reset-password-schema)
+       map->ResetPassword
+       (<- (using [:user-store :session-store :renderer
+                   :verification-code-store :password-verifier :emailer]))
+       (<- (co-using [:router]))))

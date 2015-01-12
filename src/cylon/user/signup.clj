@@ -11,8 +11,9 @@
    [cylon.token-store.protocols :refer (TokenStore)]
    [cylon.password.protocols :refer (PasswordVerifier make-password-hash)]
    [cylon.event :refer (EventPublisher raise-event! etype)]
-   [com.stuartsierra.component :as component :refer (Lifecycle)]
-   [modular.bidi :refer (WebService path-for)]
+   [com.stuartsierra.component :as component :refer (Lifecycle using)]
+   [bidi.bidi :refer (path-for)]
+   [modular.bidi :refer (WebService )]
    [hiccup.core :refer (html)]
    [ring.middleware.params :refer (params-request)]
    [ring.middleware.cookies :refer (cookies-response wrap-cookies)]
@@ -20,12 +21,15 @@
    [cylon.user :refer (create-user! get-user verify-email! render-signup-form send-email! render-welcome-email-message render-email-verified render-error)]
    [cylon.user.protocols :refer (UserStore)]
    [cylon.user.totp :as totp :refer (OneTimePasswordStore get-totp-secret set-totp-secret totp-token)]
-   [schema.core :as s])
+   [schema.core :as s]
+   [plumbing.core :refer (<-)]
+   [tangrammer.component.co-dependency :refer (co-using)]
+   )
   (:import (clojure.lang ExceptionInfo)))
 
-(defn make-verification-link [req code email]
+(defn make-verification-link [req code email router]
   (let [values ((juxt (comp name :scheme) :server-name :server-port) req)
-        verify-user-email-path (path-for req ::verify-user-email)]
+        verify-user-email-path (path-for (:routes @router) ::verify-user-email)]
     (apply format "%s://%s:%d%s?code=%s&email=%s" (conj values verify-user-email-path code email))))
 
 (def new-signup-with-totp-schema
@@ -50,7 +54,7 @@
              :body (render-error renderer req data)}))))
     h))
 
-(defrecord SignupWithTotp [renderer session-store user-store password-verifier verification-code-store emailer fields uri-context events]
+(defrecord SignupWithTotp [renderer session-store user-store password-verifier verification-code-store emailer fields uri-context events router]
   Lifecycle
   (start [component]
     (s/validate (merge
@@ -60,8 +64,10 @@
                   :password-verifier (s/protocol PasswordVerifier)
                   :verification-code-store (s/protocol TokenStore)
                   :events (s/maybe (s/protocol EventPublisher))
-                  :renderer s/Any
-                  (s/optional-key :emailer) (s/protocol Emailer)})
+                  :renderer (s/protocol UserFormRenderer)
+                  (s/optional-key :emailer) (s/protocol Emailer)
+                  :router s/Any ;; you can't get specific protocol of a codependency in start time
+                  })
                 component))
   (stop [component] component)
 
@@ -72,7 +78,7 @@
        (let [resp (response (render-signup-form
                              renderer req
                              {:form {:method :post
-                                     :action (path-for req ::POST-signup-form)
+                                     :action (path-for (:routes @router) ::POST-signup-form)
                                      :fields fields}}))]
          (if-not (session session-store req)
            ;; We create an empty session. This is because the POST
@@ -132,7 +138,7 @@
                        {:email-verification-link
                         (str
                          (absolute-prefix req)
-                         (path-for req ::verify-user-email)
+                         (path-for (:routes @router) ::verify-user-email)
                          (as-query-string {"code" code}))})))))
 
           ;; Create a session that contains the secret-key
@@ -175,20 +181,20 @@
   (uri-context [_] uri-context))
 
 (defn new-signup-with-totp [& {:as opts}]
-  (component/using
-   (->> opts
-        (merge {:fields
-                [{:name "user-id" :label "User" :placeholder "id"}
-                 {:name "password" :label "Password" :password? true :placeholder "password"}
-                 {:name "name" :label "Name" :placeholder "name"}
-                 {:name "email" :label "Email" :placeholder "email"}]
-                :uri-context s/Str
-                })
-        (s/validate new-signup-with-totp-schema)
-        map->SignupWithTotp)
-   [:user-store
-    :password-verifier
-    :session-store
-    :renderer
-    :verification-code-store
-    :emailer]))
+  (->> opts
+       (merge {:fields
+               [{:name "user-id" :label "User" :placeholder "id"}
+                {:name "password" :label "Password" :password? true :placeholder "password"}
+                {:name "name" :label "Name" :placeholder "name"}
+                {:name "email" :label "Email" :placeholder "email"}]
+               :uri-context s/Str
+               })
+       (s/validate new-signup-with-totp-schema)
+       map->SignupWithTotp
+       (<- (using [:user-store
+                   :password-verifier
+                   :session-store
+                   :renderer
+                   :verification-code-store
+                   :emailer]))
+       (<- (co-using [:router]))))

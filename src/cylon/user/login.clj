@@ -11,16 +11,19 @@
    [cylon.session.protocols :refer (SessionStore)]
    [cylon.user :refer (get-user-by-email FormField render-login-form)]
    [cylon.util :refer (as-query-string uri-with-qs Request wrap-schema-validation)]
-   [modular.bidi :refer (WebService path-for)]
+   [bidi.bidi :refer (path-for)]
+   [modular.bidi :refer (WebService)]
    [ring.util.response :refer (redirect redirect-after-post)]
    [ring.middleware.params :refer (params-request)]
    [plumbing.core :refer (<-)]
    [com.stuartsierra.component :refer (Lifecycle using)]
-   [schema.core :as s])
+   [schema.core :as s]
+
+   [tangrammer.component.co-dependency :refer (co-using)])
   (:import (java.net URLEncoder))
   )
 
-(defrecord Login [user-store session-store renderer password-verifier fields uri-context]
+(defrecord Login [user-store session-store renderer password-verifier fields uri-context router]
   Lifecycle
   (start [component]
     (s/validate
@@ -29,13 +32,15 @@
       :password-verifier (s/protocol PasswordVerifier)
       :user-store (s/protocol p/UserStore)
       :fields [FormField]
-      :uri-context s/Str}
+      :uri-context s/Str
+      :router s/Any ;; you can't get specific protocol of a codependency in start time
+      }
      component))
   (stop [component] component)
 
   AuthenticationHandshake
   (initiate-authentication-handshake [this req]
-    (if-let [p (path-for req ::login-form)]
+    (if-let [p (path-for (:routes @router) ::login-form)]
       (let [loc (str p (as-query-string {"post_login_redirect" (URLEncoder/encode (uri-with-qs req))}))]
         (debugf "Redirecting to %s" loc)
         (redirect loc))
@@ -56,7 +61,7 @@
                :body (render-login-form
                       renderer req
                       {:form {:method :post
-                              :action (path-for req ::process-login-attempt)
+                              :action (path-for (:routes @router) ::process-login-attempt)
                               :fields (conj fields {:name "post_login_redirect" :value (get qparams "post_login_redirect") :type "hidden"})}
                        :login-failed? (Boolean/valueOf (get qparams "login_failed"))})}]
           response))
@@ -101,7 +106,7 @@
                   ;; query-params, and then from the session.
 
                   (redirect-after-post
-                   (str (path-for req ::login-form)
+                   (str (path-for (:routes @router) ::login-form)
                         ;; We must be careful to add back the query string
                         (as-query-string
                          (merge
@@ -127,4 +132,6 @@
        (s/validate {:fields [FormField]
                     :uri-context s/Str})
        map->Login
-       (<- (using [:password-verifier :session-store :renderer :user-store]))))
+       (<- (using [:password-verifier :session-store :renderer :user-store]))
+       (<- (co-using [:router]))
+       ))
