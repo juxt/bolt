@@ -30,12 +30,12 @@
   to the request. If a role is specified, also check that the role
   exists in the scope of the client. If role isn't specified, the
   identity and access-token are still retrieved."
-  [h client & [scope]]
+  [h client authenticator & [scope]]
   (fn [req]
     (let [{access-token :cylon/access-token
            scopes :cylon/scopes
            sub :cylon/subject-identifier}
-          (authenticate client req)]
+          (authenticate authenticator req)]
 
       (cond
        (nil? access-token)

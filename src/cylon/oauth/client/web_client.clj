@@ -8,7 +8,6 @@
    [clojure.set :refer (union)]
    [clojure.tools.logging :refer :all]
    [com.stuartsierra.component :as component]
-   [cylon.authentication.protocols :refer (RequestAuthenticator)]
    [cylon.oauth.client :refer (AccessTokenGrantee solicit-access-token expired?)]
    [cylon.oauth.registry :refer (register-client)]
    [cylon.oauth.registry.protocols :refer (ClientRegistry)]
@@ -234,17 +233,11 @@
        {:cylon/original-uri original-uri}
        (redirect loc))))
 
-  (expired? [_ req access-token] false)
-
-  RequestAuthenticator
-  (authenticate [component request]
-    (session session-store request)))
+  (expired? [_ req access-token] false))
 
 (defn new-web-client
   "Represents an OAuth2 client. This component provides all the web
-  routes necessary to provide signup, login and password resets. It also
-  acts as a RequestAuthorizer, which returns an OAuth2 access token from a
-  call to authorized?"
+  routes necessary to provide signup, login and password resets."
   [& {:as opts}]
   (component/using
    (->> opts
