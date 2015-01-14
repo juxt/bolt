@@ -15,8 +15,7 @@
 
 (defn new-client-request-authenticator
   "If your webapp behaves as resource server (so it has protected resources),
-  then your webapp needs to authenticate the requests and confirm with the
-  access-token-store having a session access-token"
+  then your webapp needs to authenticate the requests using current sesssion and access-token-store"
   [& {:as opts}]
   (component/using
    (->> opts
