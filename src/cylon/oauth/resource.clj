@@ -6,6 +6,7 @@
    [com.stuartsierra.component :refer (Lifecycle using)]
    [cylon.token-store :refer (get-token-by-id)]
    [cylon.token-store.protocols :refer (TokenStore)]
+   [cylon.session :refer (session)]
    [cylon.authentication.protocols :refer (RequestAuthenticator)]
    [cylon.authentication :refer (authenticate)]
    [schema.core :as s]
@@ -64,3 +65,22 @@
        (s/validate new-personal-access-token-request-authenticator-schema)
        map->PersonalAccessTokenRequestAuthenticator
        (<- (using [:token-store]))))
+
+(defrecord ClientRequestAuthenticator [session-store access-token-store]
+  RequestAuthenticator
+  (authenticate [component request]
+    (let [{access-token :cylon/access-token
+           scopes :cylon/scopes
+           sub :cylon/subject-identifier :as authentication} (session session-store request)]
+      (when (get-token-by-id access-token-store access-token)
+        authentication))))
+
+(defn new-client-request-authenticator
+  "If your webapp behaves as resource server (so it has protected resources),
+  then your webapp needs to authenticate the requests using current sesssion and access-token-store"
+  [& {:as opts}]
+  (using
+   (->> opts
+        (merge {})
+        map->ClientRequestAuthenticator)
+   [:session-store :access-token-store]))
