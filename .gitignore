@@ -11,3 +11,5 @@ pom.xml.asc
 /contrib/bootstrap-login-form/target/repl-port
 /contrib/bootstrap-login-form/target/stale/extract-native.dependencies
 *.DS_Store
+notes.org
+todo.org
