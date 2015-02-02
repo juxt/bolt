@@ -123,7 +123,10 @@
                        (do
                          (errorf "Failed to get token from %s, response was %s" access-token-uri %)
                          %)
-                       (update-in % [:body] (comp decode-stream io/reader))))]
+                       (update-in % [:body] (if-let [decode-fn (:decode-server-response-fn this)]
+                                              decode-fn
+                                              ;; add default decode to cylon oauth server response
+                                              (comp decode-stream io/reader)))))]
 
               (purge-token! state-store state)
 
@@ -265,6 +268,7 @@
 
                      :requires-user-acceptance? s/Bool
                      :uri-context s/Str
+                     (s/optional-key :decode-server-response-fn) s/Any
                      })
         map->WebClient)
    [:session-store :state-store]))
