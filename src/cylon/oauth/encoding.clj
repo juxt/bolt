@@ -1,18 +1,19 @@
 (ns cylon.oauth.encoding
   (:require
    [ring.util.codec :refer (url-encode url-decode)]
-   [clojure.string :as str]))
+   [clojure.string :as str]
+   [plumbing.core :refer (?>>)]))
 
-(defn encode-scope [scope]
+(defn encode-scope [scopes]
   (->>
-   scope
-   (map #(apply str (interpose ":" (remove nil? ((juxt namespace name) %)))))
+   scopes
+   (?>> (keyword? (first scopes)) (map #(apply str (interpose ":" (remove nil? ((juxt namespace name) %))))))
    (interpose " ")
    (apply str)
    url-encode))
 
-(defn decode-scope [s]
+(defn decode-scope [s should-be-keyword?]
   (->> (str/split (url-decode (or s "")) #"\s")
        (remove empty?)
-       (map (fn [x] (apply keyword (str/split x #":"))))
+       (?>> should-be-keyword? (map (fn [x] (apply keyword (str/split x #":")))))
        set))

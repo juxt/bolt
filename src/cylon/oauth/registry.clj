@@ -16,7 +16,7 @@
                   :homepage-uri s/Str
                   (s/optional-key :description) s/Str
                   :redirection-uri s/Str
-                  :required-scopes #{s/Keyword}
+                  :required-scopes (s/either #{s/Keyword} #{s/Str})
                   :requires-user-acceptance? s/Bool}]
   (p/register-client p properties))
 
@@ -26,7 +26,7 @@
                           :redirection-uri s/Str
                           :client-id s/Str
                           :client-secret s/Str
-                          :required-scopes #{s/Keyword}
+                          :required-scopes (s/either #{s/Keyword} #{s/Str})
                           :requires-user-acceptance? s/Bool}
   [p :- (s/protocol p/ClientRegistry)
    client-id :- s/Str]

@@ -141,7 +141,7 @@
 
                         ;; TODO If scope not there it is the same as
                         ;; requested (see 5.1)
-                        scope (decode-scope (get (:body at-resp) "scope"))
+                        scope (decode-scope (get (:body at-resp) "scope") (keyword? (first (:required-scopes this))))
 
                         id-token (-> (get (:body at-resp) "id_token") str->jwt)]
                     (if (verify id-token "secret")
@@ -257,7 +257,7 @@
                      :redirection-uri s/Str
                      (s/optional-key :post-logout-redirect-uri) s/Str
 
-                     :required-scopes #{s/Keyword}
+                     :required-scopes (s/either #{s/Keyword} #{s/Str})
 
                      :authorize-uri s/Str
                      :access-token-uri s/Str
