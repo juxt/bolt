@@ -91,7 +91,7 @@
                    client-id "client_id"
                    scopes-param "scope"
                    state "state"} (-> req params-request :query-params)
-                   requested-scopes (decode-scope scopes-param)]
+                   requested-scopes (decode-scope scopes-param (keyword? (first scopes)))]
 
               (case response-type
                 "code"

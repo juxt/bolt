@@ -123,7 +123,10 @@
                        (do
                          (errorf "Failed to get token from %s, response was %s" access-token-uri %)
                          %)
-                       (update-in % [:body] (comp decode-stream io/reader))))]
+                       (update-in % [:body] (if-let [decode-fn (:decode-server-response-fn this)]
+                                              decode-fn
+                                              ;; add default decode to cylon oauth server response
+                                              (comp decode-stream io/reader)))))]
 
               (purge-token! state-store state)
 
@@ -141,7 +144,7 @@
 
                         ;; TODO If scope not there it is the same as
                         ;; requested (see 5.1)
-                        scope (decode-scope (get (:body at-resp) "scope"))
+                        scope (decode-scope (get (:body at-resp) "scope") (keyword? (first (:required-scopes this))))
 
                         id-token (-> (get (:body at-resp) "id_token") str->jwt)]
                     (if (verify id-token "secret")
@@ -257,7 +260,7 @@
                      :redirection-uri s/Str
                      (s/optional-key :post-logout-redirect-uri) s/Str
 
-                     :required-scopes #{s/Keyword}
+                     :required-scopes (s/either #{s/Keyword} #{s/Str})
 
                      :authorize-uri s/Str
                      :access-token-uri s/Str
@@ -265,6 +268,7 @@
 
                      :requires-user-acceptance? s/Bool
                      :uri-context s/Str
+                     (s/optional-key :decode-server-response-fn) s/Any
                      })
         map->WebClient)
    [:session-store :state-store]))
