@@ -40,6 +40,7 @@
 
   AuthenticationHandshake
   (initiate-authentication-handshake [this req]
+    (assert (:routes @router))
     (if-let [p (path-for (:routes @router) ::login-form)]
       (let [loc (str p (as-query-string {"post_login_redirect" (URLEncoder/encode (uri-with-qs req))}))]
         (debugf "Redirecting to %s" loc)
