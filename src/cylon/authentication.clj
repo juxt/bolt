@@ -51,7 +51,7 @@
 (defrecord EitherRequestAuthenticator []
   p/RequestAuthenticator
   (authenticate [this request]
-    (infof "Either: %s" (keys this))
+    (debugf "Either: %s" (keys this))
     (some (fn [a]
             (when (satisfies? p/RequestAuthenticator a)
               (let [res (authenticate a request)]
