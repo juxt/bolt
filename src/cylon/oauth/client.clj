@@ -2,6 +2,7 @@
   (:require
    [clojure.tools.logging :refer :all]
    [cylon.authentication :refer (authenticate)]
+   [cylon.util :refer (absolute-uri)]
    [schema.core :as s]))
 
 ;; I don't think this is a wonderful name but until we can think of
@@ -41,7 +42,7 @@
        (nil? access-token)
        (do
          (debugf "No access token, so soliciting one from client %s" client)
-         (solicit-access-token client req (:authorize-uri client)))
+         (solicit-access-token client req (absolute-uri req)))
        (expired? client req access-token)
        (do
          (debugf "access token has expired, seeking to refresh it")

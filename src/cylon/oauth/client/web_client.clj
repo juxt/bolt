@@ -205,17 +205,17 @@
   (uri-context [this] uri-context)
 
   AccessTokenGrantee
-  (solicit-access-token [this req authorize-uri]
-    (solicit-access-token this req authorize-uri []))
+  (solicit-access-token [this req target-uri]
+    (solicit-access-token this req target-uri []))
 
   ;; RFC 6749 4.1. Authorization Code Grant (A)
-  (solicit-access-token [this req authorize-uri scopes]
-    (let [original-uri (absolute-uri req)
+  (solicit-access-token [this req target-uri scopes]
+    (let [
           state (str (java.util.UUID/randomUUID))
 
           ;; 4.1.1.  Authorization Request
           loc (str
-               authorize-uri
+               (:authorize-uri this)
                (as-query-string
                 {"response_type" "code"        ; REQUIRED
                  "client_id" (:client-id this) ; REQUIRED
@@ -228,13 +228,13 @@
 
       (create-token! state-store state {})
       ;; We create a session
-      (debugf "Creating session to store original uri of %s" original-uri)
+      (debugf "Creating session to store original uri of %s" target-uri)
       ;; We redirect to the (authorization) uri send the redirect response, but first
 
       ;; We need a session to store the original uri
       (respond-with-new-session!
        session-store req
-       {:cylon/original-uri original-uri}
+       {:cylon/original-uri target-uri}
        (redirect loc))))
 
   (expired? [_ req access-token] false)
