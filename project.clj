@@ -1,11 +1,11 @@
 ;; Copyright © 2014 JUXT LTD.
 
-(defproject cylon "0.5.1"
+(defproject cylon "0.6.0-SNAPSHOT"
   :description "An integrated security system for applications built on component"
   :url "https://github.com/juxt/cylon"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
-  :dependencies [[juxt.modular/bidi "0.7.2"]
+  :dependencies [[juxt.modular/bidi "0.9.1"]
                  [juxt.modular/ring "0.5.2"]
                  [prismatic/schema "0.3.3"]
                  [prismatic/plumbing "0.3.5"]
