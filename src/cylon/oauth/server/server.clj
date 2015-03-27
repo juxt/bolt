@@ -28,7 +28,7 @@
    [ring.middleware.params :refer (params-request)]
    [ring.util.response :refer (redirect)]
    [schema.core :as s]
-   [tangrammer.component.co-dependency :refer (co-using)]))
+   [modular.component.co-dependency :refer (co-using)]))
 
 (def new-authorization-server-schema
   {:scopes {s/Keyword {:description s/Str}}
@@ -43,7 +43,7 @@
                                 authentication-handshake
                                 client-registry
                                 uri-context
-                                router]
+                                *router]
   Lifecycle
   (start [component]
     ;; It is essential that the authentication-handshake has the same
@@ -57,7 +57,7 @@
              :access-token-store (s/protocol TokenStore)
              :authentication-handshake (s/protocol AuthenticationHandshake)
              :client-registry (s/protocol ClientRegistry)
-             :router s/Any ; should be a promise
+             :*router s/Any ; should be a promise
              })
      component))
   (stop [component] component)
@@ -134,7 +134,7 @@
                      (if requires-user-acceptance?
                        {:status 200
                         :body (html [:body
-                                     [:form {:method :post :action (path-for @router ::permit)}
+                                     [:form {:method :post :action (path-for @*router ::permit)}
                                       [:h1 "Authorize application?"]
                                       [:p (format "An application (%s) is requesting to use your credentials" application-name)]
                                       [:h2 "Application description"]

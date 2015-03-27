@@ -10,7 +10,7 @@
                  [prismatic/schema "0.3.3"]
                  [prismatic/plumbing "0.3.5"]
                  [ring/ring-core "1.2.2"]
-                 [malcolmsparks/co-dependency "0.1.5"]
+                 [juxt.modular/co-dependency "0.2.0"]
                  [hiccup "1.0.5"]
                  [org.clojure/tools.logging "0.2.6"]
 

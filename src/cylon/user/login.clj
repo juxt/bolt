@@ -18,15 +18,13 @@
    [plumbing.core :refer (<-)]
    [com.stuartsierra.component :refer (Lifecycle using)]
    [schema.core :as s]
-
-   [tangrammer.component.co-dependency :refer (co-using)])
+   [modular.component.co-dependency :refer (co-using)])
   (:import (java.net URLEncoder))
   )
 
-(defrecord Login [user-store session-store renderer password-verifier fields uri-context router]
+(defrecord Login [user-store session-store renderer password-verifier fields uri-context *router]
   Lifecycle
   (start [component]
-    (assert router)
     (s/validate
      {:session-store (s/protocol SessionStore)
       :renderer (s/protocol p/LoginFormRenderer)
@@ -34,15 +32,15 @@
       :user-store (s/protocol p/UserStore)
       :fields [FormField]
       :uri-context s/Str
-      :router s/Any ;; you can't get specific protocol of a codependency in start time
+      :*router s/Any ;; you can't get specific protocol of a codependency in start time
       }
      component))
   (stop [component] component)
 
   AuthenticationHandshake
   (initiate-authentication-handshake [this req]
-    (assert (:routes @router))
-    (if-let [p (path-for @router ::login-form)]
+    (assert (:routes @*router))
+    (if-let [p (path-for @*router ::login-form)]
       (let [loc (str p (as-query-string {"post_login_redirect" (URLEncoder/encode (uri-with-qs req))}))]
         (debugf "Redirecting to %s" loc)
         (redirect loc))
@@ -62,15 +60,15 @@
         (->
          (fn [req]
            (let [qparams (-> req params-request :query-params)
-                 response
-                 {:status 200
-                  :body (render-login-form
-                         renderer req
-                         {:form {:method :post
-                                 :action (path-for @router ::process-login-attempt)
-                                 :fields (conj fields {:name "post_login_redirect" :value (get qparams "post_login_redirect") :type "hidden"})}
-                          :login-failed? (Boolean/valueOf (get qparams "login_failed"))})}]
-             response))
+                 post-login-redirect (get qparams "post_login_redirect")]
+             (assert post-login-redirect "Request query-string must contain a post_login_redirect parameter")
+             {:status 200
+              :body (render-login-form
+                     renderer req
+                     {:form {:method :post
+                             :action (path-for @*router ::process-login-attempt)
+                             :fields (conj fields {:name "post_login_redirect" :value post-login-redirect :type "hidden"})}
+                      :login-failed? (Boolean/valueOf (get qparams "login_failed"))})}))
          wrap-schema-validation))
 
        :post
@@ -114,7 +112,7 @@
                      ;; query-params, and then from the session.
 
                      (redirect-after-post
-                      (str (path-for @router ::login-form)
+                      (str (path-for @*router ::login-form)
                            ;; We must be careful to add back the query string
                            (as-query-string
                             (merge

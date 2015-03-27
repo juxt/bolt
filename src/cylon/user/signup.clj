@@ -23,13 +23,13 @@
    [cylon.user.totp :as totp :refer (OneTimePasswordStore get-totp-secret set-totp-secret totp-token)]
    [schema.core :as s]
    [plumbing.core :refer (<-)]
-   [tangrammer.component.co-dependency :refer (co-using)]
+   [modular.component.co-dependency :refer (co-using)]
    )
   (:import (clojure.lang ExceptionInfo)))
 
-(defn make-verification-link [req code email router]
+(defn make-verification-link [req code email *router]
   (let [values ((juxt (comp name :scheme) :server-name :server-port) req)
-        verify-user-email-path (path-for @router ::verify-user-email)]
+        verify-user-email-path (path-for @*router ::verify-user-email)]
     (apply format "%s://%s:%d%s?code=%s&email=%s" (conj values verify-user-email-path code email))))
 
 (def new-signup-with-totp-schema
@@ -54,7 +54,7 @@
              :body (render-error renderer req data)}))))
     h))
 
-(defrecord SignupWithTotp [renderer session-store user-store password-verifier verification-code-store emailer fields uri-context events router]
+(defrecord SignupWithTotp [renderer session-store user-store password-verifier verification-code-store emailer fields uri-context events *router]
   Lifecycle
   (start [component]
     (s/validate (merge
@@ -66,7 +66,7 @@
                   :events (s/maybe (s/protocol EventPublisher))
                   :renderer (s/protocol UserFormRenderer)
                   (s/optional-key :emailer) (s/protocol Emailer)
-                  :router s/Any ;; you can't get specific protocol of a codependency in start time
+                  :*router s/Any ;; you can't get specific protocol of a codependency in start time
                   })
                 component))
   (stop [component] component)
@@ -82,7 +82,7 @@
           (let [resp (response (render-signup-form
                                 renderer req
                                 {:form {:method :post
-                                        :action (path-for @router ::POST-signup-form)
+                                        :action (path-for @*router ::POST-signup-form)
                                         :fields fields}}))]
             (if-not (session session-store req)
               ;; We create an empty session. This is because the POST
@@ -144,7 +144,7 @@
                           {:email-verification-link
                            (str
                             (absolute-prefix req)
-                            (path-for @router ::verify-user-email)
+                            (path-for @*router ::verify-user-email)
                             (as-query-string {"code" code}))})))))
 
              ;; Create a session that contains the secret-key

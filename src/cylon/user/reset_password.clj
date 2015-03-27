@@ -20,10 +20,10 @@
    [ring.util.response :refer (response redirect)]
    [schema.core :as s]
    [plumbing.core :refer (<-)]
-   [tangrammer.component.co-dependency :refer (co-using)]
+   [modular.component.co-dependency :refer (co-using)]
    ))
 
-(defrecord ResetPassword [emailer renderer session-store user-store verification-code-store fields-reset fields-confirm-password password-verifier uri-context router]
+(defrecord ResetPassword [emailer renderer session-store user-store verification-code-store fields-reset fields-confirm-password password-verifier uri-context *router]
   RouteProvider
   (routes [this]
     [uri-context
@@ -38,7 +38,7 @@
                     :body (render-reset-password-request-form
                            renderer req
                            {:form {:method :post
-                                   :action (path-for @router ::process-reset-password-request)
+                                   :action (path-for @*router ::process-reset-password-request)
                                    :fields fields-reset}})})
                  wrap-schema-validation))
 
@@ -60,7 +60,7 @@
                                     renderer
                                     {:link (str
                                             (absolute-prefix req)
-                                            (path-for @router ::reset-password-form)
+                                            (path-for @*router ::reset-password-form)
                                             (as-query-string {"code" code}))})))
                          (->>
                           (response
@@ -69,7 +69,7 @@
                           (respond-with-new-session! session-store req {})))
 
                        ;; TODO Add email-failed? as query parameter
-                       (redirect (path-for @router ::request-reset-password-form)))))
+                       (redirect (path-for @*router ::request-reset-password-form)))))
                  wrap-schema-validation))}
 
       "/reset-password"
@@ -87,7 +87,7 @@
                          renderer req
                          (merge
                           {:form {:method :post
-                                  :action (path-for @router ::process-password-reset)
+                                  :action (path-for @*router ::process-password-reset)
                                   ;; add hidden field
                                   :fields (conj fields-confirm-password
                                                 {:name "code" :type "hidden" :value code})}}
