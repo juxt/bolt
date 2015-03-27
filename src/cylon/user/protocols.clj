@@ -8,7 +8,9 @@
   (get-user [_ uid])
   (get-user-password-hash [_ uid])
   (set-user-password-hash! [_ uid pw-hash])
-  (get-user-by-email [_ email])
+  (get-user-by-email [_ email]
+    "Return user details for the user with this email address. Delegate
+    to get-user if email addresses are used as the user identifier.")
   (delete-user! [_ uid])
   (verify-email! [_ uid]))
 
