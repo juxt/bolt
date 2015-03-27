@@ -61,3 +61,14 @@
   (fn [req]
     (s/with-fn-validation
       (h req))))
+
+
+;; MD5 for gravatars
+
+(defn md5 [s]
+  (let [algorithm (java.security.MessageDigest/getInstance "MD5")
+        size (* 2 (.getDigestLength algorithm))
+        raw (.digest algorithm (.getBytes s))
+        sig (.toString (java.math.BigInteger. 1 raw) 16)
+        padding (apply str (repeat (- size (count sig)) "0"))]
+    (str padding sig)))

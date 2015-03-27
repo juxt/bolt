@@ -20,7 +20,7 @@
    [cylon.session.protocols :refer (SessionStore)]
    [cylon.token-store :refer (create-token! get-token-by-id)]
    [cylon.token-store.protocols :refer (TokenStore)]
-   [cylon.util :refer (as-query-string wrap-schema-validation)]
+   [cylon.util :refer (as-query-string wrap-schema-validation md5)]
    [hiccup.core :refer (html h)]
    [plumbing.core :refer (<-)]
    [ring.middleware.cookies :refer (cookies-request)]
@@ -36,6 +36,8 @@
    :iss s/Str             ; uri actually, see openid-connect ch 2.
    :uri-context s/Str
    })
+
+
 
 (defrecord AuthorizationServer [store scopes iss
                                 session-store
@@ -57,7 +59,7 @@
              :access-token-store (s/protocol TokenStore)
              :authentication-handshake (s/protocol AuthenticationHandshake)
              :client-registry (s/protocol ClientRegistry)
-             :*router s/Any ; should be a promise
+             :*router s/Any             ; should be a promise
              })
      component))
   (stop [component] component)
@@ -119,7 +121,7 @@
                             (merge
                              {:created (java.util.Date.)}
                              ;; This is for the OpenID-Connect JWT token that we will send with the access-token
-                             (select-keys authentication [:cylon/subject-identifier])))
+                             (select-keys authentication [:cylon/subject-identifier :cylon/user])))
 
                      ;; When a user permits a client, the client's scopes that they have accepted, are stored in the user preferences database
                      ;; why?
@@ -223,15 +225,22 @@
               {:status 403 :body "Client could not be authenticated"}
 
               (if-let [{sub :cylon/subject-identifier
+                        user :cylon/user
                         granted-scopes :granted-scopes}
                        (get @store code)]
 
                 (let [access-token (str (java.util.UUID/randomUUID))
-                      claim {:iss iss
-                             :sub sub
-                             :aud client-id
-                             :exp (plus (now) (days 1)) ; expiry ; TODO unhardcode
-                             :iat (now)}]
+                      ;; See http://openid.net/specs/openid-connect-core-1_0.html#CodeIDToken
+                      claim (merge {:iss iss
+                                    :sub sub
+                                    :aud client-id
+                                    :exp (plus (now) (days 1)) ; expiry ; TODO unhardcode
+                                    :iat (now)}
+                                   (when-let [name (:name user)] {:name name})
+                                   (when-let [email (:email user)]
+                                     {:email email
+                                      :picture (str "https://www.gravatar.com/avatar/" (md5 email))
+                                      }))]
 
                   (create-token! access-token-store
                                  access-token

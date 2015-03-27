@@ -3,13 +3,14 @@
 (ns cylon.user.login
   (:require
    [clojure.tools.logging :refer :all]
+   [clojure.string :as string]
    [cylon.user.protocols :as p]
    [cylon.authentication.protocols :refer (RequestAuthenticator AuthenticationHandshake)]
    [cylon.password :refer (verify-password)]
    [cylon.password.protocols :refer (PasswordVerifier)]
    [cylon.session :refer (session assoc-session-data! respond-with-new-session!)]
    [cylon.session.protocols :refer (SessionStore)]
-   [cylon.user :refer (get-user-by-email FormField render-login-form)]
+   [cylon.user :refer (get-user get-user-by-email FormField render-login-form)]
    [cylon.util :refer (as-query-string uri-with-qs Request wrap-schema-validation)]
    [bidi.bidi :refer (RouteProvider handler)]
    [modular.bidi :refer (path-for)]
@@ -19,8 +20,10 @@
    [com.stuartsierra.component :refer (Lifecycle using)]
    [schema.core :as s]
    [modular.component.co-dependency :refer (co-using)])
-  (:import (java.net URLEncoder))
-  )
+  (:import (java.net URLEncoder)))
+
+(defn email? [s]
+  (re-matches #".+@.+" s))
 
 (defrecord Login [user-store session-store renderer password-verifier fields uri-context *router]
   Lifecycle
@@ -77,50 +80,51 @@
         (->
          (fn [req]
            (let [params (-> req params-request :form-params)
-                 uid (get params "user")
+                 userid (string/trim (get params "user"))
                  password (get params "password")
                  session (session session-store req)
-                 post-login-redirect (get params "post_login_redirect")]
+                 post-login-redirect (get params "post_login_redirect")
+                 _ (debugf "Form params posted to login form are %s" params)
+                 user ((if (email? userid) get-user-by-email get-user) user-store userid)
+                 _ (debugf "User attempting login looked up: %s" user)]
 
-             (debugf "Form params posted to login form are %s" params)
+             ;; By default, we can login with a username or email address (they might well be the same thing).
 
-             (if (and uid (not-empty uid))
-               ;; checking uid email based
-               (if-let [uid (or (and (.contains uid "@") (:uid (get-user-by-email user-store uid))) (.trim uid))]
-                 (if  (verify-password password-verifier uid password)
-                   ;; Login successful!
-                   (do
-                     (debugf "Login successful!")
-                     (respond-with-new-session!
-                      session-store req
-                      {:cylon/subject-identifier uid}
-                      (if post-login-redirect
-                        (redirect-after-post post-login-redirect)
-                        {:status 200 :body "Login successful"})))
+             (if (verify-password password-verifier (:uid user) password)
+               ;; Login successful!
+               (do
+                 (debugf "Login successful!")
+                 (respond-with-new-session!
+                  session-store req
+                  {:cylon/subject-identifier (:uid user)
+                   :cylon/user user}
+                  (if post-login-redirect
+                    (redirect-after-post post-login-redirect)
+                    {:status 200 :body "Login successful"})))
 
-                   ;; Login failed!
-                   (do
-                     (debugf "Login failed!")
+               ;; Login failed!
+               (do
+                 (debugf "Login failed!")
 
-                     ;; TODO I think the best thing to do here is to create a
-                     ;; session anyway - we have been posted after all. We can
-                     ;; store in the session things like number of failed
-                     ;; attempts (to attempt to prevent brute-force hacking
-                     ;; attempts by limiting the number of sessions that can be
-                     ;; used by each remote IP address). If we do this, then the
-                     ;; post_login_redirect must be ascertained from the
-                     ;; query-params, and then from the session.
+                 ;; TODO I think the best thing to do here is to create a
+                 ;; session anyway - we have been posted after all. We can
+                 ;; store in the session things like number of failed
+                 ;; attempts (to attempt to prevent brute-force hacking
+                 ;; attempts by limiting the number of sessions that can be
+                 ;; used by each remote IP address). If we do this, then the
+                 ;; post_login_redirect must be ascertained from the
+                 ;; query-params, and then from the session.
 
-                     (redirect-after-post
-                      (str (path-for @*router ::login-form)
-                           ;; We must be careful to add back the query string
-                           (as-query-string
-                            (merge
-                             (when post-login-redirect
-                               {"post_login_redirect" (URLEncoder/encode post-login-redirect)})
-                             ;; Add a login_failed to help with indicating the failure to the user.
-                             {"login_failed" true}
-                             ))))))))))
+                 (redirect-after-post
+                  (str (path-for @*router ::login-form)
+                       ;; We must be careful to add back the query string
+                       (as-query-string
+                        (merge
+                         (when post-login-redirect
+                           {"post_login_redirect" (URLEncoder/encode post-login-redirect)})
+                         ;; Add a login_failed to help with indicating the failure to the user.
+                         {"login_failed" true}
+                         ))))))))
          wrap-schema-validation)
         )}}]))
 
