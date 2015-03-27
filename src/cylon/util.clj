@@ -1,3 +1,4 @@
+;; For internal Cylon use only. Not part of a published API. Do not use.
 (ns cylon.util
   (:require
    [schema.core :as s])
