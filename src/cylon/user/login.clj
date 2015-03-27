@@ -26,10 +26,10 @@
   Lifecycle
   (start [component]
     (s/validate
-     {:session-store (s/protocol SessionStore)
+     {:user-store (s/protocol p/UserStore)
+      :session-store (s/protocol SessionStore)
       :renderer (s/protocol p/LoginFormRenderer)
       :password-verifier (s/protocol PasswordVerifier)
-      :user-store (s/protocol p/UserStore)
       :fields [FormField]
       :uri-context s/Str
       :*router s/Any ;; you can't get specific protocol of a codependency in start time
