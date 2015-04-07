@@ -2,7 +2,7 @@
 
 (ns cylon.user.signup
   (:require
-   [bidi.bidi :refer (RouteProvider handler)]
+   [bidi.bidi :refer (RouteProvider tag)]
    [cylon.user.protocols :refer (Emailer UserFormRenderer ErrorRenderer)]
    [clojure.tools.logging :refer :all]
    [cylon.util :refer (absolute-prefix as-query-string wrap-schema-validation)]
@@ -76,8 +76,7 @@
     [uri-context
      {"signup"
       {:get
-       (handler
-        ::GET-signup-form
+       (->
         (fn [req]
           (let [resp (response (render-signup-form
                                 renderer req
@@ -91,95 +90,94 @@
               ;; (revisit: the comment above is wrong, the POST handler can
               ;; create the session)
               (respond-with-new-session! session-store req {} resp)
-              resp))))
+              resp)))
+        (tag ::GET-signup-form))
 
        :post
-       (handler
-        ::POST-signup-form
-        (->
-         (fn [req]
-           (debugf "Processing signup")
-           (let [form (-> req params-request :form-params)
-                 uid (get form "user-id")
-                 password (get form "password")
-                 email (get form "email")
-                 name (get form "name")
-                 totp-secret (when (satisfies? OneTimePasswordStore user-store)
-                               (totp/secret-key))]
+       (->
+        (fn [req]
+          (debugf "Processing signup")
+          (let [form (-> req params-request :form-params)
+                uid (get form "user-id")
+                password (get form "password")
+                email (get form "email")
+                name (get form "name")
+                totp-secret (when (satisfies? OneTimePasswordStore user-store)
+                              (totp/secret-key))]
 
-             ;; Check the user doesn't already exist, if she does, render an error page
-             (when (get-user user-store uid)
-               (throw (ex-info (format "User already exists: %s" uid)
-                               {:error-type :user-already-exists
-                                :user-id uid})))
+            ;; Check the user doesn't already exist, if she does, render an error page
+            (when (get-user user-store uid)
+              (throw (ex-info (format "User already exists: %s" uid)
+                              {:error-type :user-already-exists
+                               :user-id uid})))
 
-             ;; Add the user
-             (create-user! user-store uid (make-password-hash password-verifier password)
-                           email
-                           {:name name})
+            ;; Add the user
+            (create-user! user-store uid (make-password-hash password-verifier password)
+                          email
+                          {:name name})
 
-             ;; Add the totp-secret
-             (when (satisfies? OneTimePasswordStore user-store)
-               (set-totp-secret user-store uid totp-secret))
+            ;; Add the totp-secret
+            (when (satisfies? OneTimePasswordStore user-store)
+              (set-totp-secret user-store uid totp-secret))
 
-             ;; Signal that the user has been created.
-             (raise-event! events {etype ::user-created
-                                   :cylon/subject-identifier uid
-                                   :name name})
+            ;; Signal that the user has been created.
+            (raise-event! events {etype ::user-created
+                                  :cylon/subject-identifier uid
+                                  :name name})
 
-             ;; Send the email to the user now!
-             (when emailer
-               ;; TODO Possibly we should encrypt and decrypt the verification-code (symmetric)
-               (let [code (str (java.util.UUID/randomUUID))]
-                 (create-token!
-                  verification-code-store code
-                  {:cylon/subject-identifier uid
-                   :email email})
+            ;; Send the email to the user now!
+            (when emailer
+              ;; TODO Possibly we should encrypt and decrypt the verification-code (symmetric)
+              (let [code (str (java.util.UUID/randomUUID))]
+                (create-token!
+                 verification-code-store code
+                 {:cylon/subject-identifier uid
+                  :email email})
 
-                 (send-email!
-                  emailer
-                  (merge {:to email}
-                         (render-welcome-email-message
-                          renderer
-                          {:email-verification-link
-                           (str
-                            (absolute-prefix req)
-                            (path-for @*router ::verify-user-email)
-                            (as-query-string {"code" code}))})))))
+                (send-email!
+                 emailer
+                 (merge {:to email}
+                        (render-welcome-email-message
+                         renderer
+                         {:email-verification-link
+                          (str
+                           (absolute-prefix req)
+                           (path-for @*router ::verify-user-email)
+                           (as-query-string {"code" code}))})))))
 
-             ;; Create a session that contains the secret-key
-             (let [data (merge {:cylon/subject-identifier uid :name name}
-                               (when (satisfies? OneTimePasswordStore user-store)
-                                 {:totp-secret totp-secret}))]
-               (assoc-session-data! session-store req data)
+            ;; Create a session that contains the secret-key
+            (let [data (merge {:cylon/subject-identifier uid :name name}
+                              (when (satisfies? OneTimePasswordStore user-store)
+                                {:totp-secret totp-secret}))]
+              (assoc-session-data! session-store req data)
 
-               (respond-with-new-session!
-                session-store req
-                {:cylon/subject-identifier uid} ; keep logged in after signup
-                (if-let [loc (or (get form "post_signup_redirect")
-                                 (:post-signup-redirect component))]
-                  (redirect-after-post loc)
-                  (response (format "Thank you, %s, for signing up" name)))))))
+              (respond-with-new-session!
+               session-store req
+               {:cylon/subject-identifier uid} ; keep logged in after signup
+               (if-let [loc (or (get form "post_signup_redirect")
+                                (:post-signup-redirect component))]
+                 (redirect-after-post loc)
+                 (response (format "Thank you, %s, for signing up" name)))))))
 
-         wrap-schema-validation
-         (wrap-error-rendering renderer)
-         ))}
+        wrap-schema-validation
+        (wrap-error-rendering renderer)
+        (tag ::POST-signup-form)
+        )}
 
       "verify-email"
       {:get
-       (handler
-        ::verify-user-email
-        (->
-         (fn [req]
-           (let [params (-> req params-request :params)]
-             (let [token-id (get params "code")
-                   token (get-token-by-id (:verification-code-store component) token-id)]
-               (if-let [uid (:cylon/subject-identifier token)]
-                 (do
-                   (verify-email! user-store uid)
-                   (response (render-email-verified renderer req token)))
-                 {:status 400 :body (format "No known verification code: %s" token-id)}))))
-         wrap-schema-validation))}
+       (->
+        (fn [req]
+          (let [params (-> req params-request :params)]
+            (let [token-id (get params "code")
+                  token (get-token-by-id (:verification-code-store component) token-id)]
+              (if-let [uid (:cylon/subject-identifier token)]
+                (do
+                  (verify-email! user-store uid)
+                  (response (render-email-verified renderer req token)))
+                {:status 400 :body (format "No known verification code: %s" token-id)}))))
+        wrap-schema-validation
+        (tag ::verify-user-email))}
       }]))
 
 (defn new-signup-with-totp [& {:as opts}]
