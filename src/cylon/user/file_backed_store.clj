@@ -7,36 +7,51 @@
    [schema.core :as s]
    ))
 
+(defn save
+  "Save the state of the component's ref to a file, via an agent."
+  [component]
+  (send-off
+   (:agent component)
+   (fn [f]
+     (spit f (with-out-str (pprint @(:ref component))))
+     (:file component))))
+
 (defrecord FileBackedUserStore []
   Lifecycle
   (start [component]
     (let [f (:file component)]
       (assoc component
-        :ref (ref (if (.exists f) (read-string (slurp f)) {}))
-        :agent (agent f))))
+             :ref (ref (if (.exists f) (read-string (slurp f)) {}))
+             :agent (agent f))))
   (stop [component] component)
 
   UserStore
-  (create-user! [_ uid pw-hash email user-details]
-    (throw (ex-info "TODO" {})))
+  (create-user! [component uid pw-hash email user-details]
+    (dosync
+     (alter (:ref component) assoc uid {:pw-hash pw-hash
+                                        :email email
+                                        :user-details user-details})
+     (save component)
+     (get @(:ref component) uid)))
 
   (get-user [component uid]
     (get @(:ref component) uid))
 
-  (get-user-password-hash [_ uid]
-    (throw (ex-info "TODO" {})))
+  (get-user-password-hash [component uid]
+    (get-in @(:ref component) [uid :pw-hash]))
 
   (set-user-password-hash! [component uid pw-hash]
     (dosync
      (alter (:ref component) assoc uid {})
-     (send-off (:agent component)
-               (fn [f]
-                 (spit f (with-out-str (pprint @(:ref component))))
-                 (:file component)))
+     (save component)
      (get @(:ref component) uid)))
 
-  (get-user-by-email [_ email]
-    (throw (ex-info "TODO" {})))
+  (get-user-by-email [component email]
+    (some #(let [[uid user] %] (when (= email (:email user))
+                                 (-> user
+                                     (assoc :uid uid)
+                                     (dissoc :pw-hash))))
+          @(:ref component)))
 
   (delete-user! [_ uid]
     (throw (ex-info "TODO" {})))
