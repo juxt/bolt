@@ -35,7 +35,8 @@
   (fn [req]
     (let [{access-token :cylon/access-token
            scopes :cylon/scopes
-           sub :cylon/subject-identifier}
+           sub :cylon/subject-identifier
+           :as user}
           (authenticate client req)]
 
       (cond
@@ -57,5 +58,7 @@
 
        :otherwise
        (h (assoc req
-            :cylon/subject-identifier sub
-            :cylon/access-token access-token))))))
+                 :cylon/user user
+                 ;; Deprecated
+                 :cylon/subject-identifier sub
+                 :cylon/access-token access-token))))))
