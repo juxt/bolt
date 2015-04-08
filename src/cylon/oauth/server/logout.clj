@@ -1,6 +1,6 @@
 (ns cylon.oauth.server.logout
   (:require
-   [bidi.bidi :refer (RouteProvider handler)]
+   [bidi.bidi :refer (RouteProvider tag)]
    [com.stuartsierra.component :refer (using)]
    [cylon.token-store :refer (purge-token!)]
    [cylon.session :refer (session respond-close-session!)]
@@ -13,9 +13,8 @@
   RouteProvider
   (routes [component]
     [uri-context
-     {"/logout"
-      (handler
-       ::logout
+     {"logout"
+      (->
        (fn [req]
          ;; Logout
          ;; TODO :-
@@ -36,7 +35,8 @@
             session-store req
             (if post-logout-redirect-uri
               (redirect post-logout-redirect-uri)
-              {:status 200 :body "Logged out of auth server"})))))}]))
+              {:status 200 :body "Logged out of auth server"}))))
+       (tag ::logout))}]))
 
 (def new-logout-schema
   {:uri-context s/Str})

@@ -5,7 +5,7 @@
    [clojure.set :as set]
    [clojure.string :as str]
    [clojure.tools.logging :refer :all]
-   [bidi.bidi :refer (RouteProvider handler)]
+   [bidi.bidi :refer (RouteProvider tag)]
    [modular.bidi :refer (path-for)]
    [cheshire.core :refer (encode)]
    [clj-jwt.core :refer (to-str sign jwt)]
@@ -37,8 +37,6 @@
    :uri-context s/Str
    })
 
-
-
 (defrecord AuthorizationServer [store scopes iss
                                 session-store
                                 access-token-store
@@ -68,117 +66,115 @@
   ;; TODO Implement RFC 6749 4.1.2.1 Error Response
   (routes [component]
     [uri-context
-     {"/authorize"
+     {"authorize"
       {:get
-       (handler
-        ::authorization-endpoint
-        (->
-         (fn [req]
+       (->
+        (fn [req]
 
-           ;; TODO We should validate the incoming response_type
+          ;; TODO We should validate the incoming response_type
 
-           (let [authentication (authenticate authentication-handshake req)]
-             (debugf "OAuth2 authorization server: Authorizing request. User authentication is %s" authentication)
-             ;; Establish whether the user-agent is already authenticated.
+          (let [authentication (authenticate authentication-handshake req)]
+            (debugf "OAuth2 authorization server: Authorizing request. User authentication is %s" authentication)
+            ;; Establish whether the user-agent is already authenticated.
 
 
-             ;; If we aren't authenticated, we hand off to the
-             ;; authentication process, which will honor an existing
-             ;; session or create a new one if one doesn't already
-             ;; exist. Since we want to remember certain details of this
-             ;; authorization request, we elect to create the session
-             ;; here. The authentication will return to this same handler.
+            ;; If we aren't authenticated, we hand off to the
+            ;; authentication process, which will honor an existing
+            ;; session or create a new one if one doesn't already
+            ;; exist. Since we want to remember certain details of this
+            ;; authorization request, we elect to create the session
+            ;; here. The authentication will return to this same handler.
 
-             ;; We initiate an authentication, which will ALWAYS
-             ;; create a new session, so we store important details
-             ;; about this request for the return. We
+            ;; We initiate an authentication, which will ALWAYS
+            ;; create a new session, so we store important details
+            ;; about this request for the return. We
 
-             (if-not (:cylon/subject-identifier authentication)
-               (initiate-authentication-handshake authentication-handshake req)
+            (if-not (:cylon/subject-identifier authentication)
+              (initiate-authentication-handshake authentication-handshake req)
 
-               ;; Else... The user is AUTHENTICATED (now), so we AUTHORIZE the CLIENT
-               (let [{response-type "response_type"
-                      client-id "client_id"
-                      scopes-param "scope"
-                      state "state"} (-> req params-request :query-params)
-                      requested-scopes (decode-scope scopes-param (keyword? (first scopes)))]
+              ;; Else... The user is AUTHENTICATED (now), so we AUTHORIZE the CLIENT
+              (let [{response-type "response_type"
+                     client-id "client_id"
+                     scopes-param "scope"
+                     state "state"} (-> req params-request :query-params)
+                     requested-scopes (decode-scope scopes-param (keyword? (first scopes)))]
 
-                 (case response-type
-                   "code"
-                   (let [code (str (java.util.UUID/randomUUID))
+                (case response-type
+                  "code"
+                  (let [code (str (java.util.UUID/randomUUID))
 
-                         {:keys [redirection-uri application-name description
-                                 requires-user-acceptance? required-scopes] :as client}
-                         (lookup-client (:client-registry component) client-id)]
+                        {:keys [redirection-uri application-name description
+                                requires-user-acceptance? required-scopes] :as client}
+                        (lookup-client (:client-registry component) client-id)]
 
-                     ;; Why do we do this?
-                     ;; you need to associate the user-data, scopes, redirect-uri with params...  with the code
-                     ;; (assoc-session-data! session-store req {:code code})
+                    ;; Why do we do this?
+                    ;; you need to associate the user-data, scopes, redirect-uri with params...  with the code
+                    ;; (assoc-session-data! session-store req {:code code})
 
-                     ;; Remember the code for the possible exchange - TODO expire these
-                     (swap! store assoc
-                            code
-                            (merge
-                             {:created (java.util.Date.)}
-                             ;; This is for the OpenID-Connect JWT token that we will send with the access-token
-                             (select-keys authentication [:cylon/subject-identifier :cylon/user])))
+                    ;; Remember the code for the possible exchange - TODO expire these
+                    (swap! store assoc
+                           code
+                           (merge
+                            {:created (java.util.Date.)}
+                            ;; This is for the OpenID-Connect JWT token that we will send with the access-token
+                            (select-keys authentication [:cylon/subject-identifier :cylon/user])))
 
-                     ;; When a user permits a client, the client's scopes that they have accepted, are stored in the user preferences database
-                     ;; why?
-                     ;; because next time, we don't have to ask the user for their permission everytime they login
-                     ;; ok, i understand
-                     ;; however
+                    ;; When a user permits a client, the client's scopes that they have accepted, are stored in the user preferences database
+                    ;; why?
+                    ;; because next time, we don't have to ask the user for their permission everytime they login
+                    ;; ok, i understand
+                    ;; however
 
-                     (debugf (if requires-user-acceptance?
-                               "App requires user acceptance"
-                               "App does not require user acceptance"))
-                     ;; Lookup the application - do we have at-least the client id?
-                     (if requires-user-acceptance?
-                       {:status 200
-                        :body (html [:body
-                                     [:form {:method :post :action (path-for @*router ::permit)}
-                                      [:h1 "Authorize application?"]
-                                      [:p (format "An application (%s) is requesting to use your credentials" application-name)]
-                                      [:h2 "Application description"]
-                                      [:p description]
-                                      [:h2 "Scope"]
-                                      (for [s requested-scopes]
-                                        (let [s (apply str (interpose "/" (remove nil? ((juxt namespace name) s))))]
-                                          [:p [:label {:for s} s] [:input {:type "checkbox" :id s :name s :value s :checked true}]]))
-                                      [:input {:type "submit"}]]
-                                     ])}
+                    (debugf (if requires-user-acceptance?
+                              "App requires user acceptance"
+                              "App does not require user acceptance"))
+                    ;; Lookup the application - do we have at-least the client id?
+                    (if requires-user-acceptance?
+                      {:status 200
+                       :body (html [:body
+                                    [:form {:method :post :action (path-for @*router ::permit)}
+                                     [:h1 "Authorize application?"]
+                                     [:p (format "An application (%s) is requesting to use your credentials" application-name)]
+                                     [:h2 "Application description"]
+                                     [:p description]
+                                     [:h2 "Scope"]
+                                     (for [s requested-scopes]
+                                       (let [s (apply str (interpose "/" (remove nil? ((juxt namespace name) s))))]
+                                         [:p [:label {:for s} s] [:input {:type "checkbox" :id s :name s :value s :checked true}]]))
+                                     [:input {:type "submit"}]]
+                                    ])}
 
-                       (do
-                         (debugf (format "App doesn't require user acceptance, granting scopes as required: [%s]" required-scopes))
-                         (swap! store update-in [code] assoc :granted-scopes required-scopes)
-                         ;; 4.1.2: "If the resource owner grants the
-                         ;; access request, the authorization server
-                         ;; issues an authorization code and delivers it
-                         ;; to the client by adding the following
-                         ;; parameters to the query component of the
-                         ;; redirection URI"
-                         (debugf "Redirecting to redirection uri: %s" redirection-uri)
+                      (do
+                        (debugf (format "App doesn't require user acceptance, granting scopes as required: [%s]" required-scopes))
+                        (swap! store update-in [code] assoc :granted-scopes required-scopes)
+                        ;; 4.1.2: "If the resource owner grants the
+                        ;; access request, the authorization server
+                        ;; issues an authorization code and delivers it
+                        ;; to the client by adding the following
+                        ;; parameters to the query component of the
+                        ;; redirection URI"
+                        (debugf "Redirecting to redirection uri: %s" redirection-uri)
 
-                         (redirect
-                          (str redirection-uri
-                               (as-query-string
-                                {"code" code
-                                 "state" state}))))))
+                        (redirect
+                         (str redirection-uri
+                              (as-query-string
+                               {"code" code
+                                "state" state}))))))
 
-                   ;; Unknown response_type
-                   {:status 400
-                    :body (format "Bad response_type parameter: '%s'" response-type)})))))
+                  ;; Unknown response_type
+                  {:status 400
+                   :body (format "Bad response_type parameter: '%s'" response-type)})))))
 
-         wrap-schema-validation))}
+        wrap-schema-validation
+        (tag ::authorization-endpoint))}
 
       ;; ::permit is called by ::authorization-endpoint above, and it assumes
       ;; various things are placed in the current session. It hasn't been
       ;; properly tested (and we know it won't work as currently written)
       ;; so treat as a stub for now.
-      "/permit-client"
+      "permit-client"
       {:post
-       (handler
-        ::permit
+       (->
         (fn [req]
           ;; TODO I'm worred about the fact we must ensure that the session
           ;; represents a true authenticated user
@@ -204,15 +200,16 @@
 
                 (redirect
                  (format "%s?code=%s&state=%s"
-                         redirection-uri code (:state session))))))))}
+                         redirection-uri code (:state session)))))))
+        (tag ::permit))}
 
-      "/access-token"
+      "access-token"
       {:post
-       (handler
         ;; RFC 6749 4.1 (D) - and this is the Token endpoint as described
         ;; in section 3 (Protocol Endpoints)
-        ::token-endpoint
+
         ;; This is initiated by the client
+       (->
         (fn [req]
           (let [params (-> req params-request :form-params)
                 code (get params "code")
@@ -284,12 +281,13 @@
                                 (sign :HS256 "secret") to-str)
                             })}))
                 {:status 400
-                 :body (format "Invalid request - unrecognized code: %s" code)})))))}}]))
+                 :body (format "Invalid request - unrecognized code: %s" code)}))))
+        (tag ::token-endpoint))}}]))
 
 (defn new-authorization-server [& {:as opts}]
   (->> opts
        (merge {:store (atom {})
-               :uri-context "/login/oauth"})
+               :uri-context "/login/oauth/"})
        (s/validate new-authorization-server-schema)
        map->AuthorizationServer
        (<- (component/using

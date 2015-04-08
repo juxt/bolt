@@ -2,7 +2,7 @@
 
 (ns cylon.oauth.client.web-client
   (:require
-   [bidi.bidi :refer (RouteProvider handler)]
+   [bidi.bidi :refer (RouteProvider tag)]
    [cheshire.core :refer (encode decode-stream)]
    [clj-jwt.core :refer (to-str jwt sign str->jwt verify encoded-claims)]
    [clojure.java.io :as io]
@@ -63,114 +63,112 @@
   RouteProvider
   (routes [this]
     [uri-context
-     {"/grant"
+     {"grant"
       {:get
-       (handler
-        ::redirection-endpoint
+       (->
         ;; Used by the authorization server to return responses containing
         ;; authorization credentials to the client via the resource owner
         ;; user-agent.
-        (->
-         (fn [req]
-           (let [params (:query-params req)
-                 state (get params "state")
-                 tok (get-token-by-id state-store state)]
+        (fn [req]
+          (let [params (:query-params req)
+                state (get params "state")
+                tok (get-token-by-id state-store state)]
 
-             (if (nil? tok)
-               (let [session (session session-store req)
-                     original-uri (:cylon/original-uri session)]
-                 (if original-uri
-                   (redirect original-uri)
-                   {:status 400 :body "Unexpected user state"}))
+            (if (nil? tok)
+              (let [session (session session-store req)
+                    original-uri (:cylon/original-uri session)]
+                (if original-uri
+                  (redirect original-uri)
+                  {:status 400 :body "Unexpected user state"}))
 
-               (let [code (get params "code")
+              (let [code (get params "code")
 
-                     _ (infof "Exchanging code (%s) for access token via %s" code access-token-uri)
+                    _ (infof "Exchanging code (%s) for access token via %s" code access-token-uri)
 
-                     ;; Exchange the code for an access token
-                     ;; This is a blocking operation. We elect to wait for
-                     ;; the response. In a future version we might go fully
-                     ;; async.
-                     at-resp
-                     @(http-request
-                       {:method :post
-                        :url access-token-uri
-                        :headers {"content-type" "application/x-www-form-urlencoded"}
-                        ;; Exchange the code for an access token - application/x-www-form-urlencoded format
-                        ;; 2.3.1: "Including the client credentials in the
-                        ;; request-body using the two parameters is NOT
-                        ;; RECOMMENDED and SHOULD be limited to clients
-                        ;; unable to directly utilize the HTTP Basic
-                        ;; authentication scheme (or other password-based
-                        ;; HTTP authentication schemes)."
+                    ;; Exchange the code for an access token
+                    ;; This is a blocking operation. We elect to wait for
+                    ;; the response. In a future version we might go fully
+                    ;; async.
+                    at-resp
+                    @(http-request
+                      {:method :post
+                       :url access-token-uri
+                       :headers {"content-type" "application/x-www-form-urlencoded"}
+                       ;; Exchange the code for an access token - application/x-www-form-urlencoded format
+                       ;; 2.3.1: "Including the client credentials in the
+                       ;; request-body using the two parameters is NOT
+                       ;; RECOMMENDED and SHOULD be limited to clients
+                       ;; unable to directly utilize the HTTP Basic
+                       ;; authentication scheme (or other password-based
+                       ;; HTTP authentication schemes)."
 
-                        ;; TODO Support Basic Authentication in preference
-                        ;; to client secrets.
+                       ;; TODO Support Basic Authentication in preference
+                       ;; to client secrets.
 
-                        ;; 4.1.3. Access Token Request redirect_uri
-                        ;; REQUIRED, if the "redirect_uri" parameter was
-                        ;; included in the authorization request as
-                        ;; described in Section 4.1.1, and their values
-                        ;; MUST be identical.
+                       ;; 4.1.3. Access Token Request redirect_uri
+                       ;; REQUIRED, if the "redirect_uri" parameter was
+                       ;; included in the authorization request as
+                       ;; described in Section 4.1.1, and their values
+                       ;; MUST be identical.
 
-                        ;; TODO: Better if we could construct this string
-                        ;; with the help of some utility function.
+                       ;; TODO: Better if we could construct this string
+                       ;; with the help of some utility function.
 
-                        :body (as-www-form-urlencoded
-                               {"grant_type" "authorization_code"
-                                "code" code
-                                "client_id" (:client-id this)
-                                "client_secret" (:client-secret this)})}
+                       :body (as-www-form-urlencoded
+                              {"grant_type" "authorization_code"
+                               "code" code
+                               "client_id" (:client-id this)
+                               "client_secret" (:client-secret this)})}
 
-                       ;; TODO Arguably we need better error handling here
-                       #(if (:error %)
-                          (do
-                            (errorf "Failed to get token from %s, response was %s" access-token-uri %)
-                            %)
-                          (update-in % [:body] (if-let [decode-fn (:decode-server-response-fn this)]
-                                                 decode-fn
-                                                 ;; add default decode to cylon oauth server response
-                                                 (comp decode-stream io/reader)))))]
-
-                 (purge-token! state-store state)
-
-                 (if-let [error (:error at-resp)]
-                   {:status 403
-                    :body (format "Something went wrong: status of underlying request, error was %s" error)}
-
-                   (if (not= (:status at-resp) 200)
-                     {:status 403
-                      :body (format "Something went wrong: status of underlying request %s" (:status at-resp))}
-
-
-                     (let [original-uri (:cylon/original-uri (session session-store req))
-                           access-token (get (:body at-resp) "access_token")
-
-                           ;; TODO If scope not there it is the same as
-                           ;; requested (see 5.1)
-                           scope (decode-scope (get (:body at-resp) "scope") (keyword? (first (:required-scopes this))))
-
-                           id-token (-> (get (:body at-resp) "id_token") str->jwt)]
-                       (if (verify id-token "secret")
+                      ;; TODO Arguably we need better error handling here
+                      #(if (:error %)
                          (do
-                           (assert original-uri (str "Failed to get original-uri from session " (session session-store req)))
+                           (errorf "Failed to get token from %s, response was %s" access-token-uri %)
+                           %)
+                         (update-in % [:body] (if-let [decode-fn (:decode-server-response-fn this)]
+                                                decode-fn
+                                                ;; add default decode to cylon oauth server response
+                                                (comp decode-stream io/reader)))))]
 
-                           (infof "Verified id_token: %s" id-token)
-                           (infof "Scope is %s" scope)
-                           (infof "Claims are %s" (:claims id-token))
+                (purge-token! state-store state)
 
-                           (assoc-session-data!
-                            session-store req {:cylon/access-token access-token
-                                               :cylon/scopes scope
-                                               :cylon/open-id (-> id-token :claims)
-                                               :cylon/subject-identifier (-> id-token :claims :sub)})
-                           (redirect original-uri))))))))))
-         wrap-params))}
+                (if-let [error (:error at-resp)]
+                  {:status 403
+                   :body (format "Something went wrong: status of underlying request, error was %s" error)}
 
-      "/logout"
+                  (if (not= (:status at-resp) 200)
+                    {:status 403
+                     :body (format "Something went wrong: status of underlying request %s" (:status at-resp))}
+
+
+                    (let [original-uri (:cylon/original-uri (session session-store req))
+                          access-token (get (:body at-resp) "access_token")
+
+                          ;; TODO If scope not there it is the same as
+                          ;; requested (see 5.1)
+                          scope (decode-scope (get (:body at-resp) "scope") (keyword? (first (:required-scopes this))))
+
+                          id-token (-> (get (:body at-resp) "id_token") str->jwt)]
+                      (if (verify id-token "secret")
+                        (do
+                          (assert original-uri (str "Failed to get original-uri from session " (session session-store req)))
+
+                          (infof "Verified id_token: %s" id-token)
+                          (infof "Scope is %s" scope)
+                          (infof "Claims are %s" (:claims id-token))
+
+                          (assoc-session-data!
+                           session-store req {:cylon/access-token access-token
+                                              :cylon/scopes scope
+                                              :cylon/open-id (-> id-token :claims)
+                                              :cylon/subject-identifier (-> id-token :claims :sub)})
+                          (redirect original-uri))))))))))
+        wrap-params
+        (tag ::redirection-endpoint))}
+
+      "logout"
       {:get
-       (handler
-        ::logout
+       (->
         (fn [req]
           ;; http://openid.net/specs/openid-connect-session-1_0.html - chapter 5
 
@@ -205,8 +203,8 @@
              ;; If there's only a post-logout-redirect-uri, then redirect to it
              post-logout-redirect-uri (redirect post-logout-redirect-uri)
              :otherwise {:status 200 :body "Logged out"}
-             ))))}}])
-
+             )))
+        (tag ::logout))}}])
 
   AccessTokenGrantee
   (solicit-access-token [this req target-uri]
@@ -256,7 +254,7 @@
   (component/using
    (->> opts
         (merge {:requires-user-acceptance? true
-                :uri-context ""})
+                :uri-context "/"})
         (s/validate {(s/optional-key :client-id) s/Str
                      (s/optional-key :client-secret) s/Str
                      :application-name s/Str
