@@ -68,8 +68,9 @@
                    renderer req {:email email}))
                  (respond-with-new-session! session-store req {})))
 
-              ;; TODO Add email-failed? as query parameter
-              (redirect (path-for @*router ::request-reset-password-form)))))
+              (redirect (format "%s?unknown-email=%s"
+                                (path-for @*router ::request-reset-password-form)
+                                email)))))
         wrap-schema-validation
         (tag ::process-reset-password-request)
         )}
