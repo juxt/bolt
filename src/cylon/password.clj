@@ -13,12 +13,12 @@
 
 (defn make-salt
   "Make a base64 string representing a salt. Pass in a SecureRandom."
-  [rng]
+  [^SecureRandom rng]
   (let [ba (byte-array 32)]
     (.nextBytes rng ba)
     (DatatypeConverter/printBase64Binary ba)))
 
-(defn ->hashed-password [algo rng password]
+(defn ->hashed-password [algo ^SecureRandom rng password]
   (let [salt (make-salt rng)]
     {:salt salt :hash (make-hash algo password salt)}))
 
