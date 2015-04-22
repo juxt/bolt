@@ -4,75 +4,50 @@
   (:require
    [cylon.user.protocols :as p]
    [cylon.util :refer (Request)]
-   [schema.core :as s]))
+   [schema.core :as s]
+   [modular.email :refer (EmailAddress EmailMessage)]
+   ))
 
 ;; UserStore API
-
-(s/defschema User "A user"
-  {:uid s/Str
-   :email s/Str
-   s/Keyword s/Any})
 
 (s/defschema PasswordHashWithSalt
   {:hash s/Str
    :salt s/Str})
 
-(s/defn create-user! :- nil
+(s/defschema User "A user"
+  {:password PasswordHashWithSalt
+   s/Keyword s/Str})
+
+(s/defn create-user-error?
   [component :- (s/protocol p/UserStore)
-   uid :- s/Str
-   pw-hash :- PasswordHashWithSalt
-   email :- s/Str
-   user-details :- {s/Keyword s/Any}]
-  (p/create-user! component uid pw-hash email user-details))
+   user :- User]
+  (p/create-user-error? component user))
+
+(s/defn create-user!
+  [component :- (s/protocol p/UserStore)
+   user :- User]
+  (p/create-user! component user))
 
 (s/defn get-user :- (s/maybe User)
   [component :- (s/protocol p/UserStore)
-   uid :- s/Str]
-  (p/get-user component uid))
+   id :- s/Str]
+  (p/get-user component id))
 
-(s/defn get-user-password-hash :- (s/maybe PasswordHashWithSalt)
+(s/defn update-user! :- nil
   [component :- (s/protocol p/UserStore)
-   uid :- s/Str]
-  (p/get-user-password-hash component uid))
-
-(s/defn set-user-password-hash! :- nil
-  [component :- (s/protocol p/UserStore)
-   uid :- s/Str
-   pw-hash :- PasswordHashWithSalt]
-  (p/set-user-password-hash! component uid pw-hash))
-
-(s/defn get-user-by-email :- (s/maybe User)
-  [component :- (s/protocol p/UserStore)
-   email :- s/Str]
-  (p/get-user-by-email component email))
+   id :- s/Str
+   user :- User]
+  (p/update-user! component id user))
 
 (s/defn delete-user! :- nil
   [component :- (s/protocol p/UserStore)
-   uid :- s/Str]
-  (p/delete-user! component uid))
+   id :- s/Str]
+  (p/delete-user! component id))
 
 (s/defn verify-email! :- nil
   [component :- (s/protocol p/UserStore)
-   uid :- s/Str]
-  (p/verify-email! component uid))
-
-;; Emailer API
-
-(s/defschema EmailAddress "An email address (relaxed version)"
-  (s/pred (fn [s] (re-matches #"\S+@\S+" s))))
-
-(s/defn send-email! :- nil
-  [component :- (s/protocol p/Emailer)
-   data :- {:to EmailAddress
-            :subject s/Str
-            :body s/Str
-            (s/optional-key :content-type) s/Str}]
-  (p/send-email! component data))
-
-(s/defschema EmailMessage
-  {:subject s/Str
-   :body s/Str
-   (s/optional-key :content-type) s/Str})
+   email :- s/Str]
+  (p/verify-email! component email))
 
 ;; Login form renderer API
 

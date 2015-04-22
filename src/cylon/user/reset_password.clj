@@ -6,10 +6,8 @@
    [com.stuartsierra.component :as component :refer (using)]
    [cylon.password.protocols :refer (make-password-hash)]
    [cylon.session.protocols :refer (session assoc-session-data! respond-with-new-session!)]
-   [cylon.user.protocols :refer (Emailer LoginFormRenderer UserFormRenderer)]
-   [cylon.user.totp :refer (OneTimePasswordStore set-totp-secret get-totp-secret totp-token secret-key)]
-
-   [cylon.user :refer (render-reset-password-request-form get-user-by-email send-email! render-reset-password-email-message render-reset-password-link-sent-response render-password-reset-form set-user-password-hash! render-password-changed-response FormField)]
+   [cylon.user.protocols :refer (LoginFormRenderer UserFormRenderer)]
+   [cylon.user :refer (render-reset-password-request-form get-user-by-email render-reset-password-email-message render-reset-password-link-sent-response render-password-reset-form set-user-password-hash! render-password-changed-response FormField)]
 
    [cylon.token-store :refer (create-token! get-token-by-id purge-token!)]
    [cylon.util :refer (absolute-uri absolute-prefix as-query-string wrap-schema-validation)]
@@ -20,6 +18,7 @@
    [ring.util.response :refer (response redirect)]
    [schema.core :as s]
    [plumbing.core :refer (<-)]
+   [modular.email :refer (send-email!)]
    [modular.component.co-dependency :refer (co-using)]
    ))
 

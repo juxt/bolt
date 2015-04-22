@@ -1,7 +1,8 @@
 ;; For internal Cylon use only. Not part of a published API. Do not use.
 (ns cylon.util
   (:require
-   [schema.core :as s])
+   [schema.core :as s]
+   [camel-snake-kebab :as csk])
   (:import (java.net URLEncoder)))
 
 (defprotocol KorksSet
@@ -72,3 +73,8 @@
         sig (.toString (java.math.BigInteger. 1 raw) 16)
         padding (apply str (repeat (- size (count sig)) "0"))]
     (str padding sig)))
+
+;; Misc
+
+(defn keywordize-form [m]
+  (into {} (for [[k v] m] [(keyword k) v])))

@@ -4,26 +4,27 @@
 
 (defprotocol UserStore
   "A store for users that doesn't involve password hashing"
-  (create-user! [_ uid pw-hash email user-details])
-  (get-user [_ uid])
-  (get-user-password-hash [_ uid])
-  (set-user-password-hash! [_ uid pw-hash])
-  (get-user-by-email [_ email]
-    "Return user details for the user with this email address. Delegate
-    to get-user if email addresses are used as the user identifier.")
-  (delete-user! [_ uid])
-  (verify-email! [_ uid]))
+  (create-user-error? [_ user] "Check the user can be created. E.g. uid
+and/or email doesn't already exist, otherwise render an error page, all
+required fields in correct format, etc. All fields are sent apart from
+the password. This is exposed as a function so that it be used in form validation prior to submission. May return a (manifold) deferred for async.")
 
-(defprotocol Emailer
-  (send-email! [_ data]
-    "Send an email to a recipient, with the given subject and body. The
-    data may optionally contain a :content-type entry that is intended
-    to allow the sending of HTML emails, with embedded images."))
+  (create-user! [_ user] "Create the user. Implementations
+  should call, and return the result of, create-user-error? prior to
+  adding the user to storage. May return a (manifold) deferred for async.")
+
+  (get-user [_ id] "Get the user identified by id")
+  (update-user! [_ id user] "Update the user identified by id with the new details provided")
+
+  (delete-user! [_ id] "Delete the user identified by id")
+  (verify-email! [_ email] "Verify that the given email exists")
+  )
 
 (defprotocol LoginFormRenderer
   (render-login-form [_ req model]
     "Render a login from from the data contained in the given model"))
 
+;; TODO: Split up into separate protocols for modularity
 (defprotocol UserFormRenderer
   (render-signup-form [_ req model]
     "Return the HTML that will be used to display the sign up form for a

@@ -11,7 +11,7 @@
    [cylon.session :refer (session assoc-session-data! respond-with-new-session! respond-close-session!)]
    [cylon.session.protocols :refer (SessionStore)]
    [cylon.user :refer (get-user get-user-by-email FormField render-login-form)]
-   [cylon.util :refer (as-query-string uri-with-qs Request wrap-schema-validation)]
+   [cylon.util :refer (as-query-string uri-with-qs Request wrap-schema-validation keywordize-form)]
    [bidi.bidi :refer (RouteProvider tag)]
    [modular.bidi :refer (path-for)]
    [ring.util.response :refer (redirect redirect-after-post)]
@@ -62,11 +62,11 @@
         (fn [req]
           (let [qparams (-> req params-request :query-params)
                 post-login-redirect (get qparams "post_login_redirect")]
-            #_(assert post-login-redirect "Request query-string must contain a post_login_redirect parameter")
             {:status 200
              :body (render-login-form
                     renderer req
-                    {:form {:method :post
+                    {:title "Login"
+                     :form {:method :post
                             :action (path-for @*router ::process-login-attempt)
                             :fields (if post-login-redirect
                                       (conj fields {:name "post_login_redirect" :value post-login-redirect :type "hidden"})
@@ -79,19 +79,14 @@
        :post
        (->
         (fn [req]
-          (let [params (-> req params-request :form-params)
-                ;; TODO Standardize "user", perhaps use a cylon prefix
-                ;; We must have this field passed, plus password, otherwise it's no good
-                userid (some-> (get params "user") string/trim)
-                password (get params "password")
-                session (session session-store req)
-                post-login-redirect (get params "post_login_redirect")
-                _ (debugf "Form params posted to login form are %s" params)
-                user (when userid
-                       ((if (email? userid) get-user-by-email get-user) user-store userid))
-                _ (debugf "User attempting login looked up: %s" user)]
+          (let [form (-> req params-request :form-params keywordize-form)
+                userid (some-> (get form :user) string/trim)
+                password (get form :password)
+                post-login-redirect (get form :post_login_redirect)
 
-            ;; By default, we can login with a username or email address (they might well be the same thing).
+                session (session session-store req)
+                user (when userid
+                       ((if (email? userid) get-user-by-email get-user) user-store userid))]
 
             (if (and user (verify-password password-verifier (:uid user) password))
               ;; Login successful!
@@ -99,8 +94,7 @@
                 (debugf "Login successful!")
                 (respond-with-new-session!
                  session-store req
-                 {:cylon/subject-identifier (:uid user)
-                  :cylon/user user}
+                 {:cylon/user user}
                  (if post-login-redirect
                    (redirect-after-post post-login-redirect)
                    {:status 200 :body "Login successful"})))

@@ -7,6 +7,7 @@
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[juxt.modular/bidi "0.9.1"]
                  [juxt.modular/ring "0.5.2"]
+                 [juxt.modular/email "0.0.1"]
                  [prismatic/schema "0.3.3"]
                  [prismatic/plumbing "0.3.5"]
                  [ring/ring-core "1.2.2"]
@@ -17,8 +18,14 @@
                  ;; Required for OAuth2/OpenID-Connect support
                  [cheshire "5.3.1"]
                  [juxt.modular/http-kit "0.5.3"]
+
                  [liberator "0.12.0"]
                  [clj-jwt "0.0.8"]
+                 [camel-snake-kebab "0.1.4"]
+
+                 [yada "0.2.3"]
+
+                 [buddy "0.5.1"]
                  ]
 
   :profiles {:dev {:dependencies [[org.clojure/clojure "1.6.0"]]}})

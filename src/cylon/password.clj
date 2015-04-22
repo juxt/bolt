@@ -66,4 +66,5 @@
        (<- (using [:user-store :password-hash-algo]))))
 
 ;; For backward compatibility
+;; TODO: DEPRECATED, should delete
 (def new-durable-password-verifier new-user-store-password-verifier)
