@@ -1,8 +1,8 @@
 ;; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
-(ns cylon.authorization
+(ns bolt.authorization
   (:require
-   [cylon.authentication :refer (get-subject-identifier)]
+   [bolt.authentication :refer (get-subject-identifier)]
    [clojure.set :as set]))
 
 (defn behalf-of? [authenticator req user]

@@ -4,10 +4,10 @@
   with getting started examples and remove the need to set up and
   configure databases. For serious purposes, replace this implementation
   with one using a proper data store."}
-  cylon.storage.file-storage
+  bolt.storage.file-storage
   (:require
    [com.stuartsierra.component :refer (Lifecycle using)]
-   [cylon.storage.protocols :refer (Storage)]
+   [bolt.storage.protocols :refer (Storage)]
    [clojure.java.io :as io]
    [clojure.pprint :refer (pprint)]
    [schema.core :as s]))

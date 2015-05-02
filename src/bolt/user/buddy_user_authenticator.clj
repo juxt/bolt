@@ -1,7 +1,7 @@
-(ns cylon.user.buddy-user-authenticator
+(ns bolt.user.buddy-user-authenticator
   (:require
    [buddy.hashers :as hs]
-   [cylon.user.protocols :refer (UserAuthenticator UserPasswordHasher)]))
+   [bolt.user.protocols :refer (UserAuthenticator UserPasswordHasher)]))
 
 
 

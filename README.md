@@ -1,4 +1,4 @@
-# Cylon
+# bolt
 
 > “Building secure Clojure web applications needs to be easier, and
 > requires integrated security frameworks - not standalone libraries!” –
@@ -6,11 +6,10 @@
 
 An integrated security system for Clojure applications based on a set of components written to the specifications of Stuart Sierra's [component](https://github.com/stuartsierra/component).
 
-Currently, Cylon represents merely an idea. This idea is to separate all
-security-related concerns from Clojure applications, so that they can be
-implemented in library form.
+Bolt is a bold object, to separate all security-related concerns from
+Clojure applications, so that they can be implemented in library form.
 
-That said, Cylon is under constant development towards delivering
+That said, bolt is under constant development towards delivering
 practical benefit for Clojure web applications.
 
 ## Terms
@@ -22,7 +21,7 @@ with associated protocols specifying functions for start/stop and
 others. A _system_ is a set of these components, with the inclusion of
 declared dependency references into each component.
 
-In addition, Cylon uses the following terms
+In addition, bolt uses the following terms
 
 * username - a user's short identifier, for example: __bob__
 * email - a user's email address
@@ -30,7 +29,7 @@ In addition, Cylon uses the following terms
 
 ## Discussion
 
-Cylon provides an _integrated system_ of components, rather than requiring developers
+Bolt provides an _integrated system_ of components, rather than requiring developers
 to roll their own from smaller libraries.
 
 Functionality can be customised by interchanging components, providing
@@ -38,15 +37,15 @@ necessary flexibility for bespoke Clojure applications.
 
 Nevertheless, 'out-of-the-box' defaults should provide good security, on
 par with other languages and frameworks. That is what is currently
-missing in the Clojure landscape and the gap that Cylon aims to fill.
+missing in the Clojure landscape and the gap that bolt aims to fill.
 
 ### Differences with Friend
 
-The key difference between Cylon and Friend is that Cylon is designed
+The key difference between bolt and Friend is that bolt is designed
 for use with [Component](https://github.com/stuartsierra/component)
 based applications.
 
-Cylon is designed specifically for modular applications, where
+Bolt is designed specifically for modular applications, where
 functionality can be added through the addition of extra components.
 
 Stuart Sierra's component library provides a balanced, elegant and
@@ -59,7 +58,7 @@ to comprehend but 'just works' or works 'like magic' then it limits the
 number of people who can understand it and point out potential
 weaknesses.
 
-To provide flexibility, Cylon fully embraces and consistently adopts
+To provide flexibility, bolt fully embraces and consistently adopts
 _protocol polymorphism_ within Clojure, enabled by Stuart's
 approach. This will not to everyone's taste. Alternatives, such as the
 use of dynamic vars, are wholly avoided. Functional programming is a
@@ -67,33 +66,31 @@ beautiful thing in the small, but presents practical challenges at
 scale. Polymorphism is one of the cornerstones of object orientation
 worth stealing.
 
-### Should you use Cylon?
+### Should you use bolt?
 
-Ultimately, whether Cylon is right for you will depend on how you build
+Ultimately, whether bolt is right for you will depend on how you build
 your Clojure web applications. For smaller applications with a single
 set of Compojure routes, Friend is a better choice.
 
 For larger applications, especially those with multiple modules and
 using [Liberator](http://clojure-liberator.github.io/liberator/) or
-[yada](https://github.com/juxt/yada) to provide a fuller REST API, Cylon
+[yada](https://github.com/juxt/yada) to provide a fuller REST API, bolt
 should be a good fit.
 
-## Pronounication
+## Name change
 
-Cylon is intented to be pronounced as in the 1978 movie of
-[Battlestar Gallactica](http://en.wikipedia.org/wiki/Cylon_%28Battlestar_Galactica%29),
-with the stress on the first syllable.  It is NOT pronounced 'Ceylon'.
+Bolt was formerly named Cylon.
 
 ## Limitations
 
-Cylon is not suitable for production systems until it reaches
-version 1.0, which will indicate that Cylon has been deployed into
+Bolt is not suitable for production systems until it reaches
+version 1.0, which will indicate that bolt has been deployed into
 production elsewhere and has undergone thorough peer review.
 
 ## Join in the conversation
 
-Join our Google group cylon-security@googlegroups.com for discussion
-about how to improve Cylon.
+Join our Google group bolt-discuss@googlegroups.com for discussion
+about how to improve bolt.
 
 ## References
 
@@ -105,10 +102,10 @@ https://github.com/weavejester/ring-anti-forgery
 
 Aaron Bedra's seminal ClojureWest talk in 2014 –
 http://www.youtube.com/watch?v=CBL59w7fXw4 - this was the inspiration
-behind Cylon.
+behind bolt.
 
 [Mastodon C](http://www.mastodonc.com/) for sponsoring the development
-on Cylon, and using it in their kixi projects
+on bolt, and using it in their kixi projects
 [kixi.hecuba](https://github.com/MastodonC/kixi.hecuba) and
 [kixi.stentor](https://github.com/MastodonC/kixi.stentor)
 
@@ -118,14 +115,14 @@ migrate [Jig](https://github.com/juxt/jig) components to it.
 
 [Yodit Stanton](https://github.com/yods) and the rest of the
 [opensensors.io](https://opensensors.io) team for putting up with the
-regular Cylon updates and being the first adopters of the OAuth2
-features.
+original Cylon updates (Cylon being the former name of bolt) and being
+the first adopters of the OAuth2 features.
 
 [Juan Antonio Ruz](https://github.com/tangrammar) for designing and
 developing the TOTP two-factor authentication support. Additionally Juan
 conducted the background research and co-authored the OAuth2 support,
 and many other aspects of the project. Also for providing a public
-example of how to use Cylon.
+example of how to use bolt.
 
 [Martin Trojer](https://github.com/martintrojer) and others from
 [JUXT](https://github.com/juxt) for a continual stream of

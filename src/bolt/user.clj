@@ -1,9 +1,9 @@
 ;; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
-(ns cylon.user
+(ns bolt.user
   (:require
-   [cylon.user.protocols :as p]
-   [cylon.util :refer (Request)]
+   [bolt.user.protocols :as p]
+   [bolt.util :refer (Request)]
    [schema.core :as s]
    [modular.email :refer (EmailAddress EmailMessage)]
    ))

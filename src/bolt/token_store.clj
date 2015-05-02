@@ -1,15 +1,15 @@
 ;; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
-(ns cylon.token-store
+(ns bolt.token-store
   (:require
-   [cylon.token-store.protocols :as p]
+   [bolt.token-store.protocols :as p]
    [schema.core :as s]))
 
 (s/defschema Date "A Java date"
   (s/pred #(instance? java.util.Date %) "date"))
 
 (s/defschema Token "A token"
-  {(s/optional-key :cylon/expiry) Date
+  {(s/optional-key :bolt/expiry) Date
    s/Keyword s/Any})
 
 (s/defn create-token! :- Token

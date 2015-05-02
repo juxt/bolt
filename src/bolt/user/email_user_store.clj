@@ -1,11 +1,11 @@
 ;; Copyright © 2015, JUXT LTD. All Rights Reserved.
 
-(ns cylon.user.email-user-store
+(ns bolt.user.email-user-store
   (:require
    [clojure.tools.logging :refer :all]
-   [cylon.user :refer (check-create-user)]
-   [cylon.user.protocols :refer (UserStore)]
-   [cylon.storage.protocols :refer (find-object store-object!)]
+   [bolt.user :refer (check-create-user)]
+   [bolt.user.protocols :refer (UserStore)]
+   [bolt.storage.protocols :refer (find-object store-object!)]
    [com.stuartsierra.component :refer (Lifecycle using)]
    [clojure.pprint :refer (pprint)]
    [clojure.java.io :as io]

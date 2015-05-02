@@ -1,14 +1,14 @@
 ; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
-(ns cylon.user.reset-password
+(ns bolt.user.reset-password
   (:require
    [clojure.tools.logging :refer :all]
    [com.stuartsierra.component :as component :refer (using)]
-   [cylon.session.protocols :refer (session assoc-session-data! respond-with-new-session!)]
-   [cylon.user.protocols :refer (LoginFormRenderer UserFormRenderer)]
-   [cylon.user :refer (render-reset-password-request-form render-reset-password-email-message render-reset-password-link-sent-response render-password-reset-form render-password-changed-response hash-password)]
-   [cylon.token-store :refer (create-token! get-token-by-id purge-token!)]
-   [cylon.util :refer (absolute-uri absolute-prefix as-query-string wrap-schema-validation)]
+   [bolt.session.protocols :refer (session assoc-session-data! respond-with-new-session!)]
+   [bolt.user.protocols :refer (LoginFormRenderer UserFormRenderer)]
+   [bolt.user :refer (render-reset-password-request-form render-reset-password-email-message render-reset-password-link-sent-response render-password-reset-form render-password-changed-response hash-password)]
+   [bolt.token-store :refer (create-token! get-token-by-id purge-token!)]
+   [bolt.util :refer (absolute-uri absolute-prefix as-query-string wrap-schema-validation)]
    [hiccup.core :refer (html)]
    [bidi.bidi :refer (RouteProvider tag)]
    [modular.bidi :refer (path-for)]

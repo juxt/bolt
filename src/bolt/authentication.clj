@@ -1,13 +1,13 @@
 ;; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
-(ns cylon.authentication
+(ns bolt.authentication
   (:require
    [clojure.string :as str]
    [clojure.tools.logging :refer :all]
-   [cylon.authentication.protocols :as p]
-   [cylon.util :refer (Request Response)]
-   [cylon.session :refer (session)]
-   [cylon.session.protocols :refer (SessionStore)]
+   [bolt.authentication.protocols :as p]
+   [bolt.util :refer (Request Response)]
+   [bolt.session :refer (session)]
+   [bolt.session.protocols :refer (SessionStore)]
    [schema.core :as s]
    [com.stuartsierra.component :refer (using)]
    [plumbing.core :refer (<-)]))
@@ -69,7 +69,7 @@
 ;; on each request
 
 (defn get-subject-identifier [authenticator req]
-  (:cylon/subject-identifier (authenticate authenticator req)))
+  (:bolt/subject-identifier (authenticate authenticator req)))
 
 (s/defn initiate-authentication-handshake :- Response
   [component :- (s/protocol p/AuthenticationHandshake)

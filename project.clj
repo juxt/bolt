@@ -1,8 +1,8 @@
 ;; Copyright © 2014 JUXT LTD.
 
-(defproject cylon "0.6.0-SNAPSHOT"
+(defproject bolt "0.6.0-SNAPSHOT"
   :description "An integrated security system for applications built on component"
-  :url "https://github.com/juxt/cylon"
+  :url "https://github.com/juxt/bolt"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/tools.logging "0.3.1"]

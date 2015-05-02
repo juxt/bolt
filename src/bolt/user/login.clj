@@ -1,15 +1,15 @@
 ;; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
-(ns cylon.user.login
+(ns bolt.user.login
   (:require
    [clojure.tools.logging :refer :all]
    [clojure.string :as string]
-   [cylon.user.protocols :as p]
-   [cylon.authentication.protocols :refer (RequestAuthenticator AuthenticationHandshake)]
-   [cylon.session :refer (session assoc-session-data! respond-with-new-session! respond-close-session!)]
-   [cylon.session.protocols :refer (SessionStore)]
-   [cylon.user :refer (find-user render-login-form authenticate-user)]
-   [cylon.util :refer (as-query-string uri-with-qs Request wrap-schema-validation keywordize-form)]
+   [bolt.user.protocols :as p]
+   [bolt.authentication.protocols :refer (RequestAuthenticator AuthenticationHandshake)]
+   [bolt.session :refer (session assoc-session-data! respond-with-new-session! respond-close-session!)]
+   [bolt.session.protocols :refer (SessionStore)]
+   [bolt.user :refer (find-user render-login-form authenticate-user)]
+   [bolt.util :refer (as-query-string uri-with-qs Request wrap-schema-validation keywordize-form)]
    [bidi.bidi :refer (RouteProvider tag)]
    [modular.bidi :refer (path-for)]
    [ring.util.response :refer (redirect redirect-after-post)]
@@ -89,7 +89,7 @@
                 (debugf "Login successful!")
                 (respond-with-new-session!
                  session-store req
-                 {:cylon/user user}
+                 {:bolt/user user}
                  (if post-login-redirect
                    (redirect-after-post post-login-redirect)
                    {:status 200 :body "Login successful"})))

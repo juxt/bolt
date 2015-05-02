@@ -1,9 +1,9 @@
 ;; Copyright © 2015, JUXT LTD. All Rights Reserved.
 
-(ns cylon.storage
+(ns bolt.storage
   (:require
    [schema.core :as s]
-   [cylon.storage.protocols :as p]))
+   [bolt.storage.protocols :as p]))
 
 ;; Storage API
 

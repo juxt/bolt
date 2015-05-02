@@ -1,6 +1,6 @@
 ;; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
-(ns cylon.oauth.server.server
+(ns bolt.oauth.server.server
   (require
    [clojure.set :as set]
    [clojure.string :as str]
@@ -11,16 +11,16 @@
    [clj-jwt.core :refer (to-str sign jwt)]
    [clj-time.core :refer (now plus days)]
    [com.stuartsierra.component :as component :refer (Lifecycle)]
-   [cylon.authentication :refer (authenticate initiate-authentication-handshake)]
-   [cylon.authentication.protocols :refer (RequestAuthenticator AuthenticationHandshake)]
-   [cylon.oauth.registry.protocols :refer (ClientRegistry)]
-   [cylon.oauth.registry :refer (lookup-client)]
-   [cylon.oauth.encoding :refer (decode-scope encode-scope)]
-   [cylon.session :refer (session respond-with-new-session! assoc-session-data! respond-close-session!)]
-   [cylon.session.protocols :refer (SessionStore)]
-   [cylon.token-store :refer (create-token! get-token-by-id)]
-   [cylon.token-store.protocols :refer (TokenStore)]
-   [cylon.util :refer (as-query-string wrap-schema-validation md5)]
+   [bolt.authentication :refer (authenticate initiate-authentication-handshake)]
+   [bolt.authentication.protocols :refer (RequestAuthenticator AuthenticationHandshake)]
+   [bolt.oauth.registry.protocols :refer (ClientRegistry)]
+   [bolt.oauth.registry :refer (lookup-client)]
+   [bolt.oauth.encoding :refer (decode-scope encode-scope)]
+   [bolt.session :refer (session respond-with-new-session! assoc-session-data! respond-close-session!)]
+   [bolt.session.protocols :refer (SessionStore)]
+   [bolt.token-store :refer (create-token! get-token-by-id)]
+   [bolt.token-store.protocols :refer (TokenStore)]
+   [bolt.util :refer (as-query-string wrap-schema-validation md5)]
    [hiccup.core :refer (html h)]
    [plumbing.core :refer (<-)]
    [ring.middleware.cookies :refer (cookies-request)]
@@ -89,7 +89,7 @@
             ;; create a new session, so we store important details
             ;; about this request for the return. We
 
-            (if-not (:cylon/subject-identifier authentication)
+            (if-not (:bolt/subject-identifier authentication)
               (initiate-authentication-handshake authentication-handshake req)
 
               ;; Else... The user is AUTHENTICATED (now), so we AUTHORIZE the CLIENT
@@ -117,7 +117,7 @@
                            (merge
                             {:created (java.util.Date.)}
                             ;; This is for the OpenID-Connect JWT token that we will send with the access-token
-                            (select-keys authentication [:cylon/subject-identifier :cylon/user])))
+                            (select-keys authentication [:bolt/subject-identifier :bolt/user])))
 
                     ;; When a user permits a client, the client's scopes that they have accepted, are stored in the user preferences database
                     ;; why?
@@ -181,7 +181,7 @@
           (let [session (session session-store req)
                 form-params (-> req params-request :form-params)
                 ]
-            (if (:cylon/subject-identifier session)
+            (if (:bolt/subject-identifier session)
               (let [permitted-scopes (set (map
                                            (fn [x] (apply keyword (str/split x #"/")))
                                            (keys form-params)))
@@ -221,8 +221,8 @@
             (if (not= (get params "client_secret") (:client-secret client))
               {:status 403 :body "Client could not be authenticated"}
 
-              (if-let [{sub :cylon/subject-identifier
-                        user :cylon/user
+              (if-let [{sub :bolt/subject-identifier
+                        user :bolt/user
                         granted-scopes :granted-scopes}
                        (get @store code)]
 
@@ -242,11 +242,11 @@
                   (create-token! access-token-store
                                  access-token
                                  {:client-id client-id
-                                  :cylon/subject-identifier sub
-                                  :cylon/scopes granted-scopes})
+                                  :bolt/subject-identifier sub
+                                  :bolt/scopes granted-scopes})
 
                   ;; Store the access token
-                  (assoc-session-data! session-store req {:cylon/access-token access-token})
+                  (assoc-session-data! session-store req {:bolt/access-token access-token})
                   (infof "Claim is %s" claim)
 
                   ;; 5.1 Successful Response

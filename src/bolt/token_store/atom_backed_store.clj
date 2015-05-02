@@ -1,6 +1,6 @@
-(ns cylon.token-store.atom-backed-store
+(ns bolt.token-store.atom-backed-store
   (:require
-   [cylon.token-store.protocols :refer (TokenStore get-token-by-id renew-token! purge-token!)]
+   [bolt.token-store.protocols :refer (TokenStore get-token-by-id renew-token! purge-token!)]
    [com.stuartsierra.component :refer (Lifecycle)]
    [schema.core :as s]
    ))
@@ -23,13 +23,13 @@
   (create-token! [component id m]
     (when (get-token-by-id component id)
       (throw (ex-info "Token id already used" {:id id})))
-    (let [token (merge (when ttl-in-secs {:cylon/expiry (expiry-date ttl-in-secs)}) (merge {:cylon/token-id id}  m))]
+    (let [token (merge (when ttl-in-secs {:bolt/expiry (expiry-date ttl-in-secs)}) (merge {:bolt/token-id id}  m))]
       (swap! tokens assoc id token)
       token))
 
   (get-token-by-id [component id]
     (let [token (get @tokens id)
-          expiry (:cylon/expiry token)]
+          expiry (:bolt/expiry token)]
       (cond
        (nil? expiry) token
        (< (now) (.getTime expiry)) (renew-token! component id)
@@ -41,8 +41,8 @@
 
   (renew-token! [_ id]
     (swap! tokens update-in [id]
-           #(if (:cylon/expiry %)
-              (assoc % :cylon/expiry (expiry-date ttl-in-secs))
+           #(if (:bolt/expiry %)
+              (assoc % :bolt/expiry (expiry-date ttl-in-secs))
               %))
     ;; Return the renewed token
     (get @tokens id))

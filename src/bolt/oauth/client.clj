@@ -1,8 +1,8 @@
-(ns cylon.oauth.client
+(ns bolt.oauth.client
   (:require
    [clojure.tools.logging :refer :all]
-   [cylon.authentication :refer (authenticate)]
-   [cylon.util :refer (absolute-uri)]
+   [bolt.authentication :refer (authenticate)]
+   [bolt.util :refer (absolute-uri)]
    [schema.core :as s]))
 
 ;; I don't think this is a wonderful name but until we can think of
@@ -33,9 +33,9 @@
   identity and access-token are still retrieved."
   [h client & [scope]]
   (fn [req]
-    (let [{access-token :cylon/access-token
-           scopes :cylon/scopes
-           sub :cylon/subject-identifier
+    (let [{access-token :bolt/access-token
+           scopes :bolt/scopes
+           sub :bolt/subject-identifier
            :as user}
           (authenticate client req)]
 
@@ -58,7 +58,7 @@
 
        :otherwise
        (h (assoc req
-                 :cylon/user user
+                 :bolt/user user
                  ;; Deprecated
-                 :cylon/subject-identifier sub
-                 :cylon/access-token access-token))))))
+                 :bolt/subject-identifier sub
+                 :bolt/access-token access-token))))))

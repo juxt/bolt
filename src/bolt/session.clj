@@ -1,10 +1,10 @@
 ;; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
-(ns cylon.session
+(ns bolt.session
   (:require
    [ring.middleware.cookies :refer (cookies-request cookies-response)]
-   [cylon.session.protocols :as p]
-   [cylon.util :refer (Request Response)]
+   [bolt.session.protocols :as p]
+   [bolt.util :refer (Request Response)]
    [schema.core :as s]))
 
 (s/defn session :- (s/maybe {s/Keyword s/Any})

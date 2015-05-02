@@ -1,4 +1,4 @@
-(ns cylon.oauth.registry.protocols)
+(ns bolt.oauth.registry.protocols)
 
 (defprotocol ClientRegistry
   (register-client [_ properties])

@@ -1,1 +1,1 @@
-(ns cylon.storage.sql-storage)
+(ns bolt.storage.sql-storage)

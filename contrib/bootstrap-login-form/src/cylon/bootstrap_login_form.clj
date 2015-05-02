@@ -1,8 +1,8 @@
 ;; Copyright © 2014 JUXT LTD.
 
-(ns cylon.bootstrap-login-form
+(ns bolt.bootstrap-login-form
   (:require
-   [cylon.impl.login-form :refer (LoginFormRenderer)]
+   [bolt.impl.login-form :refer (LoginFormRenderer)]
    [hiccup.core :refer (html)]
    [garden.core :refer (css)]
    [garden.units :refer (pt em px)]

@@ -1,24 +1,24 @@
 ;; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
-(ns cylon.user.signup
+(ns bolt.user.signup
   (:require
    [bidi.bidi :refer (RouteProvider tag)]
    [modular.email :refer (send-email!)]
    [modular.email.protocols :refer (Emailer)]
    [clojure.tools.logging :refer :all]
-   [cylon.util :refer (absolute-prefix as-query-string wrap-schema-validation keywordize-form)]
-   [cylon.session :refer (session respond-with-new-session! assoc-session-data!)]
-   [cylon.session.protocols :refer (SessionStore)]
-   [cylon.token-store :refer (create-token! get-token-by-id)]
-   [cylon.token-store.protocols :refer (TokenStore)]
+   [bolt.util :refer (absolute-prefix as-query-string wrap-schema-validation keywordize-form)]
+   [bolt.session :refer (session respond-with-new-session! assoc-session-data!)]
+   [bolt.session.protocols :refer (SessionStore)]
+   [bolt.token-store :refer (create-token! get-token-by-id)]
+   [bolt.token-store.protocols :refer (TokenStore)]
    [com.stuartsierra.component :as component :refer (Lifecycle using)]
    [modular.bidi :refer (path-for)]
    [hiccup.core :refer (html)]
    [ring.middleware.params :refer (params-request)]
    [ring.middleware.cookies :refer (cookies-response wrap-cookies)]
    [ring.util.response :refer (response redirect redirect-after-post)]
-   [cylon.user :refer (create-user! verify-email! render-signup-form render-welcome-email-message render-email-verified render-error hash-password)]
-   [cylon.user.protocols :refer (UserStore UserPasswordHasher UserAuthenticator UserFormRenderer ErrorRenderer)]
+   [bolt.user :refer (create-user! verify-email! render-signup-form render-welcome-email-message render-email-verified render-error hash-password)]
+   [bolt.user.protocols :refer (UserStore UserPasswordHasher UserAuthenticator UserFormRenderer ErrorRenderer)]
    [schema.core :as s]
    [plumbing.core :refer (<-)]
    [modular.component.co-dependency :refer (co-using)]
@@ -112,7 +112,7 @@
               (let [code (str (java.util.UUID/randomUUID))]
                 (create-token!
                  verification-code-store code
-                 {:cylon/user user})
+                 {:bolt/user user})
 
                 (when-let [email (:email user)]
                   (send-email!
@@ -127,7 +127,7 @@
                              (as-query-string {"code" code}))}))))))
 
             ;; Create a session that contains the secret-key
-            ;; (assoc-session-data! session-store req {:cylon/subject-identifier uid :name name})
+            ;; (assoc-session-data! session-store req {:bolt/subject-identifier uid :name name})
 
             (respond-with-new-session!
              session-store req
@@ -148,7 +148,7 @@
           (let [params (-> req params-request :params)]
             (let [token-id (get params "code")
                   token (get-token-by-id (:verification-code-store component) token-id)]
-              (if-let [uid (:cylon/subject-identifier token)]
+              (if-let [uid (:bolt/subject-identifier token)]
                 (do
                   (verify-email! user-store uid)
                   (response (render-email-verified renderer req token)))

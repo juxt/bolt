@@ -1,6 +1,6 @@
 ;; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
-(ns cylon.authentication.protocols)
+(ns bolt.authentication.protocols)
 
 (defprotocol RequestAuthenticator
   (authenticate [_ request]

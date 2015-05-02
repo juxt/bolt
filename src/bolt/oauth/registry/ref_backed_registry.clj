@@ -1,7 +1,7 @@
-(ns cylon.oauth.registry.ref-backed-registry
+(ns bolt.oauth.registry.ref-backed-registry
   (require
    [com.stuartsierra.component :as component]
-   [cylon.oauth.registry.protocols :refer (ClientRegistry)]))
+   [bolt.oauth.registry.protocols :refer (ClientRegistry)]))
 
 ;; Optional ClientRegistry implementation
 

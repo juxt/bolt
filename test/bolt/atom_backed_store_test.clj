@@ -1,8 +1,8 @@
-(ns cylon.atom-backed-store-test
+(ns bolt.atom-backed-store-test
   (:require
    [clojure.test :refer :all]
-   [cylon.token-store.atom-backed-store :refer :all]
-   [cylon.token-store :refer :all]
+   [bolt.token-store.atom-backed-store :refer :all]
+   [bolt.token-store :refer :all]
    [schema.core :as s]))
 
 (defn atom-fixture [f]
@@ -37,7 +37,7 @@
           component (->AtomBackedTokenStore 1 tokens)]
       (create-token! component 123 {:a "A"})
       (is (= {:a "A"} (select-keys (get-token-by-id component 123) [:a])))
-      (is (contains? (get-token-by-id component 123) :cylon/expiry))))
+      (is (contains? (get-token-by-id component 123) :bolt/expiry))))
 
   (testing "expiry"
     (let [ttl 1

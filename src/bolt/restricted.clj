@@ -1,6 +1,6 @@
 ;; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
-(ns cylon.restricted)
+(ns bolt.restricted)
 
 (defprotocol Restricted
   (authorized? [_ credentials]))

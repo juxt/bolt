@@ -1,9 +1,9 @@
-(ns cylon.oauth.server.logout
+(ns bolt.oauth.server.logout
   (:require
    [bidi.bidi :refer (RouteProvider tag)]
    [com.stuartsierra.component :refer (using)]
-   [cylon.token-store :refer (purge-token!)]
-   [cylon.session :refer (session respond-close-session!)]
+   [bolt.token-store :refer (purge-token!)]
+   [bolt.session :refer (session respond-close-session!)]
    [ring.util.response :refer (redirect)]
    [ring.middleware.params :refer (params-request)]
    [schema.core :as s]
@@ -26,7 +26,7 @@
 
          ;; When there is an access-token associated with this session, we
          ;; shall purge it.
-         (when-let [access-token (:cylon/access-token (session session-store req))]
+         (when-let [access-token (:bolt/access-token (session session-store req))]
            (purge-token! session-store access-token))
 
          (let [post-logout-redirect-uri

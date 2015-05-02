@@ -1,21 +1,21 @@
-(ns cylon.session.cookie-session-store
+(ns bolt.session.cookie-session-store
   (:require
    [clojure.tools.logging :refer :all]
    [com.stuartsierra.component :refer (using)]
-   [cylon.session :refer (session)]
-   [cylon.session.protocols :refer (SessionStore)]
+   [bolt.session :refer (session)]
+   [bolt.session.protocols :refer (SessionStore)]
 
-   [cylon.authentication.protocols :refer (RequestAuthenticator)]
-   [cylon.token-store :refer (get-token-by-id merge-token! create-token! purge-token!)]
+   [bolt.authentication.protocols :refer (RequestAuthenticator)]
+   [bolt.token-store :refer (get-token-by-id merge-token! create-token! purge-token!)]
    [ring.middleware.cookies :refer (cookies-request cookies-response)]
    [schema.core :as s]
    [plumbing.core :refer (<-)]))
 
 (defn ->cookie [session]
-  {:value (:cylon/token-id session)
+  {:value (:bolt/token-id session)
    :expires (.toGMTString
              (doto (new java.util.Date)
-               (.setTime (.getTime (:cylon/expiry session)))))
+               (.setTime (.getTime (:bolt/expiry session)))))
    :path "/"})
 
 ;(doto (new java.util.Date) (.setTime  (.getTime (:c {:c (new java.util.Date)}))))

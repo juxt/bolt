@@ -1,4 +1,4 @@
-(ns cylon.session.protocols)
+(ns bolt.session.protocols)
 
 (defprotocol SessionStore
   "A SessionStore maps an identifier, stored in a cookie, to a set of

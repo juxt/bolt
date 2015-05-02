@@ -1,6 +1,6 @@
 ;; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
-(ns cylon.token-store.protocols)
+(ns bolt.token-store.protocols)
 
 ;; All TokenStore implementations must provide temporary or persistent
 ;; storage and must expire tokens that are no longer valid. Expiry

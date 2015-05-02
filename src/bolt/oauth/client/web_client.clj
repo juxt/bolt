@@ -1,6 +1,6 @@
 ;; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
-(ns cylon.oauth.client.web-client
+(ns bolt.oauth.client.web-client
   (:require
    [bidi.bidi :refer (RouteProvider tag)]
    [cheshire.core :refer (encode decode-stream)]
@@ -9,14 +9,14 @@
    [clojure.set :refer (union)]
    [clojure.tools.logging :refer :all]
    [com.stuartsierra.component :as component]
-   [cylon.authentication.protocols :refer (RequestAuthenticator)]
-   [cylon.oauth.client :refer (AccessTokenGrantee solicit-access-token expired?)]
-   [cylon.oauth.registry :refer (register-client)]
-   [cylon.oauth.registry.protocols :refer (ClientRegistry)]
-   [cylon.oauth.encoding :refer (encode-scope decode-scope)]
-   [cylon.session :refer (session respond-with-new-session! assoc-session-data! respond-close-session!)]
-   [cylon.token-store :refer (create-token! get-token-by-id purge-token!)]
-   [cylon.util :refer (as-set absolute-uri as-www-form-urlencoded as-query-string)]
+   [bolt.authentication.protocols :refer (RequestAuthenticator)]
+   [bolt.oauth.client :refer (AccessTokenGrantee solicit-access-token expired?)]
+   [bolt.oauth.registry :refer (register-client)]
+   [bolt.oauth.registry.protocols :refer (ClientRegistry)]
+   [bolt.oauth.encoding :refer (encode-scope decode-scope)]
+   [bolt.session :refer (session respond-with-new-session! assoc-session-data! respond-close-session!)]
+   [bolt.token-store :refer (create-token! get-token-by-id purge-token!)]
+   [bolt.util :refer (as-set absolute-uri as-www-form-urlencoded as-query-string)]
    [org.httpkit.client :refer (request) :rename {request http-request}]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]
    [ring.middleware.params :refer (wrap-params)]
@@ -76,7 +76,7 @@
 
             (if (nil? tok)
               (let [session (session session-store req)
-                    original-uri (:cylon/original-uri session)]
+                    original-uri (:bolt/original-uri session)]
                 (if original-uri
                   (redirect original-uri)
                   {:status 400 :body "Unexpected user state"}))
@@ -127,7 +127,7 @@
                            %)
                          (update-in % [:body] (if-let [decode-fn (:decode-server-response-fn this)]
                                                 decode-fn
-                                                ;; add default decode to cylon oauth server response
+                                                ;; add default decode to bolt oauth server response
                                                 (comp decode-stream io/reader)))))]
 
                 (purge-token! state-store state)
@@ -141,7 +141,7 @@
                      :body (format "Something went wrong: status of underlying request %s" (:status at-resp))}
 
 
-                    (let [original-uri (:cylon/original-uri (session session-store req))
+                    (let [original-uri (:bolt/original-uri (session session-store req))
                           access-token (get (:body at-resp) "access_token")
 
                           ;; TODO If scope not there it is the same as
@@ -158,10 +158,10 @@
                           (infof "Claims are %s" (:claims id-token))
 
                           (assoc-session-data!
-                           session-store req {:cylon/access-token access-token
-                                              :cylon/scopes scope
-                                              :cylon/open-id (-> id-token :claims)
-                                              :cylon/subject-identifier (-> id-token :claims :sub)})
+                           session-store req {:bolt/access-token access-token
+                                              :bolt/scopes scope
+                                              :bolt/open-id (-> id-token :claims)
+                                              :bolt/subject-identifier (-> id-token :claims :sub)})
                           (redirect original-uri))))))))))
         wrap-params
         (tag ::redirection-endpoint))}
@@ -236,7 +236,7 @@
       ;; We need a session to store the original uri
       (respond-with-new-session!
        session-store req
-       {:cylon/original-uri target-uri}
+       {:bolt/original-uri target-uri}
        (redirect loc))))
 
   (expired? [_ req access-token] false)

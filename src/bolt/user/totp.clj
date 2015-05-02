@@ -1,6 +1,6 @@
 ;; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
-(ns cylon.user.totp)
+(ns bolt.user.totp)
 
 (defprotocol OneTimePasswordStore
   (set-totp-secret [_ identity secret] "this level add security to previous checked user/password identity")

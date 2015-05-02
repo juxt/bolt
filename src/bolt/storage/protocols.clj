@@ -1,4 +1,4 @@
-(ns cylon.storage.protocols)
+(ns bolt.storage.protocols)
 
 (defprotocol Storage
   ""

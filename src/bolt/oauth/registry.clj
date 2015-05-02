@@ -1,8 +1,8 @@
 ;; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
-(ns cylon.oauth.registry
+(ns bolt.oauth.registry
   (:require
-   [cylon.oauth.registry.protocols :as p]
+   [bolt.oauth.registry.protocols :as p]
    [schema.core :as s]))
 
 (s/defn register-client :- {:client-id s/Str

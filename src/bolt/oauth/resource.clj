@@ -1,13 +1,13 @@
 ;; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
-(ns cylon.oauth.resource
+(ns bolt.oauth.resource
   (:require
    [clojure.string :as str]
    [com.stuartsierra.component :refer (Lifecycle using)]
-   [cylon.token-store :refer (get-token-by-id)]
-   [cylon.token-store.protocols :refer (TokenStore)]
-   [cylon.authentication.protocols :refer (RequestAuthenticator)]
-   [cylon.authentication :refer (authenticate)]
+   [bolt.token-store :refer (get-token-by-id)]
+   [bolt.token-store.protocols :refer (TokenStore)]
+   [bolt.authentication.protocols :refer (RequestAuthenticator)]
+   [bolt.authentication :refer (authenticate)]
    [schema.core :as s]
    [plumbing.core :refer (<-)]))
 

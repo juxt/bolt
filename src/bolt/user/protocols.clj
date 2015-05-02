@@ -1,6 +1,6 @@
 ;; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
-(ns cylon.user.protocols)
+(ns bolt.user.protocols)
 
 (defprotocol UserStore
   "A store for users that doesn't involve password hashing"

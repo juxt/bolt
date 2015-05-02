@@ -1,10 +1,10 @@
 ;; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
-(ns cylon.oauth.authorization
+(ns bolt.oauth.authorization
   (:require
-   [cylon.authentication :refer (authenticate)])
+   [bolt.authentication :refer (authenticate)])
   )
 
 (defn scope-authorized? [authenticator req scope]
   (let [creds (authenticate authenticator req)]
-    (contains? (:cylon/scopes creds) scope)))
+    (contains? (:bolt/scopes creds) scope)))

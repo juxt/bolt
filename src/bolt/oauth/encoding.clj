@@ -1,4 +1,4 @@
-(ns cylon.oauth.encoding
+(ns bolt.oauth.encoding
   (:require
    [ring.util.codec :refer (url-encode url-decode)]
    [clojure.string :as str]
