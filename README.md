@@ -22,9 +22,15 @@ with associated protocols specifying functions for start/stop and
 others. A _system_ is a set of these components, with the inclusion of
 declared dependency references into each component.
 
+In addition, Cylon uses the following terms
+
+* username - a user's short identifier, for example: __bob__
+* email - a user's email address
+* user - a map, containing entries that distinguish and describe a user
+
 ## Discussion
 
-Cylon provides an _integrated system_, rather than requiring developers
+Cylon provides an _integrated system_ of components, rather than requiring developers
 to roll their own from smaller libraries.
 
 Functionality can be customised by interchanging components, providing
@@ -36,10 +42,9 @@ missing in the Clojure landscape and the gap that Cylon aims to fill.
 
 ### Differences with Friend
 
-The key difference is that [Friend](https://github.com/cemerick/friend)
-is designed upon [Compojure](https://github.com/weavejester/compojure),
-whereas Cylon is based on
-[Component](https://github.com/stuartsierra/component).
+The key difference between Cylon and Friend is that Cylon is designed
+for use with [Component](https://github.com/stuartsierra/component)
+based applications.
 
 Cylon is designed specifically for modular applications, where
 functionality can be added through the addition of extra components.
@@ -69,8 +74,9 @@ your Clojure web applications. For smaller applications with a single
 set of Compojure routes, Friend is a better choice.
 
 For larger applications, especially those with multiple modules and
-using [Liberator](http://clojure-liberator.github.io/liberator/) to
-provide a fuller REST API, Cylon should be a good fit.
+using [Liberator](http://clojure-liberator.github.io/liberator/) or
+[yada](https://github.com/juxt/yada) to provide a fuller REST API, Cylon
+should be a good fit.
 
 ## Pronounication
 
@@ -99,7 +105,7 @@ https://github.com/weavejester/ring-anti-forgery
 
 Aaron Bedra's seminal ClojureWest talk in 2014 –
 http://www.youtube.com/watch?v=CBL59w7fXw4 - this was the inspiration
-between Cylon.
+behind Cylon.
 
 [Mastodon C](http://www.mastodonc.com/) for sponsoring the development
 on Cylon, and using it in their kixi projects
@@ -118,7 +124,8 @@ features.
 [Juan Antonio Ruz](https://github.com/tangrammar) for designing and
 developing the TOTP two-factor authentication support. Additionally Juan
 conducted the background research and co-authored the OAuth2 support,
-and many other aspects of the project.
+and many other aspects of the project. Also for providing a public
+example of how to use Cylon.
 
 [Martin Trojer](https://github.com/martintrojer) and others from
 [JUXT](https://github.com/juxt) for a continual stream of

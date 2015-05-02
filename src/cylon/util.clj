@@ -77,4 +77,4 @@
 ;; Misc
 
 (defn keywordize-form [m]
-  (into {} (for [[k v] m] [(keyword k) v])))
+  (into {} (for [[k v] m] [(csk/->kebab-case-keyword k) v])))

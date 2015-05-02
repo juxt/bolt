@@ -3,7 +3,6 @@
 (ns cylon.user.signup
   (:require
    [bidi.bidi :refer (RouteProvider tag)]
-   [cylon.user.protocols :refer (UserFormRenderer ErrorRenderer)]
    [modular.email :refer (send-email!)]
    [modular.email.protocols :refer (Emailer)]
    [clojure.tools.logging :refer :all]
@@ -12,18 +11,18 @@
    [cylon.session.protocols :refer (SessionStore)]
    [cylon.token-store :refer (create-token! get-token-by-id)]
    [cylon.token-store.protocols :refer (TokenStore)]
-   [cylon.password.protocols :refer (PasswordVerifier make-password-hash)]
    [com.stuartsierra.component :as component :refer (Lifecycle using)]
    [modular.bidi :refer (path-for)]
    [hiccup.core :refer (html)]
    [ring.middleware.params :refer (params-request)]
    [ring.middleware.cookies :refer (cookies-response wrap-cookies)]
    [ring.util.response :refer (response redirect redirect-after-post)]
-   [cylon.user :refer (create-user-error? create-user! verify-email! render-signup-form render-welcome-email-message render-email-verified render-error)]
-   [cylon.user.protocols :refer (UserStore)]
+   [cylon.user :refer (create-user! verify-email! render-signup-form render-welcome-email-message render-email-verified render-error hash-password)]
+   [cylon.user.protocols :refer (UserStore UserPasswordHasher UserAuthenticator UserFormRenderer ErrorRenderer)]
    [schema.core :as s]
    [plumbing.core :refer (<-)]
    [modular.component.co-dependency :refer (co-using)]
+   [yada.yada :refer (yada)]
    )
   (:import (clojure.lang ExceptionInfo)))
 
@@ -33,39 +32,23 @@
     (apply format "%s://%s:%d%s?code=%s&email=%s" (conj values verify-user-email-path code email))))
 
 (def new-signup-schema
-  {:fields [{:name s/Str
-             :label s/Str
-             (s/optional-key :placeholder) s/Str
-             (s/optional-key :password?) s/Bool}]
-   :uri-context s/Str
+  {:uri-context s/Str
+   ;; TODO: Ensure this can't be hijacked, see section on 'Preventing
+   ;; redirect attacks' here:
+   ;; http://rundis.github.io/blog/2015/buddy_auth_part2.html
    (s/optional-key :post-signup-redirect) s/Str})
 
-(defn wrap-error-rendering [h renderer]
-  (if (satisfies? ErrorRenderer renderer)
-    (fn [req]
-      (try
-        (h req)
-        (catch ExceptionInfo e
-          (errorf e "User signup error")
-          (let [{error-type :error-type :as data} (ex-data e)]
-            {:status (case error-type
-                       :user-already-exists 422
-                       422)
-             :body (render-error renderer req data)}))))
-    h))
-
-(defrecord Signup [renderer session-store user-store password-verifier verification-code-store emailer fields uri-context events *router]
+(defrecord Signup [user-store user-password-hasher session-store verification-code-store renderer emailer uri-context *router]
   Lifecycle
   (start [component]
     (s/validate (merge
                  new-signup-schema
                  {:user-store (s/protocol UserStore)
+                  :user-password-hasher (s/protocol UserPasswordHasher)
                   :session-store (s/protocol SessionStore)
-                  :password-verifier (s/protocol PasswordVerifier)
                   :verification-code-store (s/protocol TokenStore)
-                  :events (s/maybe (s/protocol EventPublisher))
                   :renderer (s/protocol UserFormRenderer)
-                  (s/optional-key :emailer) (s/protocol Emailer)
+                  :emailer (s/protocol Emailer)
                   :*router s/Any ;; you can't get specific protocol of a codependency in start time
                   })
                 component))
@@ -82,8 +65,8 @@
                                 renderer req
                                 {:title "Sign up"
                                  :form {:method :post
-                                        :action (path-for @*router ::POST-signup-form)
-                                        :fields fields}}))]
+                                        :action (path-for @*router ::POST-signup-form)}}))]
+
             (if-not (session session-store req)
               ;; We create an empty session. This is because the POST
               ;; handler requires that a session exists within which it can
@@ -97,18 +80,25 @@
        :post
        (->
         (fn [req]
-          (debugf "Processing signup")
 
           (let [form (-> req params-request :form-params)
                 ;;uid (get form "user-id")
                 password (get form "password")
-                ;;email (get form "email")
+
                 ;;name (get form "name")
 
                 ;; We remove the plain-text password to avoid sending it
                 ;; through the API
-                user (-> (dissoc "password") keywordize-form)
+                user (-> form (dissoc "password") keywordize-form)
+
+                ;; Create the user
+                ;; TODO: Watch out, create-user! can return a manifold deferred
+                user (create-user! user-store
+                                   (assoc user :password-hash (hash-password user-password-hasher password)))
                 ]
+
+            (when (:error user) (throw (ex-info "Failed to create user" user)))
+
 
             ;; TODO: Check the password meets policy constraints (length, etc.)
 
@@ -117,9 +107,6 @@
             ;; all required fields in correct format, etc.
             ;; (create-user-error? user-store user)
 
-            ;; Create the user
-            (create-user! user-store (assoc user :password (make-password-hash password-verifier password)))
-
             ;; Send the email to the user now!
             (when emailer
               (let [code (str (java.util.UUID/randomUUID))]
@@ -127,30 +114,30 @@
                  verification-code-store code
                  {:cylon/user user})
 
-                (send-email!
-                 emailer
-                 (merge {:to email}
-                        (render-welcome-email-message
-                         renderer
-                         {:email-verification-link
-                          (str
-                           (absolute-prefix req)
-                           (path-for @*router ::verify-user-email)
-                           (as-query-string {"code" code}))})))))
+                (when-let [email (:email user)]
+                  (send-email!
+                   emailer
+                   (merge {:to email}
+                          (render-welcome-email-message
+                           renderer
+                           {:email-verification-link
+                            (str
+                             (absolute-prefix req)
+                             (path-for @*router ::verify-user-email)
+                             (as-query-string {"code" code}))}))))))
 
             ;; Create a session that contains the secret-key
             ;; (assoc-session-data! session-store req {:cylon/subject-identifier uid :name name})
 
             (respond-with-new-session!
              session-store req
-             {:cylon/subject-identifier uid} ; keep logged in after signup
+             user ; keep logged in after signup
              (if-let [loc (or (get form "post_signup_redirect")
                               (:post-signup-redirect component))]
                (redirect-after-post loc)
-               (response (format "Thank you, %s, for signing up" name))))))
+               (response (format "Thank you, %s, for signing up" user))))))
 
         wrap-schema-validation
-        (wrap-error-rendering renderer)
         (tag ::POST-signup-form)
         )}
 
@@ -172,19 +159,13 @@
 
 (defn new-signup [& {:as opts}]
   (->> opts
-       (merge {:fields
-               [{:name "user-id" :label "User" :placeholder "id"}
-                {:name "password" :label "Password" :password? true :placeholder "password"}
-                {:name "name" :label "Name" :placeholder "name"}
-                {:name "email" :label "Email" :placeholder "email"}]
-               :uri-context "/"
-               })
+       (merge {:uri-context "/"})
        (s/validate new-signup-schema)
        map->Signup
        (<- (using [:user-store
-                   :password-verifier
+                   :user-password-hasher
                    :session-store
-                   :renderer
                    :verification-code-store
+                   :renderer
                    :emailer]))
        (<- (co-using [:router]))))

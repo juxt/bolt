@@ -10,28 +10,23 @@
 
 ;; UserStore API
 
-(s/defschema PasswordHashWithSalt
-  {:hash s/Str
-   :salt s/Str})
-
 (s/defschema User "A user"
-  {:password PasswordHashWithSalt
-   s/Keyword s/Str})
+  {s/Keyword s/Str})
 
-(s/defn create-user-error?
+(s/defn check-create-user
   [component :- (s/protocol p/UserStore)
    user :- User]
-  (p/create-user-error? component user))
+  (p/check-create-user component user))
 
 (s/defn create-user!
   [component :- (s/protocol p/UserStore)
    user :- User]
   (p/create-user! component user))
 
-(s/defn get-user :- (s/maybe User)
+(s/defn find-user :- (s/maybe User)
   [component :- (s/protocol p/UserStore)
    id :- s/Str]
-  (p/get-user component id))
+  (p/find-user component id))
 
 (s/defn update-user! :- nil
   [component :- (s/protocol p/UserStore)
@@ -49,9 +44,22 @@
    email :- s/Str]
   (p/verify-email! component email))
 
+;; UserAuthenticator API
+
+(s/defn authenticate-user :- s/Any
+  [component :- (s/protocol p/UserAuthenticator)
+   user :- User
+   evidence :- {s/Keyword s/Str}]
+  (p/authenticate-user component user evidence))
+
+(s/defn hash-password :- s/Str
+  [component :- (s/protocol p/UserPasswordHasher)
+   password :- s/Str]
+  (p/hash-password component password))
+
 ;; Login form renderer API
 
-(s/defschema FormField
+#_(s/defschema FormField
   {:name s/Str
    (s/optional-key :label) s/Str
    (s/optional-key :placeholder) s/Str
@@ -60,15 +68,14 @@
 
 (s/defschema Form
   {:method s/Keyword
-   :action s/Str
-   :fields [FormField]})
+   :action s/Str})
 
 (s/defn render-login-form :- s/Str
   [component :- (s/protocol p/LoginFormRenderer)
    req :- Request
    model :- {:form Form
              (s/optional-key :login-failed?) s/Bool
-             s/Keyword s/Any}]
+             (s/optional-key :post-login-redirect) s/Str}]
   (p/render-login-form component req model))
 
 ;; User form renderer API

@@ -6,11 +6,9 @@
    [clojure.string :as string]
    [cylon.user.protocols :as p]
    [cylon.authentication.protocols :refer (RequestAuthenticator AuthenticationHandshake)]
-   [cylon.password :refer (verify-password)]
-   [cylon.password.protocols :refer (PasswordVerifier)]
    [cylon.session :refer (session assoc-session-data! respond-with-new-session! respond-close-session!)]
    [cylon.session.protocols :refer (SessionStore)]
-   [cylon.user :refer (get-user get-user-by-email FormField render-login-form)]
+   [cylon.user :refer (find-user render-login-form authenticate-user)]
    [cylon.util :refer (as-query-string uri-with-qs Request wrap-schema-validation keywordize-form)]
    [bidi.bidi :refer (RouteProvider tag)]
    [modular.bidi :refer (path-for)]
@@ -25,15 +23,14 @@
 (defn email? [s]
   (re-matches #".+@.+" s))
 
-(defrecord Login [user-store session-store renderer password-verifier fields uri-context *router]
+(defrecord Login [user-store user-authenticator session-store renderer uri-context *router]
   Lifecycle
   (start [component]
     (s/validate
      {:user-store (s/protocol p/UserStore)
+      :user-authenticator (s/protocol p/UserAuthenticator)
       :session-store (s/protocol SessionStore)
       :renderer (s/protocol p/LoginFormRenderer)
-      :password-verifier (s/protocol PasswordVerifier)
-      :fields [FormField]
       :uri-context s/Str
       :*router s/Any ;; you can't get specific protocol of a codependency in start time
       }
@@ -65,13 +62,11 @@
             {:status 200
              :body (render-login-form
                     renderer req
-                    {:title "Login"
-                     :form {:method :post
-                            :action (path-for @*router ::process-login-attempt)
-                            :fields (if post-login-redirect
-                                      (conj fields {:name "post_login_redirect" :value post-login-redirect :type "hidden"})
-                                      fields)}
-                     :login-failed? (Boolean/valueOf (get qparams "login_failed"))})}))
+                    (merge
+                     {:form (merge {:method :post
+                                    :action (path-for @*router ::process-login-attempt)})
+                      :login-failed? (Boolean/valueOf (get qparams "login_failed"))}
+                     (when post-login-redirect {:post-login-redirect post-login-redirect})))}))
         wrap-schema-validation
         (tag ::login-form)
         )
@@ -80,15 +75,15 @@
        (->
         (fn [req]
           (let [form (-> req params-request :form-params keywordize-form)
-                userid (some-> (get form :user) string/trim)
+                _ (infof "Form is %s" form)
+                id (some-> (get form :user) string/trim)
                 password (get form :password)
-                post-login-redirect (get form :post_login_redirect)
+                post-login-redirect (get form :post-login-redirect)
 
                 session (session session-store req)
-                user (when userid
-                       ((if (email? userid) get-user-by-email get-user) user-store userid))]
+                user (find-user user-store id)]
 
-            (if (and user (verify-password password-verifier (:uid user) password))
+            (if (and user (authenticate-user user-authenticator user {:password password}))
               ;; Login successful!
               (do
                 (debugf "Login successful!")
@@ -140,12 +135,9 @@
 
 (defn new-login [& {:as opts}]
   (->> opts
-       (merge {:fields [{:name "user" :label "User" :type "text" :placeholder "id or email"}
-                        {:name "password" :label "Password" :type "password" :placeholder "password"}]
-               :uri-context ""})
-       (s/validate {:fields [FormField]
-                    :uri-context s/Str})
+       (merge {:uri-context ""})
+       (s/validate {:uri-context s/Str})
        map->Login
-       (<- (using [:password-verifier :session-store :renderer :user-store]))
+       (<- (using [:user-store :user-authenticator :session-store :renderer]))
        (<- (co-using [:router]))
        ))

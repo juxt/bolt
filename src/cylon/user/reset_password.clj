@@ -1,14 +1,12 @@
-;; Copyright © 2014, JUXT LTD. All Rights Reserved.
+; Copyright © 2014, JUXT LTD. All Rights Reserved.
 
 (ns cylon.user.reset-password
   (:require
    [clojure.tools.logging :refer :all]
    [com.stuartsierra.component :as component :refer (using)]
-   [cylon.password.protocols :refer (make-password-hash)]
    [cylon.session.protocols :refer (session assoc-session-data! respond-with-new-session!)]
    [cylon.user.protocols :refer (LoginFormRenderer UserFormRenderer)]
-   [cylon.user :refer (render-reset-password-request-form get-user-by-email render-reset-password-email-message render-reset-password-link-sent-response render-password-reset-form set-user-password-hash! render-password-changed-response FormField)]
-
+   [cylon.user :refer (render-reset-password-request-form render-reset-password-email-message render-reset-password-link-sent-response render-password-reset-form render-password-changed-response hash-password)]
    [cylon.token-store :refer (create-token! get-token-by-id purge-token!)]
    [cylon.util :refer (absolute-uri absolute-prefix as-query-string wrap-schema-validation)]
    [hiccup.core :refer (html)]
@@ -48,7 +46,10 @@
         (fn [req]
           (let [form (-> req params-request :form-params)
                 email (get form "email")]
-            (if-let [user (get-user-by-email user-store email)]
+            ;; TODO: We need to look up the user by email, rather than any
+            ;; other id. This poses a challenge, because we don't have a
+            ;; protocol for doing this yet
+            (if-let [user (throw (ex-info "TODO" {})) #_(get-user-by-email user-store email)]
               (let [code (str (java.util.UUID/randomUUID))]
                 (debugf "Found user: %s" user)
                 (create-token! verification-code-store code user)
@@ -109,10 +110,12 @@
             (if token
               (do
                 (infof "Reseting password for user %s" (:uid token))
-                (set-user-password-hash!
+                ;; TODO How to update the user password here?
+                (throw (ex-info "TODO"))
+                #_(set-user-password-hash!
                  user-store
                  (:uid token)
-                 (make-password-hash password-verifier pw))
+                 (hash-password user-password-hasher pw))
                 (purge-token! (:verification-code-store this) token-id)
                 (response (render-password-changed-response renderer req {})))
 
@@ -123,27 +126,12 @@
         )}}]))
 
 (def new-reset-password-schema
-  {:fields-reset
-   [FormField]
-   :fields-confirm-password
-   [FormField]
-   :uri-context s/Str})
+  {:uri-context s/Str})
 
 (defn new-reset-password [& {:as opts}]
   (->> opts
        (merge
-        {:fields-reset
-         [{:name "email"
-           :type "text"
-           :label "Email"
-           :placeholder "email"}]
-         :fields-confirm-password
-         [{:name "new_pw"
-           :type "password"
-           :label "New Password"
-           :placeholder "new password"}]
-         :uri-context "/"
-         })
+        {:uri-context "/"})
        (s/validate new-reset-password-schema)
        map->ResetPassword
        (<- (using [:user-store :session-store :renderer
