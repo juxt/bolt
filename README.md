@@ -4,13 +4,13 @@
 > requires integrated security frameworks - not standalone libraries!” –
 > John P. Hackworth, [Clojure web security is worse than you think](https://hackworth.be/2014/03/26/clojure-web-security-is-worse-than-you-think/)
 
-An integrated security system for Clojure applications based on a set of components written to the specifications of Stuart Sierra's [component](https://github.com/stuartsierra/component).
+An integrated security system for Clojure applications based on a set of
+components written to the specifications of Stuart Sierra's
+[component](https://github.com/stuartsierra/component).
 
-Bolt is a bold object, to separate all security-related concerns from
-Clojure applications, so that they can be implemented in library form.
-
-That said, bolt is under constant development towards delivering
-practical benefit for Clojure web applications.
+Bolt has an ambitious goal: to separate all security-related concerns
+from Clojure-based applications so that they can be implemented as
+pluggable components.
 
 ## Terms
 
@@ -21,7 +21,7 @@ with associated protocols specifying functions for start/stop and
 others. A _system_ is a set of these components, with the inclusion of
 declared dependency references into each component.
 
-In addition, bolt uses the following terms
+In addition, bolt uses the following terms :-
 
 * username - a user's short identifier, for example: __bob__
 * email - a user's email address
