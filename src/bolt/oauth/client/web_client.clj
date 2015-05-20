@@ -17,7 +17,7 @@
    [bolt.session :refer (session respond-with-new-session! assoc-session-data! respond-close-session!)]
    [bolt.token-store :refer (create-token! get-token-by-id purge-token!)]
    [bolt.util :refer (as-set absolute-uri as-www-form-urlencoded as-query-string)]
-   [org.httpkit.client :refer (request) :rename {request http-request}]
+   [aleph.http :as http]
    [ring.middleware.cookies :refer (wrap-cookies cookies-request cookies-response)]
    [ring.middleware.params :refer (wrap-params)]
    [ring.util.response :refer (redirect)]
@@ -90,10 +90,8 @@
                     ;; the response. In a future version we might go fully
                     ;; async.
                     at-resp
-                    @(http-request
-                      {:method :post
-                       :url access-token-uri
-                       :headers {"content-type" "application/x-www-form-urlencoded"}
+                    @(http/post access-token-uri
+                      {:headers {"content-type" "application/x-www-form-urlencoded"}
                        ;; Exchange the code for an access token - application/x-www-form-urlencoded format
                        ;; 2.3.1: "Including the client credentials in the
                        ;; request-body using the two parameters is NOT

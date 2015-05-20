@@ -1,0 +1,16 @@
+<div class="container">
+  <div class="page-header">
+    <h1>Protected site: {{message}}</h1>
+    {{#user}}
+    <p>Logged in as {{email}}</p>
+    <p>Your roles are {{roles}}</p>
+    <p><a href="{{logout-href}}">Logout</a></p>
+    {{/user}}
+    {{^user}}
+    <p>Please <a href="{{login-href}}">login</a></p>
+    {{/user}}
+  </div>
+  <div class="footer">
+    <p>This text can be found in <code>resources/templates/index.html.mustache</code></p>
+  </div>
+</div>

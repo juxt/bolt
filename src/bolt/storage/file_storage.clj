@@ -7,18 +7,19 @@
   bolt.storage.file-storage
   (:require
    [com.stuartsierra.component :refer (Lifecycle using)]
-   [bolt.storage.protocols :refer (Storage)]
+   [bolt.storage.protocols :refer (Storage find-object store-object! delete-object!)]
+   [bolt.storage.atom-storage :refer (new-atom-storage)]
    [clojure.java.io :as io]
    [clojure.pprint :refer (pprint)]
    [schema.core :as s]))
 
 (defn- save-file
   "Save the state of the component's ref to a file, via an agent."
-  [{:keys [agent ref file]}]
+  [{:keys [agent atom-storage file]}]
   (send-off
    agent
    (fn [f]
-     (spit f (with-out-str (pprint @ref)))
+     (spit f (with-out-str (pprint @(:ref atom-storage))))
      file)))
 
 (defn selector [qualifier]
@@ -28,22 +29,20 @@
 (defn remove-object [ds qualifier seed]
   (into seed (remove (selector qualifier) ds)))
 
-(defrecord FileStorage [file seed ref]
+(defrecord FileStorage [file seed atom-storage]
   Storage
   (find-object [component qualifier]
-    (let [ks (keys qualifier)]
-      (some (selector qualifier) @ref)))
+    (find-object atom-storage qualifier))
 
   (store-object! [component object]
     (dosync
-     (alter ref conj object)
+     (store-object! atom-storage object)
      (save-file component)))
 
   (delete-object! [component qualifier]
-    (let [ks (keys qualifier)]
-      (dosync
-       (alter ref remove-object qualifier seed)
-       (save-file component)))))
+    (dosync
+     (delete-object! atom-storage qualifier)
+     (save-file component))))
 
 (defn- check-file-parent [{f :file :as opts}]
   (assert
@@ -62,9 +61,11 @@
 
 (defn new-file-storage [& {:as opts}]
   (->> opts
-       (merge {:seed #{}})
+       (merge {:seed #{}
+               :atom-storage (new-atom-storage (or (:seed opts) #{}))})
        (s/validate {:file (s/either s/Str (s/pred (partial instance? java.io.File)))
-                    :seed (s/either (s/eq #{}) (s/eq []))})
+                    :seed (s/either (s/eq #{}) (s/eq []))
+                    :atom-storage (s/protocol Storage)})
        (#(update-in % [:file] io/file))
        check-file-parent
        add-ref-agent

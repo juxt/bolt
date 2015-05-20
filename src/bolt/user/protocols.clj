@@ -31,8 +31,8 @@ given. May return the user wrapped in a (manifold) deferred for async.")
     "Verify that the given email exists"))
 
 (defprotocol UserAuthenticator
-  (authenticate-user [_ user evidence]
-    "Return some signed token upon valid evidence"))
+  (authenticate-user [_ user credential]
+    "Return truthy if credential is valid"))
 
 (defprotocol UserPasswordHasher
   (hash-password [_ password]

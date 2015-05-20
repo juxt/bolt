@@ -59,6 +59,7 @@
         (fn [req]
           (let [qparams (-> req params-request :query-params)
                 post-login-redirect (get qparams "post_login_redirect")]
+
             {:status 200
              :body (render-login-form
                     renderer req
@@ -81,42 +82,34 @@
                 post-login-redirect (get form :post-login-redirect)
 
                 session (session session-store req)
-                user (find-user user-store id)]
+                user (find-user user-store id)
+                authentication (when user (authenticate-user user-authenticator user {:password password}))]
 
-            (if (and user (authenticate-user user-authenticator user {:password password}))
+            (if (and user authentication)
               ;; Login successful!
               (do
                 (debugf "Login successful!")
                 (respond-with-new-session!
                  session-store req
-                 {:bolt/user user}
+                 {:bolt/user user
+                  ;; It might be useful to store the results of the
+                  ;; authentication (which could be signed)
+                  :bolt/authentication authentication}
                  (if post-login-redirect
                    (redirect-after-post post-login-redirect)
                    {:status 200 :body "Login successful"})))
 
               ;; Login failed!
-              (do
-                (debugf "Login failed!")
-
-                ;; TODO I think the best thing to do here is to create a
-                ;; session anyway - we have been posted after all. We can
-                ;; store in the session things like number of failed
-                ;; attempts (to attempt to prevent brute-force hacking
-                ;; attempts by limiting the number of sessions that can be
-                ;; used by each remote IP address). If we do this, then the
-                ;; post_login_redirect must be ascertained from the
-                ;; query-params, and then from the session.
-
-                (redirect-after-post
-                 (str (path-for @*router ::login-form)
-                      ;; We must be careful to add back the query string
-                      (as-query-string
-                       (merge
-                        (when post-login-redirect
-                          {"post_login_redirect" (URLEncoder/encode post-login-redirect)})
-                        ;; Add a login_failed to help with indicating the failure to the user.
-                        {"login_failed" true}
-                        ))))))))
+              (redirect-after-post
+               (str (path-for @*router ::login-form)
+                    ;; We must be careful to add back the query string
+                    (as-query-string
+                     (merge
+                      (when post-login-redirect
+                        {"post_login_redirect" (URLEncoder/encode post-login-redirect)})
+                      ;; Add a login_failed to help with indicating the failure to the user.
+                      {"login_failed" true}
+                      )))))))
         wrap-schema-validation
         (tag ::process-login-attempt)
         )}

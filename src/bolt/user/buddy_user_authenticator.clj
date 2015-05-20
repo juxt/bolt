@@ -3,12 +3,11 @@
    [buddy.hashers :as hs]
    [bolt.user.protocols :refer (UserAuthenticator UserPasswordHasher)]))
 
-
-
 (defrecord BuddyUserAuthenticator []
   UserAuthenticator
-  (authenticate-user [_ user evidence]
-    (throw (ex-info "TODO" {})))
+  (authenticate-user [_ user credential]
+    (hs/check (:password credential) (:password user)))
+
   UserPasswordHasher
   (hash-password [_ password]
     (hs/encrypt password)))

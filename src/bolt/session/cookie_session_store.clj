@@ -1,3 +1,6 @@
+;; TODO: This is misnamed. The cookie only contains a UUID, which keys
+;; into a token store containing the material.
+
 (ns bolt.session.cookie-session-store
   (:require
    [clojure.tools.logging :refer :all]

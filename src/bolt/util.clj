@@ -2,7 +2,8 @@
 (ns bolt.util
   (:require
    [schema.core :as s]
-   [camel-snake-kebab :as csk])
+   [clojure.string :as str]
+   #_[camel-snake-kebab :as csk])
   (:import (java.net URLEncoder)))
 
 (defprotocol KorksSet
@@ -77,4 +78,4 @@
 ;; Misc
 
 (defn keywordize-form [m]
-  (into {} (for [[k v] m] [(csk/->kebab-case-keyword k) v])))
+  (into {} (for [[k v] m] [(keyword (str/replace k "_" "-")) v])))
