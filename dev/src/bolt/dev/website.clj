@@ -22,7 +22,9 @@
          [:h2 "Welcome to " [:span.bolt "bolt"] "!"]
          [:ol
           [:li [:a {:href (path-for @*router :bolt.dev.user-guide/user-guide)}
-                "User guide"]]]])}))
+                "User guide"]]
+          [:li [:a {:href (path-for @*router :example1/index)}
+                "Example 1"]]]])}))
    {:produces ["text/html;charset=utf-8"]}))
 
 (defrecord Website [*router templater]

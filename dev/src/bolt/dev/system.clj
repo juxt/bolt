@@ -105,7 +105,7 @@
   (let [uri-context "/example1"]
     (assoc
      system
-     :example1 (bolt.dev.example1/new-example :uri-context uri-context)
+     :example1 (bolt.dev.example1/new-example :kns "example1" :uri-context uri-context)
      :example1/session-store (new-cookie-session-store)
      :example1/token-store (new-atom-backed-token-store)
      :example1/login (new-login :uri-context uri-context)
@@ -113,8 +113,7 @@
      :example1/buddy-user-authenticator (new-buddy-user-authenticator)
      :example1/atom-storage (new-atom-storage)
      :example1/login-form (new-login-form)
-     :example1/template-model (new-aggregate-template-model)
-)))
+     :example1/template-model (new-aggregate-template-model))))
 
 (defn new-system-map
   [config]
@@ -129,47 +128,55 @@
         (assoc :redirect (new-redirect :from "/" :to :bolt.dev.website/index))
         ))))
 
+(def example1-dependencies
+  {:dependencies
+   {:example1 {:templater :clostache-templater
+               :session-store :example1/session-store
+               :user-store :example1/email-user-store
+               :password-hasher :example1/buddy-user-authenticator}
+    :example1/template-model [:example1]
+
+    ;; These are the components to support security (login, etc.)
+    :example1/session-store {:token-store :example1/token-store}
+
+    :example1/login {:user-store :example1/email-user-store
+                     :user-authenticator :example1/buddy-user-authenticator
+                     :session-store :example1/session-store
+                     :renderer :example1/login-form}
+
+    :example1/login-form {:templater :clostache-templater}
+
+    :example1/email-user-store {:storage :example1/atom-storage}}
+
+   :co-dependencies
+   {:example1 {:router :router
+               :template-model :example1/template-model}
+    :example1/login-form {:template-model :example1/template-model
+                          :router :router}}})
+
 (defn new-dependency-map
   []
-  {:http-server {:request-handler :router}
-   :router [:user-guide
-            :website
-            :jquery :bootstrap
-            :web-resources
-            :highlight-js-resources
-            :redirect
-            :example1
-            :example1/login]
-   :user-guide {:templater :clostache-templater}
-   :website {:templater :clostache-templater}
+  (merge
+   {:http-server {:request-handler :router}
+    :router [:user-guide
+             :website
+             :jquery :bootstrap
+             :web-resources
+             :highlight-js-resources
+             :redirect
+             :example1
+             :example1/login]
+    :user-guide {:templater :clostache-templater}
+    :website {:templater :clostache-templater}}
 
-   :example1 {:templater :clostache-templater
-              :session-store :example1/session-store
-              :user-store :example1/email-user-store
-              :password-hasher :example1/buddy-user-authenticator}
-   :example1/template-model [:example1]
-
-   ;; These are the components to support security (login, etc.)
-   :example1/session-store {:token-store :example1/token-store}
-
-   :example1/login {:user-store :example1/email-user-store
-                    :user-authenticator :example1/buddy-user-authenticator
-                    :session-store :example1/session-store
-                    :renderer :example1/login-form}
-
-   :example1/login-form {:templater :clostache-templater}
-
-   :example1/email-user-store {:storage :example1/atom-storage}})
+   (:dependencies example1-dependencies)))
 
 (defn new-co-dependency-map
   []
-  {:website {:router :router}
-   :user-guide {:router :router}
-   :example1 {:router :router
-              :template-model :example1/template-model}
-   :example1/login-form {:template-model :example1/template-model
-                         :router :router}
-   })
+  (merge
+   {:website {:router :router}
+    :user-guide {:router :router}}
+   (:co-dependencies example1-dependencies)))
 
 (defn new-production-system
   "Create the production system"

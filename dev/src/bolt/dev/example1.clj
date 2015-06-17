@@ -21,11 +21,13 @@
    [bolt.dev.view :refer (page-body page)]))
 
 (s/defrecord Example
-    [templater :- (s/protocol Templater)
+    [kns :- s/Str
+     templater :- (s/protocol Templater)
      session-store :- (s/protocol SessionStore)
      user-store :- (s/protocol UserStore)
      password-hasher :- (s/protocol UserPasswordHasher)
      uri-context :- String
+
      ;; Co-dependencies
      *template-model
      *router]
@@ -54,12 +56,12 @@
           [(str uri-context)
            {"/index.html"
             (-> (page "templates/example1/index.html.mustache" templater *template-model *router session-store)
-                (tag ::index))
+                (tag (keyword kns "index")))
             "/protected.html"
             (-> (page "templates/example1/protected.html.mustache" templater *template-model *router session-store)
-                (tag ::protected))
-            "" (redirect ::index)
-            "/" (redirect ::index)}])
+                (tag (keyword kns "protected")))
+            "" (redirect (keyword kns "index"))
+            "/" (redirect (keyword kns "index"))}])
 
   UserFormRenderer
   (render-signup-form
@@ -108,7 +110,7 @@
   (->
    (->> args
         (merge {})
-        (s/validate {:uri-context s/Str})
+        (s/validate {:uri-context s/Str :kns s/Str})
         (map->Example))
    (using [:templater :session-store :user-store])
    (co-using [:router :template-model])))
