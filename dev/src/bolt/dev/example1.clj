@@ -93,10 +93,10 @@
    [component req]
    (let [login-href
          (when-let [path (path-for @*router :bolt.user.login/login-form)]
-           (str path "?post_login_redirect=" (path-for @*router ::index)))
+           (str path "?post_login_redirect=" (path-for @*router (keyword kns "index"))))
          logout-href
          (when-let [path (path-for @*router :bolt.user.login/logout)]
-           (str path "?post_logout_redirect=" (path-for @*router ::index)))]
+           (str path "?post_logout_redirect=" (path-for @*router (keyword kns "index"))))]
 
      (assert login-href "No href to login. Check system dependencies.")
      (assert logout-href "No href to logout. Check system dependencies.")

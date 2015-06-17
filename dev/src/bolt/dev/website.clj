@@ -23,8 +23,12 @@
          [:ol
           [:li [:a {:href (path-for @*router :bolt.dev.user-guide/user-guide)}
                 "User guide"]]
-          [:li [:a {:href (path-for @*router :example1/index)}
-                "Example 1"]]]])}))
+          ]
+         [:h3 "Examples"]
+         [:ol
+          [:li [:a {:href (path-for @*router :example1a/index)} "Example 1a"]]
+          ]
+         ])}))
    {:produces ["text/html;charset=utf-8"]}))
 
 (defrecord Website [*router templater]
