@@ -111,7 +111,7 @@
                  :title "Example 1a"
                  :tag-ns tag-ns
                  :uri-context uri-context)
-     :example1a/session-store (new-cookie-session-store)
+     :example1a/session-store (new-cookie-session-store :cookie-id tag-ns)
      :example1a/token-store (new-atom-backed-token-store)
      :example1a/login (new-login :uri-context uri-context :tag-ns tag-ns)
      :example1a/email-user-store (new-email-user-store)
@@ -138,7 +138,7 @@
                  :title "Example 1b"
                  :tag-ns tag-ns
                  :uri-context uri-context)
-     :example1b/session-store (new-cookie-session-store)
+     :example1b/session-store (new-cookie-session-store :cookie-id tag-ns)
      :example1b/token-store (new-atom-backed-token-store)
      :example1b/login (new-login :uri-context uri-context :tag-ns tag-ns)
      :example1b/email-user-store (new-email-user-store)
