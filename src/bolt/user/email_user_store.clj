@@ -9,6 +9,7 @@
    [com.stuartsierra.component :refer (Lifecycle using)]
    [clojure.pprint :refer (pprint)]
    [clojure.java.io :as io]
+   [clojure.tools.logging :refer :all]
    [schema.core :as s]
    [plumbing.core :refer (<-)]
    ))
@@ -19,13 +20,15 @@
 
   UserStore
   (check-create-user [component user]
-    (let [user (select-keys user [:user])
+    (let [user (select-keys user [:email])
           existing (find-object storage user)]
+      (infof "check-create-user user %s existing %s" user existing)
       (when existing
         {:error :user-exists
          :user user})))
 
   (create-user! [component user]
+    (infof "create user %s %s" (into {} component) user)
     (or
      (check-create-user component user)
      (do
