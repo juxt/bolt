@@ -45,8 +45,6 @@
                    user-store {:email "bob@example.org"
                                :password (hash-password password-hasher "bob")
                                :roles #{:user}}))
-
-         (println "email user store is now " (-> user-store :storage :ref deref))
          component)
 
   (stop [component] component)
