@@ -18,7 +18,9 @@
    [schema.core :as s]
    [schema.utils :refer [class-schema]]
    [hiccup.core :refer (html)]
-   [bolt.dev.view :refer (page-body page)]))
+   [bolt.dev.view :refer (page-body page)]
+   bolt.schema)
+  (:import [modular.bidi Router]))
 
 (s/defrecord Example
     [kns :- s/Str
@@ -26,15 +28,12 @@
      session-store :- (s/protocol SessionStore)
      user-store :- (s/protocol UserStore)
      password-hasher :- (s/protocol UserPasswordHasher)
-     uri-context :- String
-
-     ;; Co-dependencies
-     *template-model
-     *router]
+     uri-context :- s/Str
+     *template-model :- (bolt.schema/codep (s/protocol TemplateModel))
+     *router :- (bolt.schema/codep Router)]
 
   Lifecycle
   (start [component]
-         (s/validate (class-schema (type component)) component)
 
          ;; Add some users
          (println "Create alice"
@@ -108,9 +107,6 @@
 
 (defn new-example [& {:as args}]
   (->
-   (->> args
-        (merge {})
-        (s/validate {:uri-context s/Str :kns s/Str})
-        (map->Example))
+   (map->Example (merge {} args))
    (using [:templater :session-store :user-store])
    (co-using [:router :template-model])))

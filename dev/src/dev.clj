@@ -11,7 +11,8 @@
    [modular.component.co-dependency :as co-dependency]
    [bolt.dev.system :refer (config new-system-map new-dependency-map new-co-dependency-map)]
    [modular.maker :refer (make)]
-   [bidi.bidi :as bidi]))
+   [bidi.bidi :as bidi]
+   [schema.core :as s]))
 
 (def system nil)
 
@@ -34,13 +35,27 @@
   (alter-var-root #'system
     (constantly (new-dev-system))))
 
+(defn check
+  "Check for component validation errors"
+  []
+  (let [errors
+        (->> system
+             (reduce-kv
+              (fn [acc k v]
+                (assoc acc k (s/check (type v) v)))
+              {})
+             (filter (comp some? second)))]
+
+    (when (seq errors) (into {} errors))))
+
 (defn start
   "Starts the current development system."
   []
   (alter-var-root
    #'system
    co-dependency/start-system
-))
+   )
+  (when-let [errors (check)] (println "System validation errors:" errors)))
 
 (defn stop
   "Shuts down and destroys the current development system."
