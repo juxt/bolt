@@ -15,6 +15,7 @@
    [bolt.dev.database :refer (new-database)]
    [bolt.dev.example1 :refer (new-example)]
    [bolt.dev.login-form :refer (new-login-form)]
+   [bolt.dev.seeder :refer (new-user-seeder)]
 
    [bolt.session.cookie-session-store :refer (new-cookie-session-store)]
    [bolt.token-store.atom-backed-store :refer (new-atom-backed-token-store)]
@@ -117,9 +118,12 @@
      :example1a/buddy-user-authenticator (new-buddy-user-authenticator)
      :example1a/atom-storage (new-atom-storage)
      :example1a/login-form (new-login-form)
-     :example1a/template-model (new-aggregate-template-model))))
+     :example1a/template-model (new-aggregate-template-model)
 
-(defn example1b-components [system config]
+     :example1a/seeder (new-user-seeder)
+)))
+
+#_(defn example1b-components [system config]
   (let [tag-ns "example1b"
         uri-context (str "/" tag-ns)]
     (assoc
@@ -135,7 +139,16 @@
      :example1b/buddy-user-authenticator (new-buddy-user-authenticator)
      :example1b/atom-storage (new-atom-storage)
      :example1b/login-form (new-login-form)
-     :example1b/template-model (new-aggregate-template-model))))
+     :example1b/template-model (new-aggregate-template-model)
+
+     :example1b/seeder (new-user-seeder
+                        :users [{:email "alice@example.org"
+                                 :password "wonderland"
+                                 :roles #{:superuser}}
+                                {:email "bob@example.org"
+                                 :password "bob"
+                                 :roles #{:user}}])
+     )))
 
 (defn new-system-map
   [config]
@@ -147,29 +160,31 @@
         (router-components config)
         (http-server-components config)
         (example1a-components config)
-        (example1b-components config)
+        #_(example1b-components config)
         (assoc :redirect (new-redirect :from "/" :to :bolt.dev.website/index))
         ))))
 
 (def example1a-dependencies
   {:dependencies
    {:example1a {:templater :clostache-templater
-               :session-store :example1a/session-store
-               :user-store :example1a/email-user-store
-               :password-hasher :example1a/buddy-user-authenticator}
+                :session-store :example1a/session-store}
     :example1a/template-model [:example1a]
+
 
     ;; These are the components to support security (login, etc.)
     :example1a/session-store {:token-store :example1a/token-store}
 
     :example1a/login {:user-store :example1a/email-user-store
-                     :user-authenticator :example1a/buddy-user-authenticator
-                     :session-store :example1a/session-store
-                     :renderer :example1a/login-form}
+                      :user-authenticator :example1a/buddy-user-authenticator
+                      :session-store :example1a/session-store
+                      :renderer :example1a/login-form}
 
     :example1a/login-form {:templater :clostache-templater}
 
-    :example1a/email-user-store {:storage :example1a/atom-storage}}
+    :example1a/email-user-store {:storage :example1a/atom-storage}
+
+    :example1a/seeder {:password-hasher :example1a/buddy-user-authenticator
+                       :user-store :example1a/email-user-store}}
 
    :co-dependencies
    {:example1a {:router :router
@@ -177,12 +192,13 @@
     :example1a/login-form {:template-model :example1a/template-model
                            :router :router}}})
 
-(def example1b-dependencies
+#_(def example1b-dependencies
   {:dependencies
    {:example1b {:templater :clostache-templater
                :session-store :example1b/session-store
                :user-store :example1b/email-user-store
-               :password-hasher :example1b/buddy-user-authenticator}
+                ;;:password-hasher :example1b/buddy-user-authenticator
+                }
     :example1b/template-model [:example1b]
 
     ;; These are the components to support security (login, etc.)
@@ -215,13 +231,13 @@
              :redirect
              :example1a
              :example1a/login
-             :example1b
-             :example1b/login]
+             #_:example1b
+             #_:example1b/login]
     :user-guide {:templater :clostache-templater}
     :website {:templater :clostache-templater}}
 
    (:dependencies example1a-dependencies)
-   (:dependencies example1b-dependencies)))
+   #_(:dependencies example1b-dependencies)))
 
 (defn new-co-dependency-map
   []
@@ -229,7 +245,7 @@
    {:website {:router :router}
     :user-guide {:router :router}}
    (:co-dependencies example1a-dependencies)
-   (:co-dependencies example1b-dependencies)))
+   #_(:co-dependencies example1b-dependencies)))
 
 (defn new-production-system
   "Create the production system"

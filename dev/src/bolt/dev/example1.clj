@@ -8,8 +8,6 @@
    [bolt.user.protocols :refer (LoginFormRenderer UserFormRenderer)]
    [bolt.session :refer (session)]
    [bolt.session.protocols :refer (SessionStore)]
-   [bolt.user.protocols :refer (UserStore UserPasswordHasher)]
-   [bolt.user :refer (create-user! hash-password)]
    [modular.bidi :refer (as-request-handler path-for)]
    [modular.component.co-dependency :refer (co-using)]
    [modular.template :as template :refer (render-template template-model Templater TemplateModel)]
@@ -27,29 +25,9 @@
      tag-ns :- s/Str
      templater :- (s/protocol Templater)
      session-store :- (s/protocol SessionStore)
-     user-store :- (s/protocol UserStore)
-     password-hasher :- (s/protocol UserPasswordHasher)
      uri-context :- s/Str
      *template-model :- (bolt.schema/co-dep (s/protocol TemplateModel))
      *router :- (bolt.schema/co-dep Router)]
-
-  Lifecycle
-  (start [component]
-
-         ;; Add some users
-         (println "Create alice"
-                  (create-user!
-                   user-store {:email "alice@example.org"
-                               :password (hash-password password-hasher "wonderland")
-                               :roles #{:superuser}}))
-         (println "Create bob"
-                  (create-user!
-                   user-store {:email "bob@example.org"
-                               :password (hash-password password-hasher "bob")
-                               :roles #{:user}}))
-         component)
-
-  (stop [component] component)
 
   RouteProvider
   (routes [_]
@@ -113,5 +91,5 @@
 (defn new-example [& {:as args}]
   (->
    (map->Example (merge {} args))
-   (using [:templater :session-store :user-store])
+   (using [:templater :session-store])
    (co-using [:router :template-model])))
