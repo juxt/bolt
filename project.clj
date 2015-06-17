@@ -9,7 +9,7 @@
   [[org.clojure/tools.logging "0.3.1"]
 
    [juxt.modular/bidi "0.9.2" :exclusions [bidi]]
-   [juxt.modular/ring "0.5.2"]
+   [juxt.modular/ring "0.5.3"]
    [juxt.modular/email "0.0.1"]
    [juxt.modular/co-dependency "0.2.0"]
 
@@ -18,9 +18,6 @@
 
    ;; Required for OAuth2/OpenID-Connect support
    [cheshire "5.4.0"]
-
-   [bidi "1.18.10" :exclusions [ring/ring-core
-                                org.clojure/tools.reader]]
 
    ;; Doesn't work with clojure 1.7.0-beta2
    #_[camel-snake-kebab "0.3.1"
@@ -60,20 +57,19 @@
          :dependencies
          [[org.clojure/clojure "1.7.0-beta2"]
 
-          [org.clojure/tools.logging "0.2.6"]
           [ch.qos.logback/logback-classic "1.0.7"
            :exclusions [org.slf4j/slf4j-api]]
           [org.slf4j/jul-to-slf4j "1.7.2"]
           [org.slf4j/jcl-over-slf4j "1.7.2"]
           [org.slf4j/log4j-over-slf4j "1.7.2"]
 
-          [com.stuartsierra/component "0.2.2"]
+          [com.stuartsierra/component "0.2.3"]
           [org.clojure/tools.namespace "0.2.5"]
 
           [markdown-clj "0.9.62"]
 
           [juxt.modular/aleph "0.0.8" :exclusions [manifold]]
-          [juxt.modular/bidi "0.9.2" :exclusions [bidi]]
+          [juxt.modular/bidi "0.9.3" :exclusions [bidi]]
           [juxt.modular/clostache "0.6.3"]
           [juxt.modular/co-dependency "0.2.0"]
           [juxt.modular/maker "0.5.0"]
