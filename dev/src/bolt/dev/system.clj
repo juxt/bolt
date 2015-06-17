@@ -18,6 +18,7 @@
    [bolt.dev.seeder :refer (new-user-seeder)]
 
    [bolt.session.cookie-session-store :refer (new-cookie-session-store)]
+   [bolt.session.jwt-session :refer (new-jwt-session)]
    [bolt.token-store.atom-backed-store :refer (new-atom-backed-token-store)]
    [bolt.user.login :refer (new-login)]
    [bolt.user.email-user-store :refer (new-email-user-store)]
@@ -126,8 +127,7 @@
                                  :roles #{:superuser}}
                                 {:email "bob@example.org"
                                  :password "bob"
-                                 :roles #{:user}}])
-)))
+                                 :roles #{:user}}]))))
 
 (defn example1b-components [system config]
   (let [tag-ns "example1b"
@@ -138,8 +138,7 @@
                  :title "Example 1b"
                  :tag-ns tag-ns
                  :uri-context uri-context)
-     :example1b/session-store (new-cookie-session-store :cookie-id tag-ns)
-     :example1b/token-store (new-atom-backed-token-store)
+     :example1b/session-store (new-jwt-session :cookie-id tag-ns)
      :example1b/login (new-login :uri-context uri-context :tag-ns tag-ns)
      :example1b/email-user-store (new-email-user-store)
      :example1b/buddy-user-authenticator (new-buddy-user-authenticator)
@@ -153,8 +152,7 @@
                                  :roles #{:superuser}}
                                 {:email "billy@example.org"
                                  :password "fish"
-                                 :roles #{:user}}])
-     )))
+                                 :roles #{:user}}]))))
 
 (defn new-system-map
   [config]
@@ -204,9 +202,6 @@
                 :session-store :example1b/session-store
                 }
     :example1b/template-model [:example1b]
-
-    ;; These are the components to support security (login, etc.)
-    :example1b/session-store {:token-store :example1b/token-store}
 
     :example1b/login {:user-store :example1b/email-user-store
                       :user-authenticator :example1b/buddy-user-authenticator
