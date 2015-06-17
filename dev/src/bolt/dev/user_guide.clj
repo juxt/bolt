@@ -166,10 +166,10 @@
        [[".html"
          (->
           (yada
-           :body {"text/html"
-                  (fn [ctx]
-                    (let [config {:prefix prefix :ext-prefix ext-prefix}]
-                      (body component (post-process-doc component xbody config) config)))})
+           (fn [ctx]
+             (let [config {:prefix prefix :ext-prefix ext-prefix}]
+               (body component (post-process-doc component xbody config) config)))
+           {:produces ["text/html;charset=utf-8"]})
           (tag ::user-guide))]
         ]])))
 

@@ -12,19 +12,18 @@
 
 (defn index [{:keys [*router templater]}]
   (yada
-   :body
-   {"text/html"
-    (fn [ctx]
-      (render-template
-       templater
-       "templates/page.html.mustache"
-       {:content
-        (html
-         [:div.container
-          [:h2 "Welcome to " [:span.bolt "bolt"] "!"]
-          [:ol
-           [:li [:a {:href (path-for @*router :bolt.dev.user-guide/user-guide)}
-                 "User guide"]]]])}))}))
+   (fn [ctx]
+     (render-template
+      templater
+      "templates/page.html.mustache"
+      {:content
+       (html
+        [:div.container
+         [:h2 "Welcome to " [:span.bolt "bolt"] "!"]
+         [:ol
+          [:li [:a {:href (path-for @*router :bolt.dev.user-guide/user-guide)}
+                "User guide"]]]])}))
+   {:produces ["text/html;charset=utf-8"]}))
 
 (defrecord Website [*router templater]
   RouteProvider
