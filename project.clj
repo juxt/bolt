@@ -65,6 +65,7 @@
 
           [com.stuartsierra/component "0.2.3"]
           [org.clojure/tools.namespace "0.2.5"]
+          [org.clojure/tools.reader "0.9.2"]
 
           [markdown-clj "0.9.62"]
 
