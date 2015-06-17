@@ -71,6 +71,9 @@
 
 (def new-cookie-session-store-schema {:cookie-id s/Str})
 
+;; This is only a 'cookie' session store by virtue of the fact that it
+;; stores the session key in the cookie. The rest of the details go into
+;; the token-store. This is misleading. (TODO: rename this component)
 (defn new-cookie-session-store [& {:as opts}]
   (->> opts
        (merge {:cookie-id "session-id"})
