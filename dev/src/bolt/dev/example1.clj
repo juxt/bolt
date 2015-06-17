@@ -29,8 +29,8 @@
      user-store :- (s/protocol UserStore)
      password-hasher :- (s/protocol UserPasswordHasher)
      uri-context :- s/Str
-     *template-model :- (bolt.schema/codep (s/protocol TemplateModel))
-     *router :- (bolt.schema/codep Router)]
+     *template-model :- (bolt.schema/co-dep (s/protocol TemplateModel))
+     *router :- (bolt.schema/co-dep Router)]
 
   Lifecycle
   (start [component]

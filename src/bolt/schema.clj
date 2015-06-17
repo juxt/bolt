@@ -5,7 +5,7 @@
    schema.utils schema.macros
    [schema.core :as s]))
 
-(defrecord Codependency [schema]
+(defrecord Co-dependency [schema]
   s/Schema
   (s/walker [this]
     (let [sub-walker (s/subschema-walker schema)]
@@ -17,5 +17,5 @@
 
   (s/explain [this] this))
 
-(defn codep [schema]
-  (->Codependency schema))
+(defn co-dep [schema]
+  (->Co-dependency schema))
