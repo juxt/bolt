@@ -13,8 +13,7 @@
    templater
    "templates/example1/page.html.mustache"
    (merge model
-          {:title "Example 1"
-           :content
+          {:content
            (render-template
             templater
             template

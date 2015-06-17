@@ -50,6 +50,12 @@
     <!-- There should be content here -->
     <div class="container">
       {{{content}}}
+
+      <div class="footer">
+        {{#links}}
+        <a href="{{href}}">{{label}}</a> &nbsp;&nbsp;
+        {{/links}}
+      </div>
     </div>
 
     <!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->

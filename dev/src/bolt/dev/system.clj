@@ -102,13 +102,17 @@
           :port 8084)))
 
 (defn example1a-components [system config]
-  (let [uri-context "/example1a"]
+  (let [tag-ns "example1a"
+        uri-context (str "/" tag-ns)]
     (assoc
      system
-     :example1a (bolt.dev.example1/new-example :kns "example1a" :uri-context uri-context)
+     :example1a (bolt.dev.example1/new-example
+                 :title "Example 1a"
+                 :tag-ns tag-ns
+                 :uri-context uri-context)
      :example1a/session-store (new-cookie-session-store)
      :example1a/token-store (new-atom-backed-token-store)
-     :example1a/login (new-login :uri-context uri-context)
+     :example1a/login (new-login :uri-context uri-context :tag-ns tag-ns)
      :example1a/email-user-store (new-email-user-store)
      :example1a/buddy-user-authenticator (new-buddy-user-authenticator)
      :example1a/atom-storage (new-atom-storage)
@@ -116,13 +120,17 @@
      :example1a/template-model (new-aggregate-template-model))))
 
 (defn example1b-components [system config]
-  (let [uri-context "/example1b"]
+  (let [tag-ns "example1b"
+        uri-context (str "/" tag-ns)]
     (assoc
      system
-     :example1b (bolt.dev.example1/new-example :kns "example1b" :uri-context uri-context)
+     :example1b (bolt.dev.example1/new-example
+                 :title "Example 1b"
+                 :tag-ns tag-ns
+                 :uri-context uri-context)
      :example1b/session-store (new-cookie-session-store)
      :example1b/token-store (new-atom-backed-token-store)
-     :example1b/login (new-login :uri-context uri-context)
+     :example1b/login (new-login :uri-context uri-context :tag-ns tag-ns)
      :example1b/email-user-store (new-email-user-store)
      :example1b/buddy-user-authenticator (new-buddy-user-authenticator)
      :example1b/atom-storage (new-atom-storage)

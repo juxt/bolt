@@ -31,12 +31,13 @@
      session-store :- (s/protocol SessionStore)
      renderer :- (s/protocol p/LoginFormRenderer)
      uri-context :- s/Str
+     tag-ns :- s/Str
      *router :- (bolt.schema/co-dep Router)]
 
   AuthenticationHandshake
   (initiate-authentication-handshake [component req]
     (assert (:routes @*router))
-    (if-let [p (path-for @*router ::login-form)]
+    (if-let [p (path-for @*router (keyword tag-ns "login-form"))]
       (let [loc (str p (as-query-string {"post_login_redirect" (URLEncoder/encode (uri-with-qs req))}))]
         (debugf "Redirecting to %s" loc)
         (redirect loc))
@@ -49,6 +50,11 @@
   RouteProvider
   (routes [component]
     [uri-context
+     ;; Author's note: In retrospect perhaps it is better for Bolt NOT
+     ;; to provide a login-form + pluggable renderer and instead insist
+     ;; the user provide one. The user can provide one that posts to the
+     ;; POST handler, which is the primary purpose of this
+     ;; component. TODO: Break up this design.
      {"/login"
       {:get
        (->
@@ -61,11 +67,11 @@
                     renderer req
                     (merge
                      {:form (merge {:method :post
-                                    :action (path-for @*router ::process-login-attempt)})
+                                    :action (path-for @*router (keyword tag-ns "process-login-attempt"))})
                       :login-failed? (Boolean/valueOf (get qparams "login_failed"))}
                      (when post-login-redirect {:post-login-redirect post-login-redirect})))}))
         wrap-schema-validation
-        (tag ::login-form)
+        (tag (keyword tag-ns "login-form"))
         )
 
        :post
@@ -97,7 +103,7 @@
 
               ;; Login failed!
               (redirect-after-post
-               (str (path-for @*router ::login-form)
+               (str (path-for @*router (keyword tag-ns "login-form"))
                     ;; We must be careful to add back the query string
                     (as-query-string
                      (merge
@@ -107,7 +113,7 @@
                       {"login_failed" true}
                       )))))))
         wrap-schema-validation
-        (tag ::process-login-attempt)
+        (tag (keyword tag-ns "process-login-attempt"))
         )}
 
       "/logout"
@@ -118,15 +124,14 @@
                 post-logout-redirect (get qparams "post_logout_redirect")]
             (respond-close-session! session-store req (redirect post-logout-redirect))))
         wrap-schema-validation
-        (tag ::logout)
+        (tag (keyword tag-ns "logout"))
         )}
       }]))
 
 (defn new-login [& {:as opts}]
   (->> opts
-       (merge {:uri-context ""})
-       (s/validate {:uri-context s/Str})
+       (merge {:uri-context ""
+               :tag-ns (str *ns*)})
        map->Login
        (<- (using [:user-store :user-authenticator :session-store :renderer]))
-       (<- (co-using [:router]))
-       ))
+       (<- (co-using [:router]))))

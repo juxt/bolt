@@ -23,7 +23,8 @@
   (:import [modular.bidi Router]))
 
 (s/defrecord Example
-    [kns :- s/Str
+    [title :- s/Str
+     tag-ns :- s/Str
      templater :- (s/protocol Templater)
      session-store :- (s/protocol SessionStore)
      user-store :- (s/protocol UserStore)
@@ -55,12 +56,12 @@
           [(str uri-context)
            {"/index.html"
             (-> (page "templates/example1/index.html.mustache" templater *template-model *router session-store)
-                (tag (keyword kns "index")))
+                (tag (keyword tag-ns "index")))
             "/protected.html"
             (-> (page "templates/example1/protected.html.mustache" templater *template-model *router session-store)
-                (tag (keyword kns "protected")))
-            "" (redirect (keyword kns "index"))
-            "/" (redirect (keyword kns "index"))}])
+                (tag (keyword tag-ns "protected")))
+            "" (redirect (keyword tag-ns "index"))
+            "/" (redirect (keyword tag-ns "index"))}])
 
   UserFormRenderer
   (render-signup-form
@@ -91,18 +92,22 @@
   (template-model
    [component req]
    (let [login-href
-         (when-let [path (path-for @*router :bolt.user.login/login-form)]
-           (str path "?post_login_redirect=" (path-for @*router (keyword kns "index"))))
+         (when-let [path (path-for @*router (keyword tag-ns "login-form"))]
+           (str path "?post_login_redirect=" (path-for @*router (keyword tag-ns "index"))))
          logout-href
-         (when-let [path (path-for @*router :bolt.user.login/logout)]
-           (str path "?post_logout_redirect=" (path-for @*router (keyword kns "index"))))]
+         (when-let [path (path-for @*router (keyword tag-ns "logout"))]
+           (str path "?post_logout_redirect=" (path-for @*router (keyword tag-ns "index"))))]
 
      (assert login-href "No href to login. Check system dependencies.")
      (assert logout-href "No href to logout. Check system dependencies.")
 
-     {:menu []
+     {:title title
+      :menu []
       :login-href login-href
       :logout-href logout-href
+      :links [{:label "Home" :href (path-for @*router :bolt.dev.website/index)}
+              {:label "User Guide" :href (path-for @*router :bolt.dev.user-guide/user-guide)}]
+
       })))
 
 (defn new-example [& {:as args}]
