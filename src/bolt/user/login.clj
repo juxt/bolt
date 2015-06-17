@@ -17,25 +17,21 @@
    [plumbing.core :refer (<-)]
    [com.stuartsierra.component :refer (Lifecycle using)]
    [schema.core :as s]
+   bolt.schema
    [modular.component.co-dependency :refer (co-using)])
-  (:import (java.net URLEncoder)))
+  (:import [java.net URLEncoder]
+           [modular.bidi Router]))
 
 (defn email? [s]
   (re-matches #".+@.+" s))
 
-(defrecord Login [user-store user-authenticator session-store renderer uri-context *router]
-  Lifecycle
-  (start [component]
-    (s/validate
-     {:user-store (s/protocol p/UserStore)
-      :user-authenticator (s/protocol p/UserAuthenticator)
-      :session-store (s/protocol SessionStore)
-      :renderer (s/protocol p/LoginFormRenderer)
-      :uri-context s/Str
-      :*router s/Any ;; you can't get specific protocol of a codependency in start time
-      }
-     component))
-  (stop [component] component)
+(s/defrecord Login
+    [user-store :- (s/protocol p/UserStore)
+     user-authenticator :- (s/protocol p/UserAuthenticator)
+     session-store :- (s/protocol SessionStore)
+     renderer :- (s/protocol p/LoginFormRenderer)
+     uri-context :- s/Str
+     *router :- (bolt.schema/co-dep Router)]
 
   AuthenticationHandshake
   (initiate-authentication-handshake [component req]
