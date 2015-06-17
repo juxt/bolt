@@ -27,6 +27,7 @@
          [:h3 "Examples"]
          [:ol
           [:li [:a {:href (path-for @*router :example1a/index)} "Example 1a"]]
+          [:li [:a {:href (path-for @*router :example1b/index)} "Example 1b"]]
           ]
          ])}))
    {:produces ["text/html;charset=utf-8"]}))

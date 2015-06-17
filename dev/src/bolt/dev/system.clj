@@ -101,8 +101,8 @@
     (make new-webserver config
           :port 8084)))
 
-(defn example1-components [system config]
-  (let [uri-context "/example1"]
+(defn example1a-components [system config]
+  (let [uri-context "/example1a"]
     (assoc
      system
      :example1a (bolt.dev.example1/new-example :kns "example1a" :uri-context uri-context)
@@ -115,6 +115,20 @@
      :example1a/login-form (new-login-form)
      :example1a/template-model (new-aggregate-template-model))))
 
+(defn example1b-components [system config]
+  (let [uri-context "/example1b"]
+    (assoc
+     system
+     :example1b (bolt.dev.example1/new-example :kns "example1b" :uri-context uri-context)
+     :example1b/session-store (new-cookie-session-store)
+     :example1b/token-store (new-atom-backed-token-store)
+     :example1b/login (new-login :uri-context uri-context)
+     :example1b/email-user-store (new-email-user-store)
+     :example1b/buddy-user-authenticator (new-buddy-user-authenticator)
+     :example1b/atom-storage (new-atom-storage)
+     :example1b/login-form (new-login-form)
+     :example1b/template-model (new-aggregate-template-model))))
+
 (defn new-system-map
   [config]
   (apply system-map
@@ -124,11 +138,12 @@
         (website-components config)
         (router-components config)
         (http-server-components config)
-        (example1-components config)
+        (example1a-components config)
+        (example1b-components config)
         (assoc :redirect (new-redirect :from "/" :to :bolt.dev.website/index))
         ))))
 
-(def example1-dependencies
+(def example1a-dependencies
   {:dependencies
    {:example1a {:templater :clostache-templater
                :session-store :example1a/session-store
@@ -154,6 +169,32 @@
     :example1a/login-form {:template-model :example1a/template-model
                            :router :router}}})
 
+(def example1b-dependencies
+  {:dependencies
+   {:example1b {:templater :clostache-templater
+               :session-store :example1b/session-store
+               :user-store :example1b/email-user-store
+               :password-hasher :example1b/buddy-user-authenticator}
+    :example1b/template-model [:example1b]
+
+    ;; These are the components to support security (login, etc.)
+    :example1b/session-store {:token-store :example1b/token-store}
+
+    :example1b/login {:user-store :example1b/email-user-store
+                     :user-authenticator :example1b/buddy-user-authenticator
+                     :session-store :example1b/session-store
+                     :renderer :example1b/login-form}
+
+    :example1b/login-form {:templater :clostache-templater}
+
+    :example1b/email-user-store {:storage :example1b/atom-storage}}
+
+   :co-dependencies
+   {:example1b {:router :router
+                :template-model :example1b/template-model}
+    :example1b/login-form {:template-model :example1b/template-model
+                           :router :router}}})
+
 (defn new-dependency-map
   []
   (merge
@@ -165,18 +206,22 @@
              :highlight-js-resources
              :redirect
              :example1a
-             :example1a/login]
+             :example1a/login
+             :example1b
+             :example1b/login]
     :user-guide {:templater :clostache-templater}
     :website {:templater :clostache-templater}}
 
-   (:dependencies example1-dependencies)))
+   (:dependencies example1a-dependencies)
+   (:dependencies example1b-dependencies)))
 
 (defn new-co-dependency-map
   []
   (merge
    {:website {:router :router}
     :user-guide {:router :router}}
-   (:co-dependencies example1-dependencies)))
+   (:co-dependencies example1a-dependencies)
+   (:co-dependencies example1b-dependencies)))
 
 (defn new-production-system
   "Create the production system"
