@@ -17,7 +17,7 @@
    [bolt.dev.login-form :refer (new-login-form)]
    [bolt.dev.seeder :refer (new-user-seeder)]
 
-   [bolt.session.cookie-session-store :refer (new-cookie-session-store)]
+   [bolt.session.cookie-session :refer (new-cookie-session)]
    [bolt.session.jwt-session :refer (new-jwt-session)]
    [bolt.token-store.atom-backed-store :refer (new-atom-backed-token-store)]
    [bolt.user.login :refer (new-login)]
@@ -112,7 +112,7 @@
                  :title "Example 1a"
                  :tag-ns tag-ns
                  :uri-context uri-context)
-     :example1a/session-store (new-cookie-session-store :cookie-id tag-ns)
+     :example1a/session (new-cookie-session :cookie-id tag-ns)
      :example1a/token-store (new-atom-backed-token-store)
      :example1a/login (new-login :uri-context uri-context :tag-ns tag-ns)
      :example1a/email-user-store (new-email-user-store)
@@ -138,7 +138,7 @@
                  :title "Example 1b"
                  :tag-ns tag-ns
                  :uri-context uri-context)
-     :example1b/session-store (new-jwt-session :cookie-id tag-ns)
+     :example1b/session (new-jwt-session :cookie-id tag-ns)
      :example1b/login (new-login :uri-context uri-context :tag-ns tag-ns)
      :example1b/email-user-store (new-email-user-store)
      :example1b/buddy-user-authenticator (new-buddy-user-authenticator)
@@ -171,16 +171,16 @@
 (def example1a-dependencies
   {:dependencies
    {:example1a {:templater :clostache-templater
-                :session-store :example1a/session-store}
+                :session :example1a/session}
     :example1a/template-model [:example1a]
 
 
     ;; These are the components to support security (login, etc.)
-    :example1a/session-store {:token-store :example1a/token-store}
+    :example1a/session {:token-store :example1a/token-store}
 
     :example1a/login {:user-store :example1a/email-user-store
                       :user-authenticator :example1a/buddy-user-authenticator
-                      :session-store :example1a/session-store
+                      :session :example1a/session
                       :renderer :example1a/login-form}
 
     :example1a/login-form {:templater :clostache-templater}
@@ -199,13 +199,13 @@
 (def example1b-dependencies
   {:dependencies
    {:example1b {:templater :clostache-templater
-                :session-store :example1b/session-store
+                :session :example1b/session
                 }
     :example1b/template-model [:example1b]
 
     :example1b/login {:user-store :example1b/email-user-store
                       :user-authenticator :example1b/buddy-user-authenticator
-                      :session-store :example1b/session-store
+                      :session :example1b/session
                       :renderer :example1b/login-form}
 
     :example1b/login-form {:templater :clostache-templater}

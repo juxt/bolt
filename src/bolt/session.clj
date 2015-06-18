@@ -15,8 +15,9 @@
 
 (s/defn stop-session! :- Response
   [component :- (s/protocol p/SessionLifecycle)
-   response :- Response]
-  (p/stop-session! component response))
+   response :- Response
+   data :- {s/Keyword s/Any}]
+  (p/stop-session! component response data))
 
 (s/defn session-data :- (s/maybe {s/Keyword s/Any})
   [component :- (s/protocol p/SessionData)

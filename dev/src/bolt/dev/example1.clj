@@ -7,7 +7,7 @@
    [com.stuartsierra.component :refer (using Lifecycle)]
    [bolt.user.protocols :refer (LoginFormRenderer UserFormRenderer)]
    [bolt.session :refer (session)]
-   [bolt.session.protocols :refer (SessionStore)]
+   [bolt.session.protocols :refer (SessionData SessionLifecycle)]
    [modular.bidi :refer (as-request-handler path-for)]
    [modular.component.co-dependency :refer (co-using)]
    [modular.template :as template :refer (render-template template-model Templater TemplateModel)]
@@ -24,7 +24,7 @@
     [title :- s/Str
      tag-ns :- s/Str
      templater :- (s/protocol Templater)
-     session-store :- (s/protocol SessionStore)
+     session :- (s/both (s/protocol SessionData) (s/protocol SessionLifecycle))
      uri-context :- s/Str
      *template-model :- (bolt.schema/co-dep (s/protocol TemplateModel))
      *router :- (bolt.schema/co-dep Router)]
@@ -33,10 +33,10 @@
   (routes [_]
           [(str uri-context)
            {"/index.html"
-            (-> (page "templates/example1/index.html.mustache" templater *template-model *router session-store)
+            (-> (page "templates/example1/index.html.mustache" templater *template-model *router session)
                 (tag (keyword tag-ns "index")))
             "/protected.html"
-            (-> (page "templates/example1/protected.html.mustache" templater *template-model *router session-store)
+            (-> (page "templates/example1/protected.html.mustache" templater *template-model *router session)
                 (tag (keyword tag-ns "protected")))
             "" (redirect (keyword tag-ns "index"))
             "/" (redirect (keyword tag-ns "index"))}])
@@ -91,5 +91,5 @@
 (defn new-example [& {:as args}]
   (->
    (map->Example (merge {} args))
-   (using [:templater :session-store])
+   (using [:templater :session])
    (co-using [:router :template-model])))

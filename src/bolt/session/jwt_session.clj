@@ -12,7 +12,7 @@
                                      (merge-with merge response
                                                  {:cookies {cookie-id {:value (jws/sign data "secret")
                                                                        :path "/"}}})))
-  (stop-session! [_ response]
+  (stop-session! [_ response _]
                  (cookies-response
                   (merge-with merge response
                               {:cookies {cookie-id {:value ""
@@ -27,13 +27,13 @@
   SessionStore
   (session
    [_ request]
-   (throw (ex-info "Deprecated" {}))
+   (throw (ex-info "Deprecated: old SessionStore protocol" {}))
    (when-let [token (-> request cookies-request :cookies (get cookie-id) :value)]
      (jws/unsign token "secret")))
 
   (respond-close-session!
    [_ request response]
-   (throw (ex-info "Deprecated" {}))
+   (throw (ex-info "Deprecated: old SessionStore protocol" {}))
    (cookies-response
     (merge-with merge response
                 {:cookies {cookie-id {:value ""
@@ -42,7 +42,7 @@
 
   (respond-with-new-session!
    [_ request data response]
-   (throw (ex-info "Deprecated" {}))
+   (throw (ex-info "Deprecated: old SessionStore protocol" {}))
    (cookies-response
     (merge-with merge response
                 {:cookies {cookie-id {:value (jws/sign data "secret")
@@ -50,7 +50,7 @@
 
   (assoc-session-data!
    [_ req m]
-   (throw (ex-info "Deprecated" {}))
+   (throw (ex-info "Deprecated: old SessionStore protocol" {}))
    (throw (ex-info "TODO: Assoc new data and resign" {}))))
 
 (defn new-jwt-session [& {:as opts}]

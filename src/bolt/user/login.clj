@@ -6,8 +6,10 @@
    [clojure.string :as string]
    [bolt.user.protocols :as p]
    [bolt.authentication.protocols :refer (RequestAuthenticator AuthenticationHandshake)]
-   [bolt.session :refer (session assoc-session-data! respond-with-new-session! respond-close-session!)]
-   [bolt.session.protocols :refer (SessionStore)]
+   ;;[bolt.session :refer (session assoc-session-data! respond-with-new-session! respond-close-session!)]
+   [bolt.session :refer (start-session! stop-session! session-data)]
+   ;;[bolt.session.protocols :refer (SessionStore)]
+   [bolt.session.protocols :refer (SessionLifecycle SessionData)]
    [bolt.user :refer (find-user render-login-form authenticate-user)]
    [bolt.util :refer (as-query-string uri-with-qs Request wrap-schema-validation keywordize-form)]
    [bidi.bidi :refer (RouteProvider tag)]
@@ -28,7 +30,7 @@
 (s/defrecord Login
     [user-store :- (s/protocol p/UserStore)
      user-authenticator :- (s/protocol p/UserAuthenticator)
-     session-store :- (s/protocol SessionStore)
+     session :- (s/both (s/protocol SessionData) (s/protocol SessionLifecycle))
      renderer :- (s/protocol p/LoginFormRenderer)
      uri-context :- s/Str
      tag-ns :- s/Str
@@ -45,7 +47,7 @@
 
   RequestAuthenticator
   (authenticate [component req]
-    (session session-store req))
+                (session-data session req))
 
   RouteProvider
   (routes [component]
@@ -83,7 +85,7 @@
                 password (get form :password)
                 post-login-redirect (get form :post-login-redirect)
 
-                session (session session-store req)
+                ;;session (session-data session req)
                 user (find-user user-store id)
                 authentication (when user (authenticate-user user-authenticator user {:password password}))]
 
@@ -91,15 +93,16 @@
               ;; Login successful!
               (do
                 (debugf "Login successful!")
-                (respond-with-new-session!
-                 session-store req
+                (start-session!
+                 session
+                 (if post-login-redirect
+                   (redirect-after-post post-login-redirect)
+                   {:status 200 :body "Login successful"})
                  {:bolt/user user
                   ;; It might be useful to store the results of the
                   ;; authentication (which could be signed)
                   :bolt/authentication authentication}
-                 (if post-login-redirect
-                   (redirect-after-post post-login-redirect)
-                   {:status 200 :body "Login successful"})))
+                 ))
 
               ;; Login failed!
               (redirect-after-post
@@ -122,7 +125,7 @@
         (fn [req]
           (let [qparams (-> req params-request :query-params)
                 post-logout-redirect (get qparams "post_logout_redirect")]
-            (respond-close-session! session-store req (redirect post-logout-redirect))))
+            (stop-session! session (redirect post-logout-redirect) (session-data session req))))
         wrap-schema-validation
         (tag (keyword tag-ns "logout"))
         )}
@@ -133,5 +136,5 @@
        (merge {:uri-context ""
                :tag-ns (str *ns*)})
        map->Login
-       (<- (using [:user-store :user-authenticator :session-store :renderer]))
+       (<- (using [:user-store :user-authenticator :session :renderer]))
        (<- (co-using [:router]))))

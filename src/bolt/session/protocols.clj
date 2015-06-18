@@ -3,11 +3,11 @@
 (defprotocol SessionLifecycle
   "Start and stop sessions."
   (start-session! [_ response data] "Start a session containing the map of data given. Return a modified Ring response (derived from the given original response), encoding the session token, key, handle or data. The session material may be embedded in a Set-Cookie or other response header.")
-  (stop-session! [_ response] "Stop a session. Return a modified Ring response (derived from the given original response), representing the cookies you want to delete."))
+  (stop-session! [_ response data] "Stop a session. Return a modified Ring response (derived from the given original response) which will invalidate the browser session. The existing session data is passed, which may be necessary in order to locate the session material to delete."))
 
 (defprotocol SessionData
   "Establish session data, given a request."
-  (session-data [_ request] "Extract session data, returned as a map, from the given request. If necessary, verify the request is authentic to prevent forgery. If it isn't valid, return nil. Throw an exception to indicate a potential attack."))
+  (session-data [_ request] "Extract session data, returned as a map, from the given request. Include in the data any key necessary to invalidate the session, if required. If necessary, verify the request is authentic to prevent forgery. If it isn't valid, return nil. Throw an exception to indicate a potential attack."))
 
 
 ;; Deprecated
