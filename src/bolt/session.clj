@@ -19,7 +19,7 @@
   (p/stop-session! component response))
 
 (s/defn session-data :- (s/maybe {s/Keyword s/Any})
-  [component :- (s/protocol p/SessionDecoder)
+  [component :- (s/protocol p/SessionData)
    request ;; :- Request
    ]
   (p/session-data component request))

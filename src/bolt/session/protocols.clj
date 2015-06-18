@@ -5,8 +5,8 @@
   (start-session! [_ response data] "Start a session containing the map of data given. Return a modified Ring response (derived from the given original response), encoding the session token, key, handle or data. The session material may be embedded in a Set-Cookie or other response header.")
   (stop-session! [_ response] "Stop a session. Return a modified Ring response (derived from the given original response), representing the cookies you want to delete."))
 
-(defprotocol SessionDecoder
-  "Extracts session data from a request."
+(defprotocol SessionData
+  "Establish session data, given a request."
   (session-data [_ request] "Extract session data, returned as a map, from the given request. If necessary, verify the request is authentic to prevent forgery. If it isn't valid, return nil. Throw an exception to indicate a potential attack."))
 
 
