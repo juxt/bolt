@@ -7,6 +7,25 @@
    [bolt.util :refer (Request Response)]
    [schema.core :as s]))
 
+(s/defn start-session! :- Response
+  [component :- (s/protocol p/SessionLifecycle)
+   response :- Response
+   data :- {s/Keyword s/Any}]
+  (p/start-session! component response data))
+
+(s/defn stop-session! :- Response
+  [component :- (s/protocol p/SessionLifecycle)
+   response :- Response]
+  (p/stop-session! component response))
+
+(s/defn session-data :- (s/maybe {s/Keyword s/Any})
+  [component :- (s/protocol p/SessionDecoder)
+   request ;; :- Request
+   ]
+  (p/session-data component request))
+
+;; Deprecated
+
 (s/defn session :- (s/maybe {s/Keyword s/Any})
   [component :- (s/protocol p/SessionStore)
    request ;; :- Request
