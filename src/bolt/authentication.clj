@@ -6,8 +6,6 @@
    [clojure.tools.logging :refer :all]
    [bolt.authentication.protocols :as p]
    [bolt.util :refer (Request Response)]
-   [bolt.session :refer (session)]
-   [bolt.session.protocols :refer (SessionStore)]
    [schema.core :as s]
    [com.stuartsierra.component :refer (using)]
    [plumbing.core :refer (<-)]))
