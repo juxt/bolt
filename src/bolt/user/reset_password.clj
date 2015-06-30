@@ -5,8 +5,6 @@
    [clojure.tools.logging :refer :all]
    [com.stuartsierra.component :as component :refer (using)]
    [bolt.session.protocols :refer (session assoc-session-data! respond-with-new-session!)]
-   [bolt.user.protocols :refer (LoginFormRenderer UserFormRenderer)]
-   [bolt.user :refer (render-reset-password-request-form render-reset-password-email-message render-reset-password-link-sent-response render-password-reset-form render-password-changed-response hash-password)]
    [bolt.token-store :refer (create-token! get-token-by-id purge-token!)]
    [bolt.util :refer (absolute-uri absolute-prefix as-query-string wrap-schema-validation)]
    [hiccup.core :refer (html)]
@@ -27,8 +25,8 @@
      {"request-reset-password"
       {
        ;; GET: show the find by user form to reset the password
-       :get
-       (->
+       #_:get
+       #_(->
         (fn [req]
           {:status 200
            :body (render-reset-password-request-form
@@ -53,7 +51,8 @@
               (let [code (str (java.util.UUID/randomUUID))]
                 (debugf "Found user: %s" user)
                 (create-token! verification-code-store code user)
-                (send-email!
+
+                #_(send-email!
                  emailer (merge
                           {:to email}
                           (render-reset-password-email-message
@@ -62,12 +61,14 @@
                                    (absolute-prefix req)
                                    (path-for @*router ::reset-password-form)
                                    (as-query-string {"code" code}))})))
-                (->>
+
+                #_(->>
                  (response
                   (render-reset-password-link-sent-response
                    renderer req {:email email}))
                  (respond-with-new-session! session-store req {})))
 
+              ;; Otherwise
               (redirect (format "%s?unknown-email=%s"
                                 (path-for @*router ::request-reset-password-form)
                                 email)))))
@@ -76,8 +77,8 @@
         )}
 
       "reset-password"
-      {:get
-       (->
+      {#_:get
+       #_(->
         (fn [req]
           (let [params (-> req params-request :params)]
             (let [code (get params "code")
@@ -117,7 +118,7 @@
                  (:uid token)
                  (hash-password user-password-hasher pw))
                 (purge-token! (:verification-code-store this) token-id)
-                (response (render-password-changed-response renderer req {})))
+                (response "TODO" #_(render-password-changed-response renderer req {})))
 
               ;; TODO: Here's where we must display an error, via calling a protocol
               {:status 400 :body (format "ERROR: no such token for code: %s" token-id)})))

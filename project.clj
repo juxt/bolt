@@ -11,7 +11,7 @@
    [juxt.modular/bidi "0.9.2" :exclusions [bidi]]
    [juxt.modular/ring "0.5.3"]
    [juxt.modular/email "0.0.1"]
-   [juxt.modular/co-dependency "0.2.0"]
+   [juxt.modular/co-dependency "0.2.1"]
 
    [prismatic/schema "0.4.2"]
    [prismatic/plumbing "0.4.2"]
@@ -23,7 +23,7 @@
    #_[camel-snake-kebab "0.3.1"
     :exclusions [com.keminglabs/cljx]]
 
-   ;; We should probably replace clj-jwt with buddy
+   ;; We will soon replace clj-jwt with buddy
    [clj-jwt "0.0.8"
     ;; Important we exclude bc here otherwise get an
     ;; this exception:
@@ -66,13 +66,14 @@
           [com.stuartsierra/component "0.2.3"]
           [org.clojure/tools.namespace "0.2.5"]
           [org.clojure/tools.reader "0.9.2"]
+          [org.clojure/tools.trace "0.7.8"]
 
           [markdown-clj "0.9.62"]
 
           [juxt.modular/aleph "0.0.8" :exclusions [manifold]]
           [juxt.modular/bidi "0.9.3" :exclusions [bidi]]
           [juxt.modular/clostache "0.6.3"]
-          [juxt.modular/co-dependency "0.2.0"]
+          [juxt.modular/co-dependency "0.2.1"]
           [juxt.modular/maker "0.5.0"]
           [juxt.modular/test "0.1.0"]
           [juxt.modular/template "0.6.3"]

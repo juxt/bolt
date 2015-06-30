@@ -7,7 +7,7 @@
    [bolt.util :refer (Request Response)]
    [schema.core :as s]))
 
-(s/defn start-session! :- Response
+(s/defn ^{:doc ""} start-session! :- Response
   [component :- (s/protocol p/SessionLifecycle)
    response :- Response
    data :- {s/Keyword s/Any}]
@@ -16,7 +16,7 @@
 (s/defn stop-session! :- Response
   [component :- (s/protocol p/SessionLifecycle)
    response :- Response
-   data :- {s/Keyword s/Any}]
+   data :- (s/maybe {s/Keyword s/Any})]
   (p/stop-session! component response data))
 
 (s/defn session-data :- (s/maybe {s/Keyword s/Any})

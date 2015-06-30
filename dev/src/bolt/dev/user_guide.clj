@@ -169,7 +169,7 @@
            (fn [ctx]
              (let [config {:prefix prefix :ext-prefix ext-prefix}]
                (body component (post-process-doc component xbody config) config)))
-           {:produces ["text/html;charset=utf-8"]})
+           :produces "text/html")
           (tag ::user-guide))]
         ]])))
 

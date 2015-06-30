@@ -28,9 +28,9 @@
   (stop [component] component)
 
   Storage
-  (find-object [component qualifier]
-               (let [ks (keys qualifier)]
-                 (some (selector qualifier) @ref)))
+  (find-objects [component qualifier]
+                (let [ks (keys qualifier)]
+                  (filter (selector qualifier) @ref)))
 
   (store-object! [component object]
                  (dosync

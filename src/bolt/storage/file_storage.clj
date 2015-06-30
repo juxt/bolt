@@ -7,7 +7,7 @@
   bolt.storage.file-storage
   (:require
    [com.stuartsierra.component :refer (Lifecycle using)]
-   [bolt.storage.protocols :refer (Storage find-object store-object! delete-object!)]
+   [bolt.storage.protocols :refer (Storage find-objects store-object! delete-object!)]
    [bolt.storage.atom-storage :refer (new-atom-storage)]
    [clojure.java.io :as io]
    [clojure.pprint :refer (pprint)]
@@ -31,8 +31,8 @@
 
 (defrecord FileStorage [file seed atom-storage]
   Storage
-  (find-object [component qualifier]
-    (find-object atom-storage qualifier))
+  (find-objects [component qualifier]
+    (find-objects atom-storage qualifier))
 
   (store-object! [component object]
     (dosync

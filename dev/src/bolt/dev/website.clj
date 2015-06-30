@@ -30,7 +30,7 @@
           [:li [:a {:href (path-for @*router :example1b/index)} "Example 1b"]]
           ]
          ])}))
-   {:produces ["text/html;charset=utf-8"]}))
+   :produces "text/html"))
 
 (defrecord Website [*router templater]
   RouteProvider

@@ -4,8 +4,8 @@
   (:require
    [clojure.tools.logging :refer :all]
    [bolt.user :refer (check-create-user)]
-   [bolt.user.protocols :refer (UserStore)]
-   [bolt.storage.protocols :refer (find-object store-object!)]
+   [bolt.user.protocols :refer (UserStore UserStoreAdmin)]
+   [bolt.storage.protocols :refer (Storage find-objects store-object!)]
    [com.stuartsierra.component :refer (Lifecycle using)]
    [clojure.pprint :refer (pprint)]
    [clojure.java.io :as io]
@@ -16,19 +16,17 @@
 
 ;; This user store only looks for :email as the only identifier and
 ;; uniquely differentiating factor of a user.
-(defrecord EmailUserStore [storage]
+(s/defrecord EmailUserStore [storage :- (s/protocol Storage)]
 
   UserStore
   (check-create-user [component user]
     (let [user (select-keys user [:email])
-          existing (find-object storage user)]
-      (infof "check-create-user user %s existing %s" user existing)
+          existing (first (find-objects storage user))]
       (when existing
         {:error :user-exists
          :user user})))
 
   (create-user! [component user]
-    (infof "create user %s %s" (into {} component) user)
     (or
      (check-create-user component user)
      (do
@@ -36,7 +34,7 @@
        user)))
 
   (find-user [component id]
-    (find-object storage {:email id}))
+             (first (find-objects storage {:email id})))
 
   (update-user! [component id user]
     (throw (ex-info "TODO" {})))
@@ -45,7 +43,13 @@
     (throw (ex-info "TODO" {})))
 
   (verify-email! [_ email]
-    (throw (ex-info "TODO" {}))))
+    (throw (ex-info "TODO" {})))
+
+  UserStoreAdmin
+  (list-users [component]
+    (find-objects storage {}))
+
+  )
 
 (defn new-email-user-store [& {:as opts}]
   (->> opts

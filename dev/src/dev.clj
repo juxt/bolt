@@ -75,8 +75,6 @@
   (stop)
   (refresh :after 'dev/go))
 
-
-
 (defn routes []
   (-> system :router :routes))
 

@@ -14,7 +14,7 @@
    [bolt.dev.user-guide :refer (new-user-guide)]
    [bolt.dev.database :refer (new-database)]
    [bolt.dev.example1 :refer (new-example)]
-   [bolt.dev.login-form :refer (new-login-form)]
+;;   [bolt.dev.login-form :refer (new-login-form)]
    [bolt.dev.seeder :refer (new-user-seeder)]
 
    [bolt.session.cookie-session :refer (new-cookie-session)]
@@ -118,7 +118,7 @@
      :example1a/email-user-store (new-email-user-store)
      :example1a/buddy-user-authenticator (new-buddy-user-authenticator)
      :example1a/atom-storage (new-atom-storage)
-     :example1a/login-form (new-login-form)
+;;     :example1a/login-form (new-login-form)
      :example1a/template-model (new-aggregate-template-model)
 
      :example1a/seeder (new-user-seeder
@@ -143,7 +143,7 @@
      :example1b/email-user-store (new-email-user-store)
      :example1b/buddy-user-authenticator (new-buddy-user-authenticator)
      :example1b/atom-storage (new-atom-storage)
-     :example1b/login-form (new-login-form)
+;;     :example1b/login-form (new-login-form)
      :example1b/template-model (new-aggregate-template-model)
 
      :example1b/seeder (new-user-seeder
@@ -172,18 +172,15 @@
   {:dependencies
    {:example1a {:templater :clostache-templater
                 :session :example1a/session}
-    :example1a/template-model [:example1a]
-
 
     ;; These are the components to support security (login, etc.)
     :example1a/session {:token-store :example1a/token-store}
 
     :example1a/login {:user-store :example1a/email-user-store
                       :user-authenticator :example1a/buddy-user-authenticator
-                      :session :example1a/session
-                      :renderer :example1a/login-form}
+                      :session :example1a/session}
 
-    :example1a/login-form {:templater :clostache-templater}
+;;    :example1a/login-form {:templater :clostache-templater}
 
     :example1a/email-user-store {:storage :example1a/atom-storage}
 
@@ -191,24 +188,21 @@
                        :user-store :example1a/email-user-store}}
 
    :co-dependencies
-   {:example1a {:router :router
-                :template-model :example1a/template-model}
-    :example1a/login-form {:template-model :example1a/template-model
-                           :router :router}}})
+   {:example1a {:router :router}
+    ;;:example1a/login-form {:router :router}
+    }})
 
 (def example1b-dependencies
   {:dependencies
    {:example1b {:templater :clostache-templater
                 :session :example1b/session
                 }
-    :example1b/template-model [:example1b]
 
     :example1b/login {:user-store :example1b/email-user-store
                       :user-authenticator :example1b/buddy-user-authenticator
-                      :session :example1b/session
-                      :renderer :example1b/login-form}
+                      :session :example1b/session}
 
-    :example1b/login-form {:templater :clostache-templater}
+    ;;:example1b/login-form {:templater :clostache-templater}
 
     :example1b/email-user-store {:storage :example1b/atom-storage}
 
@@ -216,10 +210,10 @@
                        :user-store :example1b/email-user-store}}
 
    :co-dependencies
-   {:example1b {:router :router
-                :template-model :example1b/template-model}
-    :example1b/login-form {:template-model :example1b/template-model
-                           :router :router}}})
+   {:example1b {:router :router}
+    #_:example1b/login-form
+    #_{:template-model :example1b/template-model
+     :router :router}}})
 
 (defn new-dependency-map
   []
@@ -232,9 +226,12 @@
              :highlight-js-resources
              :redirect
              :example1a
-             :example1a/login
+             ;;:example1a/login
+             ;;:example1a/login-form
              :example1b
-             :example1b/login]
+;;             :example1b/login
+             ;;:example1b/login-form
+             ]
     :user-guide {:templater :clostache-templater}
     :website {:templater :clostache-templater}}
 
