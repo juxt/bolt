@@ -36,7 +36,7 @@
                  org.bouncycastle/bcprov-jdk15]]
 
    [buddy "0.5.5"]
-   [yada "0.5.0-SNAPSHOT"]
+   [yada "0.5.0-20150701.093250-1"]
    [clj-time "0.9.0"]
 
    ;; Possibly needed old dependencies

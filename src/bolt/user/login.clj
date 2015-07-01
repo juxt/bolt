@@ -80,6 +80,7 @@
                              (let [user (find-user user-store identity)
                                    authentication (when user (authenticate-user user-authenticator user {:password password}))]
                                (if (and user authentication)
+                                 ;; Login successful!
                                  (start-session!
                                   session
                                   (if redirect
@@ -88,7 +89,10 @@
                                   {:bolt/user user
                                    ;; It might be useful to store the results of the
                                    ;; authentication (which could be signed)
-                                   :bolt/authentication authentication})))))
+                                   :bolt/authentication authentication})
+                                 ;; Login failed!
+                                 (redirect-after-post "index.html"
+                                                      )))))
 
 
               #_(fn [req]
