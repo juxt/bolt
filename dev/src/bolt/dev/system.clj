@@ -178,6 +178,7 @@
 
     :example1a/login {:user-store :example1a/email-user-store
                       :user-authenticator :example1a/buddy-user-authenticator
+                      :password-hasher :example1a/buddy-user-authenticator
                       :session :example1a/session}
 
 ;;    :example1a/login-form {:templater :clostache-templater}
@@ -200,6 +201,7 @@
 
     :example1b/login {:user-store :example1b/email-user-store
                       :user-authenticator :example1b/buddy-user-authenticator
+                      :password-hasher :example1b/buddy-user-authenticator
                       :session :example1b/session}
 
     ;;:example1b/login-form {:templater :clostache-templater}

@@ -52,6 +52,8 @@
    evidence :- {s/Keyword s/Str}]
   (p/authenticate-user component user evidence))
 
+;; UserPasswordHasher API
+
 (s/defn hash-password :- s/Str
   [component :- (s/protocol p/UserPasswordHasher)
    password :- s/Str]

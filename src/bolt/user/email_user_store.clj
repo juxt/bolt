@@ -47,9 +47,7 @@
 
   UserStoreAdmin
   (list-users [component]
-    (find-objects storage {}))
-
-  )
+    (find-objects storage {})))
 
 (defn new-email-user-store [& {:as opts}]
   (->> opts
