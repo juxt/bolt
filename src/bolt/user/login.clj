@@ -14,7 +14,6 @@
    [modular.bidi :refer (path-for)]
    [ring.util.response :refer (redirect redirect-after-post)]
    [ring.middleware.params :refer (params-request)]
-   [plumbing.core :refer (<-)]
    [com.stuartsierra.component :refer (Lifecycle using)]
    [schema.core :as s]
    [yada.yada :refer (yada)]
