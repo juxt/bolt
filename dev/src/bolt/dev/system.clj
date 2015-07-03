@@ -23,7 +23,6 @@
    [bolt.user.login :refer (new-login)]
    [bolt.user.email-user-store :refer (new-email-user-store)]
    [bolt.user.buddy-user-authenticator :refer (new-buddy-user-authenticator)]
-   [bolt.storage.atom-storage :refer (new-atom-storage)]
 
    [modular.maker :refer (make)]
    [modular.bidi :refer (new-router new-web-resources new-archived-web-resources new-redirect)]
@@ -117,7 +116,7 @@
      :example1a/login (new-login :uri-context uri-context :tag-ns tag-ns)
      :example1a/email-user-store (new-email-user-store)
      :example1a/buddy-user-authenticator (new-buddy-user-authenticator)
-     :example1a/atom-storage (new-atom-storage)
+     :example1a/atom-storage (atom {})
 ;;     :example1a/login-form (new-login-form)
      :example1a/template-model (new-aggregate-template-model)
 
@@ -142,7 +141,7 @@
      :example1b/login (new-login :uri-context uri-context :tag-ns tag-ns)
      :example1b/email-user-store (new-email-user-store)
      :example1b/buddy-user-authenticator (new-buddy-user-authenticator)
-     :example1b/atom-storage (new-atom-storage)
+     :example1b/atom-storage (atom {})
 ;;     :example1b/login-form (new-login-form)
      :example1b/template-model (new-aggregate-template-model)
 

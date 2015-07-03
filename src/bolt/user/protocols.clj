@@ -5,14 +5,7 @@
 (defprotocol UserStore
   "A store for users that doesn't involve password hashing"
 
-  (check-create-user [_ user]
-    "Check the user can be created. E.g. username and/or email doesn't
-already exist, otherwise render an error page, all required fields in
-correct format, etc. All fields are sent apart from the password. This
-is exposed as a function so that it be used in form validation prior to
-submission. May return a (manifold) deferred for async.")
-
-  (create-user! [_ user]
+  (create-user! [_ id user]
     "Create the user. Implementations should call, and return the result
 of, create-user-error? prior to adding the user to storage. Returns the
 created user, perhaps with more information than the parameter

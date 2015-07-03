@@ -3,53 +3,49 @@
 (ns bolt.user.email-user-store
   (:require
    [clojure.tools.logging :refer :all]
-   [bolt.user :refer (check-create-user)]
    [bolt.user.protocols :refer (UserStore UserStoreAdmin)]
-   [bolt.storage.protocols :refer (Storage find-objects store-object!)]
+   [bolt.storage.protocols :refer (TreeStore)]
+   [bolt.storage :as st]
    [com.stuartsierra.component :refer (Lifecycle using)]
    [clojure.pprint :refer (pprint)]
    [clojure.java.io :as io]
    [clojure.tools.logging :refer :all]
    [schema.core :as s]
-   [plumbing.core :refer (<-)]
    ))
 
 ;; This user store only looks for :email as the only identifier and
 ;; uniquely differentiating factor of a user.
-(s/defrecord EmailUserStore [storage :- (s/protocol Storage)]
+(s/defrecord EmailUserStore [storage :- (s/protocol TreeStore)]
 
   UserStore
-  (check-create-user [component user]
-    (let [user (select-keys user [:email])
-          existing (first (find-objects storage user))]
-      (when existing
-        {:error :user-exists
-         :user user})))
+  (create-user!
+   [component email user]
+   (st/update-in storage [:users email]
+                 (fn [olduser]
+                   (if olduser
+                     (throw (ex-info "User already exists with given email" {:email email}))
+                     user))))
 
-  (create-user! [component user]
-    (or
-     (check-create-user component user)
-     (do
-       (store-object! storage user)
-       user)))
+  (find-user
+   [component email]
+   (st/get-in storage [:users email]))
 
-  (find-user [component id]
-             (first (find-objects storage {:email id})))
+  (update-user!
+   [component email user]
+   (st/update-in storage [:users email] (fn [u] (if u user (throw (ex-info "No user found" {:email email}))))))
 
-  (update-user! [component id user]
-    (throw (ex-info "TODO" {})))
+  (delete-user!
+   [_ email]
+   (st/update-in storage [:users] (fn [u] (dissoc u email))))
 
-  (delete-user! [_ id]
-    (throw (ex-info "TODO" {})))
-
-  (verify-email! [_ email]
-    (throw (ex-info "TODO" {})))
+  (verify-email!
+   [component email]
+   (st/update-in storage [:users email] (fn [u] (if u (assoc u :email-verified (java.util.Date.)) (throw (ex-info "No user found" {:email email}))))))
 
   UserStoreAdmin
-  (list-users [component]
-    (find-objects storage {})))
+  (list-users [component] (st/get-in storage [:users])))
 
 (defn new-email-user-store [& {:as opts}]
-  (->> opts
-       map->EmailUserStore
-       (<- (using [:storage]))))
+  (->
+   (map->EmailUserStore opts)
+   (using [:storage])))

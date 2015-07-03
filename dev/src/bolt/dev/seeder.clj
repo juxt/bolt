@@ -14,9 +14,9 @@
          (doseq [{:keys [email password roles]} users]
            (println "Creating user! " email)
            (create-user!
-            user-store {:email email
-                        :password (hash-password password-hasher password)
-                        :roles roles}))
+            user-store email {:email email
+                              :password (hash-password password-hasher password)
+                              :roles roles}))
 
          component)
   (stop [component] component))

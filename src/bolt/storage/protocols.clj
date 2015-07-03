@@ -1,5 +1,7 @@
 (ns bolt.storage.protocols
-  (:refer-clojure :exclude [get-in assoc-in update-in]))
+  (:refer-clojure :exclude [get-in assoc-in update-in])
+  (:require
+            [clojure.tools.logging :refer :all]))
 
 (defprotocol TreeStore
   "Trees are convenient storage containers. Ideally we'd have an
@@ -29,13 +31,11 @@
   (get-in [a ks] (clojure.core/get-in @a ks))
   (assoc-in [a ks v] (swap! a clojure.core/assoc-in ks v))
   (update-in [a ks f args]
-    (swap! a clojure.core/update-in ks (fn [v] (apply f v args)))))
-;; Deprecated
-
-(defprotocol Storage
-  ""
-  (find-objects [_ qualifier] "Find objects matching the qualifier")
-  (store-object! [_ object] "Store object (or objects, if sequence) in store")
-  (delete-object! [_ qualifier] "Delete objects matching the qualifier"))
-
-(defprotocol StorageWithExpiry)
+    (swap! a clojure.core/update-in ks (fn [v]
+                                         (apply f v args))))
+  clojure.lang.Ref
+  (get-in [r ks] (clojure.core/get-in @r ks))
+  (assoc-in [r ks v] (alter r clojure.core/assoc-in ks v))
+  (update-in [r ks f args]
+    (alter r clojure.core/update-in ks (fn [v]
+                                         (apply f v args)))))

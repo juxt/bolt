@@ -163,11 +163,12 @@
             ["/passwords/" [#"[\w\.\@\-\_\%]+" :identity]]
             (->
              (yada nil
-                   :parameters {:post {:path {:identity s/Str}
+                   :parameters {:post {:query {(s/optional-key :redirect) s/Str}
+                                       :path {:identity s/Str}
                                        :form {:password s/Str}}}
 
                    ;; This is a POST to ensure that it can be called via AJAX and traditional HTML forms
-                   :post! (fn [{{:keys [identity password] :as parameters} :parameters
+                   :post! (fn [{{:keys [redirect identity password] :as parameters} :parameters
                                req :request
                                :as ctx}]
 
@@ -185,16 +186,18 @@
                                 ;; It's not too late to send a 400 - we can do that via an exception
 
                                 (when (not= real-identity path-identity)
-                                  (throw (ex-info "TODO: Return a 400" {}))
-                                  )
-
+                                  (throw (ex-info "TODO: Return a 400" {})))
 
                                 (let [user (find-user user-store path-identity)]
 
                                   ;; TODO: Implement password policies
-                                  (update-user! user-store path-identity (assoc-in user [:password] (hash-password password-hasher password)))
+                                  (update-user! user-store path-identity
+                                                (assoc-in user [:password] (hash-password password-hasher password)))
 
-                                  {:status 200 :body (format "Password for %s reset succcessfully!" user)}
+                                  (if redirect
+                                    (redirect-after-post redirect)
+                                    {:status 200 :body (format "Password for %s reset succcessfully" path-identity)})
+
                                   )))))
 
              wrap-schema-validation

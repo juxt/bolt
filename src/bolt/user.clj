@@ -13,15 +13,11 @@
 (s/defschema User "A user"
   {s/Keyword s/Any})
 
-(s/defn check-create-user
-  [component :- (s/protocol p/UserStore)
-   user :- User]
-  (p/check-create-user component user))
-
 (s/defn create-user!
   [component :- (s/protocol p/UserStore)
+   id :- s/Str
    user :- User]
-  (p/create-user! component user))
+  (p/create-user! component id user))
 
 (s/defn find-user :- (s/maybe User)
   [component :- (s/protocol p/UserStore)
