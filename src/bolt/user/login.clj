@@ -41,85 +41,78 @@
 (defn make-routes [{:keys [user-store user-authenticator session password-hasher tag-ns]}]
   {"/login"
    {:post
-    (->
-     (yada nil
-           :parameters {:post {:form {(s/required-key :identity) s/Str
-                                      (s/required-key :password) s/Str
-                                      s/Keyword s/Str}
-                               :query {:redirect s/Str :onfail s/Str}}}
-           :post! (fn [{{:keys [identity password redirect onfail] :as parameters} :parameters
-                       :as ctx}]
-                    (infof "redirect=%s" redirect)
-                    (infof "onfail=%s" onfail)
-                    (let [user (find-user user-store identity)
-                          authentication (when user
-                                           (authenticate-user user-authenticator user
-                                                              {:password password}))]
-                      (if (and user authentication)
-                        ;; Login successful!
-                        (start-session! session (redirect-after-post redirect)
-                                        {:bolt/identity identity :bolt/user user})
-                        ;; Login failed!
-                        (redirect-after-post onfail)))))
-     wrap-schema-validation
-     (tag (keyword tag-ns "login")))}
+    (-> nil
+        (yada
+         :parameters {:post {:form {(s/required-key :identity) s/Str
+                                    (s/required-key :password) s/Str
+                                    s/Keyword s/Str}
+                             :query {:redirect s/Str :onfail s/Str}}}
+         :post! (fn [{{:keys [identity password redirect onfail] :as parameters} :parameters :as ctx}]
+                  (let [user (find-user user-store identity)
+                        authentication (when user
+                                         (authenticate-user user-authenticator user
+                                                            {:password password}))]
+                    (if (and user authentication)
+                      ;; Login successful!
+                      (start-session! session (redirect-after-post redirect)
+                                      {:bolt/identity identity :bolt/user user})
+                      ;; Login failed!
+                      (redirect-after-post onfail)))))
+        wrap-schema-validation
+        (tag (keyword tag-ns "login")))}
 
    "/logout"
    {:post
-
-    (->
-     (yada nil
-           :parameters {:post {:query {(s/optional-key :redirect) s/Str}}}
-
-           :post! (fn [{{:keys [redirect] :as parameters} :parameters
-                       req :request
-                       :as ctx}]
-                    (let [response (if redirect
-                                     (redirect-after-post redirect)
-                                     {:status 200 :body "Logout successful"})]
-                      (stop-session! session response (session-data session req)))))
-
-     wrap-schema-validation
-     (tag (keyword tag-ns "logout")))}
+    (-> nil
+        (yada
+         :parameters {:post {:query {(s/optional-key :redirect) s/Str}}}
+         :post! (fn [{{:keys [redirect] :as parameters} :parameters
+                     req :request
+                     :as ctx}]
+                  (let [response (if redirect
+                                   (redirect-after-post redirect)
+                                   {:status 200 :body "Logout successful"})]
+                    (stop-session! session response (session-data session req)))))
+        wrap-schema-validation
+        (tag (keyword tag-ns "logout")))}
 
    ["/passwords/" [#"[\w\.\@\-\_\%]+" :identity]]
-   (->
-    (yada nil
-          :parameters {:post {:path {:identity s/Str}
-                              :form {:password s/Str}
-                              :query {:redirect s/Str :onfail s/Str}}}
+   (-> nil
+       (yada
+        :parameters {:post {:path {:identity s/Str}
+                            :form {:password s/Str}
+                            :query {:redirect s/Str :onfail s/Str}}}
 
-          ;; This is a POST to ensure that it can be called via AJAX and traditional HTML forms
-          :post! (fn [{{:keys [identity password redirect onfail] :as parameters} :parameters
-                      req :request
-                      :as ctx}]
+        ;; This is a POST to ensure that it can be called via AJAX and traditional HTML forms
+        :post! (fn [{{:keys [identity password redirect onfail] :as parameters} :parameters
+                    req :request
+                    :as ctx}]
 
-                   (let [ ;; We must decode identity. A future version of bidi may do this for us.
-                         ;; Awkward but (currently) necessary
-                         ;; A general login solution must be more general that this
-                         path-identity (URLDecoder/decode identity)]
+                 (let [ ;; We must decode identity. A future version of bidi may do this for us.
+                       ;; Awkward but (currently) necessary
+                       ;; A general login solution must be more general that this
+                       path-identity (URLDecoder/decode identity)]
 
-                     ;; The identity MUST match that of the session data
-                     (let [session-data (session-data session req)
-                           real-identity (-> session-data :bolt/identity)]
+                   ;; The identity MUST match that of the session data
+                   (let [session-data (session-data session req)
+                         real-identity (-> session-data :bolt/identity)]
 
-                       ;; It's not too late to send a 400 - we can do that via an exception
-                       (when (not= real-identity path-identity)
-                         (throw (ex-info "TODO: Return a 400" {:real-identity real-identity
-                                                               :path-identity path-identity})))
+                     ;; It's not too late to send a 400 - we can do that via an exception
+                     (when (not= real-identity path-identity)
+                       (throw (ex-info "TODO: Return a 400" {:real-identity real-identity
+                                                             :path-identity path-identity})))
 
-                       (let [user (find-user user-store path-identity)]
+                     (let [user (find-user user-store path-identity)]
 
-                         ;; TODO: Implement password policies
-                         (cond
-                           true         ; password ok
-                           (do (update-user! user-store path-identity
-                                             (assoc-in user [:password] (hash-password password-hasher password)))
-                               (redirect-after-post redirect))
-                           :otherwise (redirect-after-post onfail)))))))
-    wrap-schema-validation
-    (tag (keyword tag-ns "set-password")))}
-  )
+                       ;; TODO: Implement password policies
+                       (cond
+                         true           ; password ok
+                         (do (update-user! user-store path-identity
+                                           (assoc-in user [:password] (hash-password password-hasher password)))
+                             (redirect-after-post redirect))
+                         :otherwise (redirect-after-post onfail)))))))
+       wrap-schema-validation
+       (tag (keyword tag-ns "set-password")))})
 
 (s/defrecord Login
     [user-store :- (s/protocol p/UserStore)
@@ -130,6 +123,9 @@
      tag-ns :- s/Str
      *router :- (co-dep Router)]
 
+  ;; TODO: This is now deprecated, now that Login only does post
+  ;; processing and doesn't 'know' where the login form is. An
+  ;; alternative implementation will be required.
   AuthenticationHandshake
   (initiate-authentication-handshake
    [component req]
@@ -149,9 +145,6 @@
           [uri-context (make-routes component)]))
 
 (defn new-login [& {:as opts}]
-  (->> opts
-       (merge {:uri-context ""
-               :tag-ns "bolt.user.login"})
-       map->Login
-       (<- (using [:user-store :password-hasher :user-authenticator :session]))
-       (<- (co-using [:router]))))
+  (-> (map->Login (merge {:uri-context "" :tag-ns "bolt.user.login"} opts))
+      (using [:user-store :password-hasher :user-authenticator :session])
+      (co-using [:router])))
