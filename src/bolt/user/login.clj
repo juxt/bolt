@@ -26,55 +26,53 @@
 (defn email? [s]
   (re-matches #".+@.+" s))
 
-(defn get-login-post-path [login redirect onfail]
+(defn get-login-post-path [component redirect onfail]
   (str
-   (path-for @(:*router login) (keyword (:tag-ns login) "login"))
+   (path-for @(:*router component) (keyword (:tag-ns component) "login"))
    (as-query-string {"redirect" (URLEncoder/encode redirect)
                      "onfail" (URLEncoder/encode onfail)})))
 
-(defn get-set-password-post-path [login identity redirect onfail]
+(defn get-logout-post-path [component redirect]
   (str
-   (path-for @(:*router login) (keyword (:tag-ns login) "set-password") :identity identity)
+   (path-for @(:*router component) (keyword (:tag-ns component) "logout"))
+   (as-query-string {"redirect" (URLEncoder/encode redirect)})))
+
+(defn get-set-password-post-path [component identity redirect onfail]
+  (str
+   (path-for @(:*router component) (keyword (:tag-ns component) "set-password") :identity identity)
    (as-query-string {"redirect" (URLEncoder/encode redirect)
                      "onfail" (URLEncoder/encode onfail)})))
 
 (defn make-routes [{:keys [user-store user-authenticator session password-hasher tag-ns]}]
-  {"/login"
-   {:post
-    (-> nil
-        (yada
-         :parameters {:post {:form {(s/required-key :identity) s/Str
-                                    (s/required-key :password) s/Str
-                                    s/Keyword s/Str}
-                             :query {:redirect s/Str :onfail s/Str}}}
-         :post! (fn [{{:keys [identity password redirect onfail] :as parameters} :parameters :as ctx}]
-                  (let [user (find-user user-store identity)
-                        authentication (when user
-                                         (authenticate-user user-authenticator user
-                                                            {:password password}))]
-                    (if (and user authentication)
-                      ;; Login successful!
-                      (start-session! session (redirect-after-post redirect)
-                                      {:bolt/identity identity :bolt/user user})
-                      ;; Login failed!
-                      (redirect-after-post onfail)))))
-        wrap-schema-validation
-        (tag (keyword tag-ns "login")))}
+  {"/login" (-> nil
+                (yada
+                 :parameters {:post {:form {(s/required-key :identity) s/Str
+                                            (s/required-key :password) s/Str
+                                            s/Keyword s/Str}
+                                     :query {:redirect s/Str :onfail s/Str}}}
+                 :post! (fn [{{:keys [identity password redirect onfail] :as parameters} :parameters :as ctx}]
+                          (let [user (find-user user-store identity)
+                                authentication (when user
+                                                 (authenticate-user user-authenticator user
+                                                                    {:password password}))]
+                            (if (and user authentication)
+                              ;; Login successful!
+                              (start-session! session (redirect-after-post redirect)
+                                              {:bolt/identity identity :bolt/user user})
+                              ;; Login failed!
+                              (redirect-after-post onfail)))))
+                wrap-schema-validation
+                (tag (keyword tag-ns "login")))
 
-   "/logout"
-   {:post
-    (-> nil
-        (yada
-         :parameters {:post {:query {(s/optional-key :redirect) s/Str}}}
-         :post! (fn [{{:keys [redirect] :as parameters} :parameters
-                     req :request
-                     :as ctx}]
-                  (let [response (if redirect
-                                   (redirect-after-post redirect)
-                                   {:status 200 :body "Logout successful"})]
-                    (stop-session! session response (session-data session req)))))
-        wrap-schema-validation
-        (tag (keyword tag-ns "logout")))}
+   ;; Logout is most certainly NOT a GET (not something you want to
+   ;; cache and accidentally leave yourself logged in)
+   "/logout" (-> nil
+                 (yada
+                  :parameters {:post {:query {:redirect s/Str}}}
+                  :post! (fn [{{:keys [redirect] :as parameters} :parameters req :request :as ctx}]
+                           (stop-session! session (redirect-after-post redirect) (session-data session req))))
+                 wrap-schema-validation
+                 (tag (keyword tag-ns "logout")))
 
    ["/passwords/" [#"[\w\.\@\-\_\%]+" :identity]]
    (-> nil
